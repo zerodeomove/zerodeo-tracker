@@ -88,6 +88,15 @@
     </label>
 
     <label>
+      Tipe
+      <select id="tipe">
+        <option value="Capex">Capex — barang/aset tahan lama</option>
+        <option value="Opex" selected>Opex — operasional / habis pakai</option>
+      </select>
+      <span class="field-error" id="err-tipe">Wajib dipilih.</span>
+    </label>
+
+    <label>
       Jalur
       <select id="jalur">
         <option value="">Pilih jalur…</option>
@@ -156,12 +165,14 @@ function validate() {
   let valid = true;
   const item = document.getElementById('item').value.trim();
   const kategori = document.getElementById('kategori').value;
+  const tipe = document.getElementById('tipe').value;
   const jalur = document.getElementById('jalur').value;
   const pic = document.getElementById('pic').value;
   const estimasi = document.getElementById('estimasi').value;
 
   if (!item) { document.getElementById('err-item').classList.add('show'); valid = false; }
   if (!kategori) { document.getElementById('err-kategori').classList.add('show'); valid = false; }
+  if (!tipe) { document.getElementById('err-tipe').classList.add('show'); valid = false; }
   if (!jalur) { document.getElementById('err-jalur').classList.add('show'); valid = false; }
   if (!pic) { document.getElementById('err-pic').classList.add('show'); valid = false; }
   if (!estimasi || Number(estimasi) <= 0) { document.getElementById('err-estimasi').classList.add('show'); valid = false; }
@@ -177,6 +188,7 @@ form.addEventListener('submit', async (e) => {
   const payload = {
     item: document.getElementById('item').value.trim(),
     kategori: document.getElementById('kategori').value,
+    tipe: document.getElementById('tipe').value,
     jalur: document.getElementById('jalur').value,
     pic: document.getElementById('pic').value,
     estimasi: document.getElementById('estimasi').value,
