@@ -1,0 +1,404 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Zerodeo — Tracker Kegiatan</title>
+<style>
+  :root {
+    --bg: #F5F4EF;
+    --surface: #FFFFFF;
+    --border: #DEDCD3;
+    --text: #1F2422;
+    --text-muted: #6B6F68;
+    --accent: #4A87A8;
+    --accent-light: #E4EEF3;
+    --accent-dark: #2D5A72;
+    --amber: #B8860B;
+    --amber-bg: #FBF2DD;
+    --green: #2F6B3A;
+    --green-bg: #E6F0E6;
+    --red: #A13A2E;
+    --red-bg: #F7E7E4;
+    --purple: #5B4A8A;
+    --purple-bg: #ECE8F5;
+    --radius: 10px;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    font-size: 14px;
+    line-height: 1.5;
+  }
+  .wrap { max-width: 1180px; margin: 0 auto; padding: 24px 20px 60px; }
+
+  header.top {
+    display: flex; align-items: baseline; justify-content: space-between;
+    margin-bottom: 20px; flex-wrap: wrap; gap: 8px;
+  }
+  header.top h1 { font-size: 20px; font-weight: 600; margin: 0; letter-spacing: -0.01em; }
+  header.top .sub { color: var(--text-muted); font-size: 13px; }
+
+  .config {
+    background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius);
+    padding: 14px 16px; margin-bottom: 20px; display: flex; gap: 10px; align-items: center; flex-wrap: wrap;
+  }
+  .config input[type=text] {
+    flex: 1; min-width: 240px; padding: 8px 10px; border: 1px solid var(--border);
+    border-radius: 6px; font-size: 13px; font-family: monospace; color: var(--text);
+  }
+  .config button, .toolbar button {
+    background: var(--accent); color: #fff; border: none; padding: 8px 14px;
+    border-radius: 6px; font-size: 13px; cursor: pointer; font-weight: 500;
+  }
+  .config button:hover, .toolbar button:hover { background: var(--accent-dark); }
+  .config .status { font-size: 12px; color: var(--text-muted); }
+  .config .status.ok { color: var(--green); }
+  .config .status.err { color: var(--red); }
+
+  .cards { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; margin-bottom: 20px; }
+  @media (max-width: 860px) { .cards { grid-template-columns: 1fr; } }
+  .card {
+    background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius);
+    padding: 16px 18px;
+  }
+  .card h2 {
+    font-size: 12px; text-transform: none; font-weight: 600; color: var(--text-muted);
+    margin: 0 0 12px 0; letter-spacing: 0.01em;
+  }
+  .card-row {
+    display: flex; justify-content: space-between; align-items: center;
+    padding: 6px 0; border-bottom: 1px solid var(--bg);
+    font-size: 13px;
+  }
+  .card-row:last-child { border-bottom: none; }
+  .card-row .label { color: var(--text); }
+  .card-row .value { font-weight: 600; font-variant-numeric: tabular-nums; }
+  .card-row .value.zero { color: var(--text-muted); font-weight: 400; }
+  .card-empty { color: var(--text-muted); font-size: 13px; padding: 8px 0; }
+
+  .plafon-bar-bg { background: var(--bg); border-radius: 4px; height: 6px; margin-top: 4px; overflow: hidden; }
+  .plafon-bar-fill { background: var(--accent); height: 100%; border-radius: 4px; }
+  .plafon-bar-fill.over { background: var(--red); }
+
+  .toolbar {
+    display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin-bottom: 12px;
+  }
+  .toolbar select, .toolbar input[type=text] {
+    padding: 7px 10px; border: 1px solid var(--border); border-radius: 6px;
+    font-size: 13px; background: var(--surface); color: var(--text);
+  }
+  .toolbar input[type=text] { flex: 1; min-width: 160px; }
+  .toolbar .count { color: var(--text-muted); font-size: 12px; margin-left: auto; }
+
+  table { width: 100%; border-collapse: collapse; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; }
+  thead th {
+    text-align: left; font-size: 12px; font-weight: 600; color: var(--text-muted);
+    background: var(--bg); padding: 10px 12px; border-bottom: 1px solid var(--border);
+    white-space: nowrap;
+  }
+  tbody td { padding: 10px 12px; border-bottom: 1px solid var(--bg); font-size: 13px; vertical-align: top; }
+  tbody tr:last-child td { border-bottom: none; }
+  tbody tr:hover { background: #FAFAF7; }
+  td.num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  td.item { max-width: 260px; }
+  td.empty-state { text-align: center; color: var(--text-muted); padding: 32px 12px; }
+
+  .badge {
+    display: inline-block; padding: 3px 9px; border-radius: 20px; font-size: 12px; font-weight: 500;
+    white-space: nowrap;
+  }
+  .badge.draft { background: #EEEDE8; color: var(--text-muted); }
+  .badge.siap { background: var(--accent-light); color: var(--accent-dark); }
+  .badge.diajukan { background: var(--amber-bg); color: var(--amber); }
+  .badge.approved { background: var(--accent-light); color: var(--accent-dark); }
+  .badge.ditolak { background: var(--red-bg); color: var(--red); }
+  .badge.revisi { background: var(--amber-bg); color: var(--amber); }
+  .badge.ditransfer { background: var(--purple-bg); color: var(--purple); }
+  .badge.selesai { background: var(--green-bg); color: var(--green); }
+
+  .aksi-btn {
+    border: none; padding: 4px 9px; border-radius: 6px; font-size: 12px; font-weight: 500;
+    cursor: pointer; margin-right: 4px;
+  }
+  .aksi-btn.approve { background: var(--green-bg); color: var(--green); }
+  .aksi-btn.reject { background: var(--red-bg); color: var(--red); }
+
+  .deadline-soon { color: var(--red); font-weight: 600; }
+  footer { margin-top: 24px; color: var(--text-muted); font-size: 12px; text-align: center; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header class="top">
+    <div>
+      <h1>Zerodeo — Tracker Kegiatan &amp; Budgeting</h1>
+      <div class="sub" id="lastSync">Memuat data…</div>
+    </div>
+    <button onclick="loadData()" style="background:var(--accent-dark);color:#fff;border:none;padding:8px 14px;border-radius:6px;font-size:13px;cursor:pointer;font-weight:500">Refresh</button>
+    <a href="input.html" style="background:var(--green);color:#fff;text-decoration:none;padding:8px 14px;border-radius:6px;font-size:13px;font-weight:500">+ Input Kegiatan</a>
+  </header>
+
+  <div class="cards">
+    <div class="card">
+      <h2>Saldo uang muka per orang</h2>
+      <div id="saldoCard"><div class="card-empty">Belum ada data.</div></div>
+    </div>
+    <div class="card">
+      <h2>Plafon fixed terpakai</h2>
+      <div id="plafonCard"><div class="card-empty">Belum ada data.</div></div>
+    </div>
+    <div class="card">
+      <h2>Deadline kegiatan terdekat</h2>
+      <div id="deadlineCard"><div class="card-empty">Belum ada data.</div></div>
+    </div>
+  </div>
+
+  <div class="toolbar">
+    <select id="filterKategori" onchange="renderTable()">
+      <option value="">Semua Kategori</option>
+    </select>
+    <select id="filterPic" onchange="renderTable()">
+      <option value="">Semua PIC</option>
+    </select>
+    <select id="filterStatus" onchange="renderTable()">
+      <option value="">Semua Status</option>
+    </select>
+    <input type="text" id="searchBox" placeholder="Cari item kegiatan…" oninput="renderTable()">
+    <span class="count" id="rowCount"></span>
+  </div>
+
+  <table>
+    <thead>
+      <tr>
+        <th>Item Kegiatan</th>
+        <th>Kategori</th>
+        <th>PIC</th>
+        <th>Status</th>
+        <th>Deadline</th>
+        <th>Estimasi</th>
+        <th>Actual</th>
+        <th>Selisih</th>
+        <th>Aksi</th>
+      </tr>
+    </thead>
+    <tbody id="tableBody">
+      <tr><td colspan="9" class="empty-state">Sambungkan API dulu untuk melihat data.</td></tr>
+    </tbody>
+  </table>
+
+  <footer>Data ditarik langsung dari Google Sheet lewat Apps Script — tidak ada salinan tersimpan di halaman ini.</footer>
+</div>
+
+<script>
+const DEFAULT_API_URL = 'https://script.google.com/macros/s/AKfycbwdL2REXUggjk_6wEj5vT1Odw1sV2FzGtp6NSU2JmVQtuTTflMLkhKQ6Py4zUd6zKkD/exec';
+const PIC_LIST = ['Lenno', 'Ricko', 'Yanuar', 'Christina'];
+let cachedPin = null;
+
+async function updateStatus(row, newStatus) {
+  let pin = cachedPin;
+  if (!pin) {
+    pin = prompt('PIN approve/reject dari Lemon:');
+    if (!pin) return;
+  }
+  try {
+    const res = await fetch(DEFAULT_API_URL, {
+      method: 'POST',
+      body: JSON.stringify({ action: 'update_status', row: row, status: newStatus, pin: pin }),
+    });
+    const json = await res.json();
+    if (json.ok) {
+      cachedPin = pin; // biar tidak nanya PIN tiap klik dalam sesi yang sama
+      loadData();
+    } else {
+      cachedPin = null;
+      alert('Gagal: ' + json.error);
+    }
+  } catch (err) {
+    alert('Gagal kirim: ' + err.message);
+  }
+}
+const STATUS_ORDER = ['Draft','Siap Ajukan','Diajukan','Approved','Ditolak','Revisi','Ditransfer','Selesai'];
+const STATUS_CLASS = {
+  'Draft':'draft','Siap Ajukan':'siap','Diajukan':'diajukan','Approved':'approved',
+  'Ditolak':'ditolak','Revisi':'revisi','Ditransfer':'ditransfer','Selesai':'selesai'
+};
+
+let kegiatanData = [];
+let plafonData = [];
+
+function fmtRupiah(n) {
+  if (n === null || n === undefined || n === '' || isNaN(n)) return '-';
+  const num = Number(n);
+  if (num === 0) return '-';
+  return (num < 0 ? '-Rp' : 'Rp') + Math.abs(Math.round(num)).toLocaleString('id-ID');
+}
+
+function fmtDate(d) {
+  if (!d) return '-';
+  const dt = new Date(d);
+  if (isNaN(dt.getTime())) return d;
+  return dt.toLocaleDateString('id-ID', { day: '2-digit', month: 'short', year: '2-digit' });
+}
+
+function daysUntil(d) {
+  if (!d) return null;
+  const dt = new Date(d);
+  if (isNaN(dt.getTime())) return null;
+  const today = new Date(); today.setHours(0,0,0,0);
+  dt.setHours(0,0,0,0);
+  return Math.round((dt - today) / 86400000);
+}
+
+function setStatus(msg, isErr) {
+  const el = document.getElementById('lastSync');
+  el.textContent = msg;
+  el.style.color = isErr ? 'var(--red)' : '';
+}
+
+async function loadData() {
+  const url = DEFAULT_API_URL;
+  setStatus('Memuat…', false);
+  try {
+    const res = await fetch(url);
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    const json = await res.json();
+    kegiatanData = json.kegiatan || [];
+    plafonData = json.plafon_fixed || [];
+    setStatus('Terakhir ambil data: ' + new Date().toLocaleString('id-ID'), false);
+    populateFilters();
+    renderCards();
+    renderTable();
+  } catch (err) {
+    setStatus('Gagal ambil data: ' + err.message + ' — cek URL & pastikan deployment "Anyone with the link".', true);
+  }
+}
+
+function populateFilters() {
+  const kategoris = [...new Set(kegiatanData.map(r => r['Kategori']).filter(Boolean))].sort();
+  const selKat = document.getElementById('filterKategori');
+  selKat.innerHTML = '<option value="">Semua Kategori</option>' +
+    kategoris.map(k => `<option value="${k}">${k}</option>`).join('');
+
+  const selPic = document.getElementById('filterPic');
+  selPic.innerHTML = '<option value="">Semua PIC</option>' +
+    PIC_LIST.map(p => `<option value="${p}">${p}</option>`).join('');
+
+  const selStatus = document.getElementById('filterStatus');
+  selStatus.innerHTML = '<option value="">Semua Status</option>' +
+    STATUS_ORDER.map(s => `<option value="${s}">${s}</option>`).join('');
+}
+
+function renderCards() {
+  // Saldo uang muka per PIC
+  const saldoHtml = PIC_LIST.map(pic => {
+    const rows = kegiatanData.filter(r => r['Ditransfer ke'] === pic);
+    const diterima = rows.reduce((sum, r) => sum + (Number(r['Nominal Transfer (Rp)']) || 0), 0);
+    const actual = rows.reduce((sum, r) => sum + (Number(r['Actual (Rp)']) || 0), 0);
+    const saldo = diterima - actual;
+    return `<div class="card-row"><span class="label">${pic}</span>
+      <span class="value ${saldo === 0 ? 'zero' : ''}">${fmtRupiah(saldo)}</span></div>`;
+  }).join('');
+  document.getElementById('saldoCard').innerHTML = saldoHtml || '<div class="card-empty">Belum ada data.</div>';
+
+  // Plafon fixed
+  if (plafonData.length === 0) {
+    document.getElementById('plafonCard').innerHTML = '<div class="card-empty">Plafon belum diisi Lemon.</div>';
+  } else {
+    const plafonHtml = plafonData.map(r => {
+      const plafon = Number(r['Plafon per Bulan (Rp)']) || 0;
+      const terpakai = Number(r['Terpakai (Rp)']) || 0;
+      const pct = plafon > 0 ? Math.min(100, (terpakai / plafon) * 100) : 0;
+      const over = plafon > 0 && terpakai > plafon;
+      if (plafon === 0) {
+        return `<div class="card-row"><span class="label">${r['Kategori']}</span>
+          <span class="value zero">belum diisi</span></div>`;
+      }
+      return `<div style="padding:6px 0">
+        <div class="card-row" style="padding:0;border:none">
+          <span class="label">${r['Kategori']}</span>
+          <span class="value">${fmtRupiah(terpakai)} / ${fmtRupiah(plafon)}</span>
+        </div>
+        <div class="plafon-bar-bg"><div class="plafon-bar-fill ${over ? 'over' : ''}" style="width:${pct}%"></div></div>
+      </div>`;
+    }).join('');
+    document.getElementById('plafonCard').innerHTML = plafonHtml;
+  }
+
+  // Deadline terdekat (belum Selesai, ada tanggal, urut terdekat, max 5)
+  const upcoming = kegiatanData
+    .filter(r => r['Status'] !== 'Selesai' && r['Deadline Kegiatan'])
+    .map(r => ({ item: r['Item Kegiatan'], date: r['Deadline Kegiatan'], days: daysUntil(r['Deadline Kegiatan']) }))
+    .sort((a, b) => new Date(a.date) - new Date(b.date))
+    .slice(0, 5);
+
+  if (upcoming.length === 0) {
+    document.getElementById('deadlineCard').innerHTML = '<div class="card-empty">Tidak ada deadline mendatang.</div>';
+  } else {
+    document.getElementById('deadlineCard').innerHTML = upcoming.map(u => {
+      const soon = u.days !== null && u.days <= 3;
+      const dayLabel = u.days === null ? '' : (u.days < 0 ? `${Math.abs(u.days)}h lewat` : u.days === 0 ? 'hari ini' : `${u.days}h lagi`);
+      return `<div class="card-row">
+        <span class="label" style="max-width:65%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${u.item || '-'}</span>
+        <span class="value ${soon ? 'deadline-soon' : ''}">${dayLabel}</span>
+      </div>`;
+    }).join('');
+  }
+}
+
+function renderTable() {
+  const kat = document.getElementById('filterKategori').value;
+  const pic = document.getElementById('filterPic').value;
+  const status = document.getElementById('filterStatus').value;
+  const search = document.getElementById('searchBox').value.trim().toLowerCase();
+
+  let rows = kegiatanData.filter(r => {
+    if (kat && r['Kategori'] !== kat) return false;
+    if (pic && r['PIC'] !== pic) return false;
+    if (status && r['Status'] !== status) return false;
+    if (search && !(r['Item Kegiatan'] || '').toLowerCase().includes(search)) return false;
+    return true;
+  });
+
+  document.getElementById('rowCount').textContent = rows.length + ' kegiatan';
+
+  const tbody = document.getElementById('tableBody');
+  if (rows.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="9" class="empty-state">Tidak ada kegiatan yang cocok dengan filter.</td></tr>';
+    return;
+  }
+
+  tbody.innerHTML = rows.map(r => {
+    const statusClass = STATUS_CLASS[r['Status']] || 'draft';
+    const days = daysUntil(r['Deadline Kegiatan']);
+    const deadlineSoon = r['Status'] !== 'Selesai' && days !== null && days <= 3;
+    const selisih = r['Selisih (Rp)'];
+    const aksi = r['Status'] === 'Diajukan'
+      ? `<button class="aksi-btn approve" onclick="updateStatus(${r['_row']}, 'Approved')">Approve</button>
+         <button class="aksi-btn reject" onclick="updateStatus(${r['_row']}, 'Ditolak')">Reject</button>`
+      : '';
+    return `<tr>
+      <td class="item">${r['Item Kegiatan'] || '-'}</td>
+      <td>${r['Kategori'] || '-'}</td>
+      <td>${r['PIC'] || '-'}</td>
+      <td><span class="badge ${statusClass}">${r['Status'] || 'Draft'}</span></td>
+      <td class="${deadlineSoon ? 'deadline-soon' : ''}">${fmtDate(r['Deadline Kegiatan'])}</td>
+      <td class="num">${fmtRupiah(r['Estimasi (Rp)'])}</td>
+      <td class="num">${fmtRupiah(r['Actual (Rp)'])}</td>
+      <td class="num">${fmtRupiah(selisih)}</td>
+      <td>${aksi}</td>
+    </tr>`;
+  }).join('');
+}
+
+// auto-load saved URL on page open
+window.addEventListener('DOMContentLoaded', () => {
+  loadData();
+});
+</script>
+</body>
+</html>

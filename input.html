@@ -1,0 +1,211 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Zerodeo — Input Kegiatan</title>
+<style>
+  :root {
+    --bg: #F5F4EF;
+    --surface: #FFFFFF;
+    --border: #DEDCD3;
+    --text: #1F2422;
+    --text-muted: #6B6F68;
+    --accent: #4A87A8;
+    --accent-dark: #2D5A72;
+    --green: #2F6B3A;
+    --green-bg: #E6F0E6;
+    --red: #A13A2E;
+    --red-bg: #F7E7E4;
+    --radius: 10px;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    font-size: 15px;
+  }
+  .wrap { max-width: 480px; margin: 0 auto; padding: 24px 18px 60px; }
+  h1 { font-size: 19px; font-weight: 600; margin: 0 0 4px 0; }
+  .sub { color: var(--text-muted); font-size: 13px; margin-bottom: 20px; }
+
+  form {
+    background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius);
+    padding: 18px; display: flex; flex-direction: column; gap: 14px;
+  }
+  label {
+    font-size: 13px; font-weight: 500; color: var(--text); display: flex; flex-direction: column; gap: 6px;
+  }
+  input, select {
+    font-size: 16px; padding: 10px 12px; border: 1px solid var(--border);
+    border-radius: 8px; background: var(--bg); color: var(--text); font-family: inherit;
+  }
+  input:focus, select:focus { outline: 2px solid var(--accent); outline-offset: 1px; }
+
+  button[type=submit] {
+    background: var(--accent); color: #fff; border: none; padding: 13px;
+    border-radius: 8px; font-size: 15px; font-weight: 600; cursor: pointer; margin-top: 4px;
+  }
+  button[type=submit]:active { background: var(--accent-dark); }
+  button[type=submit]:disabled { opacity: 0.6; }
+
+  .msg {
+    margin-top: 14px; padding: 12px 14px; border-radius: 8px; font-size: 13px; display: none;
+  }
+  .msg.ok { background: var(--green-bg); color: var(--green); display: block; }
+  .msg.err { background: var(--red-bg); color: var(--red); display: block; }
+
+  .field-error { font-size: 12px; color: var(--red); display: none; }
+  .field-error.show { display: block; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Input kegiatan baru</h1>
+  <div class="sub">Zerodeo. <a href="index.html" style="color:var(--accent)">← Balik ke tracker</a></div>
+
+  <form id="kegiatanForm">
+    <label>
+      Item kegiatan
+      <input type="text" id="item" placeholder="Contoh: sewa rak display Malang">
+      <span class="field-error" id="err-item">Wajib diisi.</span>
+    </label>
+
+    <label>
+      Kategori
+      <select id="kategori">
+        <option value="">Pilih kategori…</option>
+        <option>Peralatan/Kulak</option>
+        <option>Packaging Tambahan</option>
+        <option>Ongkos Kirim/Logistik</option>
+        <option>Konten & Aktivasi Akar</option>
+        <option>Operasional Tim</option>
+        <option>Lain-lain</option>
+      </select>
+      <span class="field-error" id="err-kategori">Wajib dipilih.</span>
+    </label>
+
+    <label>
+      Jalur
+      <select id="jalur">
+        <option value="">Pilih jalur…</option>
+        <option>Fixed</option>
+        <option>Pengajuan</option>
+      </select>
+      <span class="field-error" id="err-jalur">Wajib dipilih.</span>
+    </label>
+
+    <label>
+      PIC
+      <select id="pic">
+        <option value="">Pilih PIC…</option>
+        <option>Lenno</option>
+        <option>Ricko</option>
+        <option>Yanuar</option>
+        <option>Christina</option>
+      </select>
+      <span class="field-error" id="err-pic">Wajib dipilih.</span>
+    </label>
+
+    <label>
+      Estimasi (Rp)
+      <input type="number" id="estimasi" placeholder="0" min="0" step="1000">
+      <span class="field-error" id="err-estimasi">Isi angka lebih dari 0.</span>
+    </label>
+
+    <label>
+      Deadline kegiatan (opsional)
+      <input type="date" id="deadline">
+    </label>
+
+    <label>
+      Status
+      <select id="status">
+        <option value="Draft">Draft — masih perlu dicek dulu</option>
+        <option value="Siap Ajukan">Siap Ajukan — tinggal masuk antrean</option>
+        <option value="Diajukan" selected>Diajukan — langsung ke Lemon</option>
+      </select>
+    </label>
+
+    <button type="submit" id="submitBtn">Simpan kegiatan</button>
+  </form>
+
+  <div class="msg" id="msgBox"></div>
+</div>
+
+<script>
+const API_URL = 'https://script.google.com/macros/s/AKfycbwdL2REXUggjk_6wEj5vT1Odw1sV2FzGtp6NSU2JmVQtuTTflMLkhKQ6Py4zUd6zKkD/exec';
+
+const form = document.getElementById('kegiatanForm');
+const submitBtn = document.getElementById('submitBtn');
+const msgBox = document.getElementById('msgBox');
+
+function showMsg(text, ok) {
+  msgBox.textContent = text;
+  msgBox.className = 'msg ' + (ok ? 'ok' : 'err');
+}
+
+function clearFieldErrors() {
+  document.querySelectorAll('.field-error').forEach(el => el.classList.remove('show'));
+}
+
+function validate() {
+  clearFieldErrors();
+  let valid = true;
+  const item = document.getElementById('item').value.trim();
+  const kategori = document.getElementById('kategori').value;
+  const jalur = document.getElementById('jalur').value;
+  const pic = document.getElementById('pic').value;
+  const estimasi = document.getElementById('estimasi').value;
+
+  if (!item) { document.getElementById('err-item').classList.add('show'); valid = false; }
+  if (!kategori) { document.getElementById('err-kategori').classList.add('show'); valid = false; }
+  if (!jalur) { document.getElementById('err-jalur').classList.add('show'); valid = false; }
+  if (!pic) { document.getElementById('err-pic').classList.add('show'); valid = false; }
+  if (!estimasi || Number(estimasi) <= 0) { document.getElementById('err-estimasi').classList.add('show'); valid = false; }
+
+  return valid;
+}
+
+form.addEventListener('submit', async (e) => {
+  e.preventDefault();
+  msgBox.className = 'msg';
+  if (!validate()) return;
+
+  const payload = {
+    item: document.getElementById('item').value.trim(),
+    kategori: document.getElementById('kategori').value,
+    jalur: document.getElementById('jalur').value,
+    pic: document.getElementById('pic').value,
+    estimasi: document.getElementById('estimasi').value,
+    deadline: document.getElementById('deadline').value || null,
+    status: document.getElementById('status').value,
+  };
+
+  submitBtn.disabled = true;
+  submitBtn.textContent = 'Menyimpan…';
+
+  try {
+    const res = await fetch(API_URL, {
+      method: 'POST',
+      body: JSON.stringify(payload), // Content-Type text/plain default -> hindari CORS preflight
+    });
+    const json = await res.json();
+    if (json.ok) {
+      showMsg('Tersimpan sebagai baris ke-' + json.row + '. Form dikosongkan buat input berikutnya.', true);
+      form.reset();
+    } else {
+      showMsg('Gagal simpan: ' + (json.error || 'error tidak diketahui.'), false);
+    }
+  } catch (err) {
+    showMsg('Gagal kirim: ' + err.message, false);
+  } finally {
+    submitBtn.disabled = false;
+    submitBtn.textContent = 'Simpan kegiatan';
+  }
+});
+</script>
+</body>
+</html>
