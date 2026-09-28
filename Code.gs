@@ -330,6 +330,9 @@ function doPost(e) {
     if (data.action === 'complete_kegiatan') {
       return handleCompleteKegiatan(data);
     }
+    if (data.action === 'mark_transferred') {
+      return handleMarkTransferred(data);
+    }
     return handleAddKegiatan(data);
   } catch (err) {
     return jsonResponse({ ok: false, error: err.message });
@@ -439,6 +442,45 @@ function handleCompleteKegiatan(data) {
   sheet.getRange(row, COL.ACTUAL).setValue(actual).setNumberFormat(CURR_FORMAT);
   if (fileUrl) sheet.getRange(row, COL.NOTA).setValue(fileUrl);
   sheet.getRange(row, COL.STATUS).setValue('Selesai');
+
+  return jsonResponse({ ok: true, row: row });
+}
+
+// Tandai Ditransfer: isi PIC Transaksi + Nominal Transfer + Tgl Transfer,
+// status -> "Ditransfer". Tidak pakai PIN (eksekusi transfer, bukan keputusan
+// approve Lemon). Boleh dipakai kalau:
+// - Status sekarang "Approved" (jalur Pengajuan yang sudah di-acc Lemon), atau
+// - Jalur "Fixed" dan belum "Ditransfer"/"Selesai" (lompat tanpa approve,
+//   sesuai catatan di tab kegiatan).
+function handleMarkTransferred(data) {
+  var row = Number(data.row);
+  if (!row || row < HEADER_ROW + 1 || row > LAST_DATA_ROW) {
+    return jsonResponse({ ok: false, error: 'Baris tidak valid.' });
+  }
+  var nominal = Number(data.nominalTransfer);
+  if (!nominal || nominal <= 0) {
+    return jsonResponse({ ok: false, error: 'Nominal transfer harus angka lebih dari 0.' });
+  }
+  if (PIC_LIST.indexOf(data.picTransaksi) === -1) {
+    return jsonResponse({ ok: false, error: 'PIC Transaksi tidak dikenali.' });
+  }
+
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var sheet = ss.getSheetByName('kegiatan');
+  var currentStatus = sheet.getRange(row, COL.STATUS).getValue();
+  var jalur = sheet.getRange(row, COL.JALUR).getValue();
+  var isFixedEligible = jalur === 'Fixed' && currentStatus !== 'Ditransfer' && currentStatus !== 'Selesai';
+  var isApprovedEligible = currentStatus === 'Approved';
+  if (!isFixedEligible && !isApprovedEligible) {
+    return jsonResponse({ ok: false, error: 'Baris ini statusnya "' + currentStatus + '" (Jalur ' + jalur + ') — belum bisa ditandai Ditransfer.' });
+  }
+
+  var tglTransfer = data.tglTransfer ? new Date(data.tglTransfer) : new Date();
+
+  sheet.getRange(row, COL.PIC_TRANSAKSI).setValue(data.picTransaksi);
+  sheet.getRange(row, COL.NOMINAL_TRANSFER).setValue(nominal).setNumberFormat(CURR_FORMAT);
+  sheet.getRange(row, COL.TGL_TRANSFER).setValue(tglTransfer).setNumberFormat(DATE_FORMAT);
+  sheet.getRange(row, COL.STATUS).setValue('Ditransfer');
 
   return jsonResponse({ ok: true, row: row });
 }

@@ -3,6 +3,15 @@
 Internal tool buat tim Zerodeo (Lenno, Ricko, Yanuar, Christina) mencatat kegiatan
 dan budgeting launch, plus proses approve/reject oleh Lemon.
 
+## Alur status kegiatan
+
+- **Jalur Pengajuan:** Draft -> Siap Ajukan -> Diajukan -> (tombol Approve/Reject,
+  pakai PIN Lemon) -> Approved -> (tombol "Tandai Ditransfer" di dashboard, isi PIC
+  Transaksi + Nominal Transfer + Tgl Transfer) -> Ditransfer -> (tombol "Lengkapi"
+  di dashboard, buka complete.html, isi Actual + foto nota) -> Selesai.
+- **Jalur Fixed:** lompat approve. Begitu statusnya belum Ditransfer/Selesai, tombol
+  "Tandai Ditransfer" langsung muncul di dashboard, tanpa perlu PIN.
+
 ## Arsitektur
 
 ```
@@ -10,7 +19,7 @@ Google Sheet ("Tracker Zerodeo")
   └── Code.gs (Apps Script, HIDUP DI GOOGLE, BUKAN DI REPO INI)
         ├── setupTracker()  -> generate tab kegiatan/plafon_fixed/ringkasan
         ├── doGet()         -> expose data sebagai JSON
-        └── doPost()        -> terima kegiatan baru + approve/reject + lengkapi (actual & foto nota)
+        └── doPost()        -> terima kegiatan baru + approve/reject + tandai Ditransfer + lengkapi (actual & foto nota)
 
 index.html    -> dashboard baca dari doGet, tampil kartu ringkas + tabel filterable
 input.html    -> form tambah kegiatan baru (termasuk Tipe Capex/Opex), kirim ke doPost

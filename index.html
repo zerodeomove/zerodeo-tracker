@@ -131,6 +131,31 @@
 
   .deadline-soon { color: var(--red); font-weight: 600; }
   footer { margin-top: 24px; color: var(--text-muted); font-size: 12px; text-align: center; }
+
+  .modal-overlay {
+    position: fixed; inset: 0; background: rgba(31,36,34,0.45);
+    display: none; align-items: center; justify-content: center; padding: 16px; z-index: 50;
+  }
+  .modal-overlay.show { display: flex; }
+  .modal-box {
+    background: var(--surface); border-radius: var(--radius); padding: 20px;
+    max-width: 380px; width: 100%; display: flex; flex-direction: column; gap: 12px;
+  }
+  .modal-box h3 { margin: 0; font-size: 16px; font-weight: 600; }
+  .modal-box label { font-size: 13px; font-weight: 500; display: flex; flex-direction: column; gap: 6px; }
+  .modal-box input, .modal-box select {
+    font-size: 15px; padding: 9px 10px; border: 1px solid var(--border);
+    border-radius: 8px; background: var(--bg); color: var(--text); font-family: inherit;
+  }
+  .modal-actions { display: flex; gap: 8px; justify-content: flex-end; margin-top: 4px; }
+  .modal-actions button {
+    border: none; padding: 9px 16px; border-radius: 8px; font-size: 13px; font-weight: 600; cursor: pointer;
+  }
+  .modal-actions .btn-cancel { background: var(--bg); color: var(--text-muted); }
+  .modal-actions .btn-submit { background: var(--accent); color: #fff; }
+  .modal-actions .btn-submit:disabled { opacity: 0.6; cursor: default; }
+  .modal-err { font-size: 12px; color: var(--red); display: none; }
+  .modal-err.show { display: block; }
 </style>
 </head>
 <body>
@@ -198,6 +223,31 @@
   </table>
 
   <footer>Data ditarik langsung dari Google Sheet lewat Apps Script — tidak ada salinan tersimpan di halaman ini.</footer>
+</div>
+
+<div class="modal-overlay" id="transferModal">
+  <div class="modal-box">
+    <h3>Tandai Ditransfer</h3>
+    <label>
+      PIC Transaksi
+      <select id="tf-pic">
+        <option value="">Pilih PIC…</option>
+      </select>
+    </label>
+    <label>
+      Nominal Transfer (Rp)
+      <input type="number" id="tf-nominal" placeholder="0" min="0" step="1000">
+    </label>
+    <label>
+      Tanggal Transfer
+      <input type="date" id="tf-tanggal">
+    </label>
+    <div class="modal-err" id="tf-err"></div>
+    <div class="modal-actions">
+      <button type="button" class="btn-cancel" onclick="closeTransferModal()">Batal</button>
+      <button type="button" class="btn-submit" id="tf-submit" onclick="submitTransfer()">Simpan</button>
+    </div>
+  </div>
 </div>
 
 <script>
@@ -384,6 +434,8 @@ function renderTable() {
          <button class="aksi-btn reject" onclick="updateStatus(${r['_row']}, 'Ditolak')">Reject</button>`;
     } else if (r['Status'] === 'Ditransfer') {
       aksi = `<a class="aksi-btn approve" href="complete.html?row=${r['_row']}">Lengkapi</a>`;
+    } else if (r['Status'] !== 'Selesai' && (r['Jalur'] === 'Fixed' || r['Status'] === 'Approved')) {
+      aksi = `<button class="aksi-btn approve" onclick="openTransferModal(${r['_row']})">Tandai Ditransfer</button>`;
     }
     return `<tr>
       <td class="item">${r['Item Kegiatan'] || '-'}</td>
@@ -398,6 +450,71 @@ function renderTable() {
       <td>${aksi}</td>
     </tr>`;
   }).join('');
+}
+
+let transferRow = null;
+
+function openTransferModal(row) {
+  transferRow = row;
+  const selPic = document.getElementById('tf-pic');
+  selPic.innerHTML = '<option value="">Pilih PIC…</option>' +
+    PIC_LIST.map(p => `<option value="${p}">${p}</option>`).join('');
+  document.getElementById('tf-nominal').value = '';
+  document.getElementById('tf-tanggal').value = new Date().toISOString().slice(0, 10);
+  const errEl = document.getElementById('tf-err');
+  errEl.textContent = '';
+  errEl.classList.remove('show');
+  document.getElementById('transferModal').classList.add('show');
+}
+
+function closeTransferModal() {
+  document.getElementById('transferModal').classList.remove('show');
+  transferRow = null;
+}
+
+async function submitTransfer() {
+  const pic = document.getElementById('tf-pic').value;
+  const nominal = document.getElementById('tf-nominal').value;
+  const tanggal = document.getElementById('tf-tanggal').value;
+  const errEl = document.getElementById('tf-err');
+  errEl.classList.remove('show');
+
+  if (!pic || !nominal || Number(nominal) <= 0) {
+    errEl.textContent = 'Isi PIC Transaksi dan Nominal Transfer (lebih dari 0) dulu.';
+    errEl.classList.add('show');
+    return;
+  }
+
+  const submitBtn = document.getElementById('tf-submit');
+  submitBtn.disabled = true;
+  submitBtn.textContent = 'Menyimpan…';
+
+  try {
+    const res = await fetch(DEFAULT_API_URL, {
+      method: 'POST',
+      body: JSON.stringify({
+        action: 'mark_transferred',
+        row: transferRow,
+        picTransaksi: pic,
+        nominalTransfer: Number(nominal),
+        tglTransfer: tanggal,
+      }),
+    });
+    const json = await res.json();
+    if (json.ok) {
+      closeTransferModal();
+      loadData();
+    } else {
+      errEl.textContent = json.error || 'Gagal menyimpan.';
+      errEl.classList.add('show');
+    }
+  } catch (err) {
+    errEl.textContent = 'Gagal kirim: ' + err.message;
+    errEl.classList.add('show');
+  } finally {
+    submitBtn.disabled = false;
+    submitBtn.textContent = 'Simpan';
+  }
 }
 
 // auto-load saved URL on page open
