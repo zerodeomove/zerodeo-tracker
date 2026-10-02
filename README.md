@@ -1,7 +1,8 @@
 # Zerodeo — Tracker Kegiatan & Budgeting
 
 Internal tool buat tim Zerodeo (Lenno, Ricko, Yanuar, Christina) mencatat kegiatan
-dan budgeting launch, plus proses approve/reject oleh Lemon.
+dan budgeting launch, plus proses approve/reject oleh Lemon. Ada juga modul marketing
+(strategi, lane, channel, hasil event).
 
 ## Alur status kegiatan
 
@@ -15,47 +16,103 @@ dan budgeting launch, plus proses approve/reject oleh Lemon.
 ## Arsitektur
 
 ```
-Google Sheet ("Tracker Zerodeo")
-  └── Code.gs (Apps Script, HIDUP DI GOOGLE, BUKAN DI REPO INI)
-        ├── setupTracker()  -> generate tab kegiatan/plafon_fixed/ringkasan
-        ├── doGet()         -> expose data sebagai JSON
-        └── doPost()        -> terima kegiatan baru + approve/reject + tandai Ditransfer + lengkapi (actual & foto nota)
+Browser (halaman statis di Vercel)
+  └── common.js            zApi.get() / zApi.post(), simpan kode akses tim di localStorage
+        └── /api/proxy     Vercel Function (api/proxy.js)
+              ├── cek kode akses tim (header x-team-code vs env TEAM_CODE)
+              ├── tambahkan SHARED_SECRET (dari env) ke setiap request
+              └── Apps Script Web App (URL dari env APPS_SCRIPT_URL, TIDAK ada di repo)
+                    └── Google Sheet ("Tracker Zerodeo") = database
 
-index.html    -> dashboard baca dari doGet, tampil kartu ringkas + tabel filterable
-input.html    -> form tambah kegiatan baru (termasuk Tipe Capex/Opex), kirim ke doPost
-complete.html -> form lengkapi kegiatan yang sudah Ditransfer (Actual + foto nota), kirim ke doPost
+Project Apps Script (HIDUP DI GOOGLE, BUKAN DI REPO INI) berisi 2 file terpisah:
+  Code.gs       setupTracker(), doGet(), doPost() — tracker kegiatan + approve/reject
+  Marketing.gs  modul marketing (strategi/lane/channel/hasil_event) + cek secret
 ```
 
-Kedua file HTML fetch langsung ke Apps Script Web App URL yang di-hardcode
-di dalam masing-masing file (cari `API_URL` / `DEFAULT_API_URL`). Tidak ada
-backend lain — Google Sheet itu sendiri yang jadi database.
+Halaman tidak pernah memanggil Apps Script langsung, jadi URL-nya tidak perlu (dan
+tidak boleh) ditulis di repo ini karena repo ini public. Tidak ada backend lain —
+Google Sheet itu sendiri yang jadi database.
 
 ## File di repo ini
 
-- `index.html` — dashboard (jadi halaman utama / root domain)
-- `input.html` — form input kegiatan baru
+Halaman (static HTML, root domain di Vercel):
+- `index.html` — dashboard tracker (halaman utama)
+- `input.html` — form input kegiatan baru (termasuk Tipe Capex/Opex)
 - `complete.html` — form lengkapi kegiatan (dibuka dari tombol "Lengkapi" di
   dashboard untuk baris berstatus "Ditransfer", pakai `?row=<nomor baris>`).
   Foto nota dikompres di browser (max 1600px, JPEG) sebelum dikirim.
-- `Code.gs` — **salinan referensi saja**. File asli harus di-paste manual ke
-  Google Apps Script editor (Extensions -> Apps Script di Google Sheet-nya),
-  bukan sesuatu yang di-deploy lewat Vercel/GitHub. Repo cuma nyimpen biar ada
-  version history-nya.
+- `marketing.html` — dashboard marketing: strategi, hasil event per channel, semua hasil event
+- `strategi-input.html` — form strategi baru (lane + channel boleh lebih dari satu)
+- `hasil-event.html` — form hasil event (diisi H+1 sampai H+3 setelah event)
+- `common.js` — helper bersama: kode akses tim, `zApi.get/post` ke `/api/proxy`,
+  dan `zEsc()` (wajib dipakai untuk semua teks dari data yang masuk ke innerHTML)
+- `common.css` — style halaman marketing
+
+Vercel Function:
+- `api/proxy.js` — perantara browser -> Apps Script. Tanpa package.json, tanpa build step.
+
+Apps Script (**salinan referensi saja**, di-paste manual ke editor Apps Script, bukan
+di-deploy lewat Vercel/GitHub; repo cuma nyimpen biar ada version history-nya):
+- `Code.gs` — tracker kegiatan. Bergantung pada `Marketing.gs`
+  (`isAuthorized_`, `mkt_getData`, `mkt_handlePost`), jadi keduanya harus ada.
+- `Marketing.gs` — file TERPISAH di project Apps Script (tombol "+" di sebelah Files ->
+  Script -> beri nama "Marketing"), jangan digabung ke Code.gs. Tab `strategi`, `lane`,
+  `channel`, `hasil_event` dibuat otomatis saat pertama kali dipanggil.
+
+## Environment variable Vercel
+
+Project Settings -> Environment Variables. Nilainya diisi sendiri di dashboard Vercel,
+**jangan ditulis di repo, commit, atau chat**. Setelah env diubah wajib Redeploy.
+
+| Nama | Isi |
+|---|---|
+| `TEAM_CODE` | kode akses tim, minimal 8 karakter, bukan angka pendek. Dibagikan ke tim lewat chat pribadi. |
+| `APPS_SCRIPT_URL` | URL web app Apps Script (berakhiran `/exec`) |
+| `SHARED_SECRET` | string acak panjang, harus SAMA PERSIS dengan Script Property `SHARED_SECRET` di Apps Script |
+
+Ganti kode akses tim: ubah `TEAM_CODE` di Vercel lalu Redeploy. Semua orang akan
+diminta memasukkan kode baru saat membuka halaman berikutnya.
+
+## Script Properties Apps Script
+
+Project Settings -> Script Properties (nilainya tidak ditulis di file mana pun di repo):
+
+- `SHARED_SECRET` — sama persis dengan env Vercel. **Selama belum diisi, Apps Script
+  berjalan "terbuka"** (masa transisi supaya tracker tidak putus).
+- `APPROVAL_PIN` — PIN approve/reject Lemon. Bisa diisi langsung di sini, atau lewat
+  menu Zerodeo Tools -> Ganti PIN Lemon di Google Sheet. Sebelum PIN diset,
+  approve/reject ditolak.
+
+## Urutan rollout (jangan dibalik)
+
+1. Paste `Code.gs` dan `Marketing.gs` ke project Apps Script, masing-masing sebagai
+   file sendiri. Save.
+2. Deploy -> Manage deployments -> edit -> New version. Klik Allow / Izinkan kalau
+   Google minta izin (akses Drive untuk foto nota).
+3. Isi env di Vercel: `TEAM_CODE`, `APPS_SCRIPT_URL`, `SHARED_SECRET`.
+4. Redeploy di Vercel.
+5. Tes semua halaman: index, input, complete, marketing, strategi-input, hasil-event.
+   Tanpa kode -> halaman meminta kode akses; kode benar -> data tampil.
+6. BARU SETELAH semua halaman terbukti jalan lewat proxy: isi Script Properties
+   `SHARED_SECRET` (sama dengan Vercel) dan `APPROVAL_PIN` (PIN baru, jangan pakai
+   PIN lama). Tes ulang. Jangan dikunci lebih awal, tracker langsung error.
+
+Catatan: riwayat git lama masih memuat URL Apps Script dan PIN lama, karena riwayat
+tidak ditulis ulang. Pengamannya adalah langkah 6: ganti PIN dan kunci dengan secret,
+jadi URL lama tidak berguna tanpa secret. Jangan menunda langkah 6 terlalu lama.
 
 ## Yang HARUS dilakukan manual di luar repo (tidak bisa lewat git push)
 
 1. Google Sheet "Tracker Zerodeo" harus sudah ada tab kegiatan/plafon_fixed/ringkasan
    (dibuat lewat menu Zerodeo Tools -> Setup/Reset Tracker setelah paste Code.gs).
 2. Apps Script harus di-deploy sebagai Web App (Deploy -> Manage deployments),
-   access level "Anyone with the link", supaya index.html/input.html bisa fetch
-   tanpa login Google.
-3. Set PIN approve/reject lewat menu Zerodeo Tools -> Ganti PIN Lemon di Google
-   Sheet (PIN disimpan di Script Properties, tidak ada di kode). Sebelum PIN diset,
-   approve/reject ditolak. Kabari PIN-nya ke Lemon lewat chat pribadi (bukan
-   ditulis di repo/commit).
-4. Kalau Code.gs diedit, WAJIB redeploy versi baru (Deploy -> Manage deployments
-   -> edit -> New version) — edit di editor Apps Script saja tidak otomatis
-   update URL yang sudah jadi.
+   access level "Anyone with the link", supaya Vercel Function bisa memanggilnya
+   tanpa login Google. Akses sebenarnya dikunci lewat `SHARED_SECRET`.
+3. Set PIN approve/reject (lihat "Script Properties Apps Script" di atas). Kabari
+   PIN-nya ke Lemon lewat chat pribadi (bukan ditulis di repo/commit).
+4. Kalau Code.gs atau Marketing.gs diedit, WAJIB redeploy versi baru (Deploy ->
+   Manage deployments -> edit -> New version) — edit di editor Apps Script saja
+   tidak otomatis update URL yang sudah jadi.
 5. Fitur foto nota pakai Google Drive (folder "Zerodeo - Nota Bukti", dibuat
    otomatis). Pertama kali Code.gs versi ini di-deploy, Google minta izin akses
    Drive tambahan — klik Allow / Izinkan. Foto nota di-share "anyone with the
@@ -68,13 +125,14 @@ backend lain — Google Sheet itu sendiri yang jadi database.
 ## Deploy target
 
 - GitHub organization: `zerodeomove`
-- Hosting: Vercel, root files `index.html` dan `input.html` langsung (bukan
-  React/Node — plain static HTML, tidak butuh build step)
+- Hosting: Vercel. Halaman = plain static HTML di root (bukan React/Node), ditambah
+  satu Vercel Function di `api/proxy.js`. Tidak butuh build step.
 
-## Status saat ini (26 Sep 2026)
+## Status saat ini (2 Okt 2026)
 
 Baru tahap testing internal, dipakai tim 4 orang. Belum ada data kegiatan
-sungguhan, masih 1 baris contoh. Modul Marketing/Ops sengaja belum jadi
-tab/halaman terpisah — sekarang cukup difilter dari tabel kegiatan yang sama
-di dashboard. Dashboard khusus buat Pak Budianto (ringkas, tanpa detail
-internal) belum dibuat — direncanakan terpisah nanti.
+sungguhan, masih 1 baris contoh. Modul Marketing sekarang ada di `marketing.html`
+(strategi, lane, channel, hasil event); Ops sengaja belum jadi tab/halaman
+terpisah — sekarang cukup difilter dari tabel kegiatan yang sama di dashboard.
+Dashboard khusus buat Pak Budianto (ringkas, tanpa detail internal) belum dibuat —
+direncanakan terpisah nanti.
