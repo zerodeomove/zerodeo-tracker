@@ -3,251 +3,236 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Zerodeo — Tracker Kegiatan</title>
-<style>
-  :root {
-    --bg: #F5F4EF;
-    --surface: #FFFFFF;
-    --border: #DEDCD3;
-    --text: #1F2422;
-    --text-muted: #6B6F68;
-    --accent: #4A87A8;
-    --accent-light: #E4EEF3;
-    --accent-dark: #2D5A72;
-    --amber: #B8860B;
-    --amber-bg: #FBF2DD;
-    --green: #2F6B3A;
-    --green-bg: #E6F0E6;
-    --red: #A13A2E;
-    --red-bg: #F7E7E4;
-    --purple: #5B4A8A;
-    --purple-bg: #ECE8F5;
-    --radius: 10px;
-  }
-  * { box-sizing: border-box; }
-  body {
-    margin: 0;
-    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
-    background: var(--bg);
-    color: var(--text);
-    font-size: 14px;
-    line-height: 1.5;
-  }
-  .wrap { max-width: 1180px; margin: 0 auto; padding: 24px 20px 60px; }
-
-  .nav { display: flex; gap: 14px; font-size: 13px; margin-bottom: 18px; flex-wrap: wrap; }
-  .nav a { color: var(--accent); text-decoration: none; }
-  .nav a.on { font-weight: 600; color: var(--text); }
-
-  header.top {
-    display: flex; align-items: baseline; justify-content: space-between;
-    margin-bottom: 20px; flex-wrap: wrap; gap: 8px;
-  }
-  header.top h1 { font-size: 20px; font-weight: 600; margin: 0; letter-spacing: -0.01em; }
-  header.top .sub { color: var(--text-muted); font-size: 13px; }
-
-  .config {
-    background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius);
-    padding: 14px 16px; margin-bottom: 20px; display: flex; gap: 10px; align-items: center; flex-wrap: wrap;
-  }
-  .config input[type=text] {
-    flex: 1; min-width: 240px; padding: 8px 10px; border: 1px solid var(--border);
-    border-radius: 6px; font-size: 13px; font-family: monospace; color: var(--text);
-  }
-  .config button, .toolbar button {
-    background: var(--accent); color: #fff; border: none; padding: 8px 14px;
-    border-radius: 6px; font-size: 13px; cursor: pointer; font-weight: 500;
-  }
-  .config button:hover, .toolbar button:hover { background: var(--accent-dark); }
-  .config .status { font-size: 12px; color: var(--text-muted); }
-  .config .status.ok { color: var(--green); }
-  .config .status.err { color: var(--red); }
-
-  .cards { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; margin-bottom: 20px; }
-  @media (max-width: 860px) { .cards { grid-template-columns: 1fr; } }
-  .card {
-    background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius);
-    padding: 16px 18px;
-  }
-  .card h2 {
-    font-size: 12px; text-transform: none; font-weight: 600; color: var(--text-muted);
-    margin: 0 0 12px 0; letter-spacing: 0.01em;
-  }
-  .card-row {
-    display: flex; justify-content: space-between; align-items: center;
-    padding: 6px 0; border-bottom: 1px solid var(--bg);
-    font-size: 13px;
-  }
-  .card-row:last-child { border-bottom: none; }
-  .card-row .label { color: var(--text); }
-  .card-row .value { font-weight: 600; font-variant-numeric: tabular-nums; }
-  .card-row .value.zero { color: var(--text-muted); font-weight: 400; }
-  .card-empty { color: var(--text-muted); font-size: 13px; padding: 8px 0; }
-
-  .card.clickable { cursor: pointer; }
-  .card.clickable:hover { border-color: var(--accent); }
-  .card-big { font-size: 26px; font-weight: 600; font-variant-numeric: tabular-nums; letter-spacing: -0.01em; }
-  .card-big.zero { color: var(--text-muted); font-weight: 400; }
-  .card-sub { color: var(--text-muted); font-size: 12px; margin-top: 2px; }
-
-  .toolbar {
-    display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin-bottom: 12px;
-  }
-  .toolbar select, .toolbar input[type=text] {
-    padding: 7px 10px; border: 1px solid var(--border); border-radius: 6px;
-    font-size: 13px; background: var(--surface); color: var(--text);
-  }
-  .toolbar input[type=text] { flex: 1; min-width: 160px; }
-  .toolbar .count { color: var(--text-muted); font-size: 12px; margin-left: auto; }
-
-  table { width: 100%; border-collapse: collapse; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; }
-  thead th {
-    text-align: left; font-size: 12px; font-weight: 600; color: var(--text-muted);
-    background: var(--bg); padding: 10px 12px; border-bottom: 1px solid var(--border);
-    white-space: nowrap;
-  }
-  tbody td { padding: 10px 12px; border-bottom: 1px solid var(--bg); font-size: 13px; vertical-align: top; }
-  tbody tr:last-child td { border-bottom: none; }
-  tbody tr:hover { background: #FAFAF7; }
-  td.num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
-  td.item { max-width: 260px; }
-  td.empty-state { text-align: center; color: var(--text-muted); padding: 32px 12px; }
-
-  .badge {
-    display: inline-block; padding: 3px 9px; border-radius: 20px; font-size: 12px; font-weight: 500;
-    white-space: nowrap;
-  }
-  .badge.draft { background: #EEEDE8; color: var(--text-muted); }
-  .badge.siap { background: var(--accent-light); color: var(--accent-dark); }
-  .badge.diajukan { background: var(--amber-bg); color: var(--amber); }
-  .badge.approved { background: var(--accent-light); color: var(--accent-dark); }
-  .badge.ditolak { background: var(--red-bg); color: var(--red); }
-  .badge.revisi { background: var(--amber-bg); color: var(--amber); }
-  .badge.ditransfer { background: var(--purple-bg); color: var(--purple); }
-  .badge.selesai { background: var(--green-bg); color: var(--green); }
-
-  .aksi-btn {
-    border: none; padding: 4px 9px; border-radius: 6px; font-size: 12px; font-weight: 500;
-    cursor: pointer; margin-right: 4px; text-decoration: none; display: inline-block;
-  }
-  .aksi-btn.approve { background: var(--green-bg); color: var(--green); }
-  .aksi-btn.reject { background: var(--red-bg); color: var(--red); }
-
-  .deadline-soon { color: var(--red); font-weight: 600; }
-  footer { margin-top: 24px; color: var(--text-muted); font-size: 12px; text-align: center; }
-
-  .modal-overlay {
-    position: fixed; inset: 0; background: rgba(31,36,34,0.45);
-    display: none; align-items: center; justify-content: center; padding: 16px; z-index: 50;
-  }
-  .modal-overlay.show { display: flex; }
-  .modal-box {
-    background: var(--surface); border-radius: var(--radius); padding: 20px;
-    max-width: 380px; width: 100%; display: flex; flex-direction: column; gap: 12px;
-  }
-  .modal-box h3 { margin: 0; font-size: 16px; font-weight: 600; }
-  .modal-box label { font-size: 13px; font-weight: 500; display: flex; flex-direction: column; gap: 6px; }
-  .modal-box input, .modal-box select {
-    font-size: 15px; padding: 9px 10px; border: 1px solid var(--border);
-    border-radius: 8px; background: var(--bg); color: var(--text); font-family: inherit;
-  }
-  .modal-actions { display: flex; gap: 8px; justify-content: flex-end; margin-top: 4px; }
-  .modal-actions button {
-    border: none; padding: 9px 16px; border-radius: 8px; font-size: 13px; font-weight: 600; cursor: pointer;
-  }
-  .modal-actions .btn-cancel { background: var(--bg); color: var(--text-muted); }
-  .modal-actions .btn-submit { background: var(--accent); color: #fff; }
-  .modal-actions .btn-submit:disabled { opacity: 0.6; cursor: default; }
-  .modal-err { font-size: 12px; color: var(--red); display: none; }
-  .modal-err.show { display: block; }
-</style>
+<title>Zerodeo — Tracker &amp; Marketing</title>
+<link rel="stylesheet" href="style.css">
 </head>
 <body>
 <div class="wrap">
 
-  <div class="nav"><a class="on" href="index.html">Tracker</a><a href="marketing.html">Marketing</a></div>
-
   <header class="top">
     <div>
-      <h1>Zerodeo — Tracker Kegiatan &amp; Budgeting</h1>
+      <h1>Zerodeo</h1>
       <div class="sub" id="lastSync">Memuat data…</div>
     </div>
-    <button onclick="loadData()" style="background:var(--accent-dark);color:#fff;border:none;padding:8px 14px;border-radius:6px;font-size:13px;cursor:pointer;font-weight:500">Refresh</button>
-    <a href="input.html" style="background:var(--green);color:#fff;text-decoration:none;padding:8px 14px;border-radius:6px;font-size:13px;font-weight:500">+ Input Kegiatan</a>
+    <button class="btn dark" onclick="load()">Refresh</button>
   </header>
 
-  <div class="cards">
-    <div class="card clickable" onclick="filterMenungguApprove()" title="Klik buat lihat yang menunggu approve">
-      <h2>Menunggu Approve</h2>
-      <div id="menungguCard"><div class="card-empty">Belum ada data.</div></div>
-    </div>
-    <div class="card">
-      <h2>Sudah Cair, Belum Ada Nota</h2>
-      <div id="belumNotaCard"><div class="card-empty">Belum ada data.</div></div>
-    </div>
-    <div class="card">
-      <h2>Deadline Kegiatan Terdekat</h2>
-      <div id="deadlineCard"><div class="card-empty">Belum ada data.</div></div>
-    </div>
-  </div>
+  <nav class="tabs">
+    <button class="tab" data-main="tracker" onclick="showView('tracker')">Tracker</button>
+    <button class="tab" data-main="marketing" onclick="showView(lastMktView)">Marketing</button>
+  </nav>
 
-  <div class="toolbar">
-    <select id="filterKategori" onchange="renderTable()">
-      <option value="">Semua Kategori</option>
-    </select>
-    <select id="filterTipe" onchange="renderTable()">
-      <option value="">Semua Tipe</option>
-    </select>
-    <select id="filterPic" onchange="renderTable()">
-      <option value="">Semua PIC</option>
-    </select>
-    <select id="filterStatus" onchange="renderTable()">
-      <option value="">Semua Status</option>
-    </select>
-    <input type="text" id="searchBox" placeholder="Cari item kegiatan…" oninput="renderTable()">
-    <span class="count" id="rowCount"></span>
-  </div>
+  <!-- ================= TRACKER ================= -->
+  <section class="panel" id="panel-tracker">
+    <div class="cards">
+      <div class="card clickable" onclick="filterMenungguApprove()" title="Klik buat lihat yang menunggu approve">
+        <h2>Menunggu Approve</h2>
+        <div id="menungguCard"><div class="card-empty">Belum ada data.</div></div>
+      </div>
+      <div class="card">
+        <h2>Sudah Cair, Belum Ada Nota</h2>
+        <div id="belumNotaCard"><div class="card-empty">Belum ada data.</div></div>
+      </div>
+      <div class="card">
+        <h2>Deadline Kegiatan Terdekat</h2>
+        <div id="deadlineCard"><div class="card-empty">Belum ada data.</div></div>
+      </div>
+    </div>
 
-  <table>
-    <thead>
-      <tr>
-        <th>Item Kegiatan</th>
-        <th>Kategori</th>
-        <th>Tipe</th>
-        <th>PIC</th>
-        <th>Status</th>
-        <th>Deadline</th>
-        <th>Estimasi</th>
-        <th>Actual</th>
-        <th>Selisih</th>
-        <th>Aksi</th>
-      </tr>
-    </thead>
-    <tbody id="tableBody">
-      <tr><td colspan="10" class="empty-state">Sambungkan API dulu untuk melihat data.</td></tr>
-    </tbody>
-  </table>
+    <div class="toolbar">
+      <select id="filterKategori" onchange="renderTable()"><option value="">Semua Kategori</option></select>
+      <select id="filterTipe" onchange="renderTable()"><option value="">Semua Tipe</option></select>
+      <select id="filterPic" onchange="renderTable()"><option value="">Semua PIC</option></select>
+      <select id="filterStatus" onchange="renderTable()"><option value="">Semua Status</option></select>
+      <input type="text" id="searchBox" placeholder="Cari item kegiatan…" oninput="renderTable()">
+      <span class="push">
+        <span class="count" id="rowCount"></span>
+        <button class="btn green" onclick="openKegiatan()">+ Input Kegiatan</button>
+      </span>
+    </div>
+
+    <div class="scroll">
+      <table id="tableKegiatan">
+        <thead>
+          <tr>
+            <th>Item Kegiatan</th><th>Kategori</th><th>Tipe</th><th>PIC</th><th>Status</th>
+            <th>Deadline</th><th>Estimasi</th><th>Actual</th><th>Selisih</th><th>Aksi</th>
+          </tr>
+        </thead>
+        <tbody id="tableBody">
+          <tr><td colspan="10" class="empty-state">Memuat…</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- ================= MARKETING ================= -->
+  <section class="panel" id="panel-marketing">
+    <div class="note" id="mktNote" style="display:none"></div>
+    <div class="subtabs">
+      <button class="subtab" data-view="strategi" onclick="showView('strategi')">Strategi</button>
+      <button class="subtab" data-view="event" onclick="showView('event')">Hasil Event</button>
+    </div>
+
+    <div id="view-strategi">
+      <div class="toolbar">
+        <select id="fLane" onchange="renderStrategi()"></select>
+        <select id="fChannel" onchange="renderStrategi()"></select>
+        <select id="fStatus" onchange="renderStrategi()">
+          <option value="">Semua Status</option><option>Ide</option><option>Jalan</option><option>Selesai</option>
+        </select>
+        <input type="text" id="fSearch" placeholder="Cari strategi…" oninput="renderStrategi()">
+        <span class="push">
+          <span class="count" id="countS"></span>
+          <button class="btn green" onclick="openStrategi()">+ Strategi</button>
+        </span>
+      </div>
+      <div class="scroll">
+        <table>
+          <thead><tr><th>Strategi</th><th>Lane</th><th>Channel</th><th>Periode</th><th>PIC</th><th>Status</th></tr></thead>
+          <tbody id="bodyS"><tr><td colspan="6" class="empty">Memuat…</td></tr></tbody>
+        </table>
+      </div>
+    </div>
+
+    <div id="view-event">
+      <div class="toolbar">
+        <span class="sub">Angka di awal masih tipis. Jangan buru-buru memutuskan scale up sebelum satu channel punya beberapa event.</span>
+        <span class="push"><button class="btn green" onclick="openEvent()">+ Hasil Event</button></span>
+      </div>
+      <h2 class="sec">Hasil event per channel</h2>
+      <div class="scroll">
+        <table>
+          <thead><tr><th>Channel</th><th>Event</th><th>Hadir</th><th>Coba</th><th>Tanya beli</th><th>Order</th><th>UGC</th><th>Order / Hadir</th></tr></thead>
+          <tbody id="bodySum"><tr><td colspan="8" class="empty">Memuat…</td></tr></tbody>
+        </table>
+      </div>
+      <h2 class="sec">Semua hasil event</h2>
+      <div class="scroll">
+        <table>
+          <thead><tr><th>Tanggal</th><th>Event</th><th>Channel</th><th>Komunitas</th><th>Kode</th><th>Hadir</th><th>Coba</th><th>Tanya</th><th>Order</th><th>UGC</th></tr></thead>
+          <tbody id="bodyE"><tr><td colspan="10" class="empty">Memuat…</td></tr></tbody>
+        </table>
+      </div>
+    </div>
+  </section>
 
   <footer>Data ditarik langsung dari Google Sheet lewat Apps Script — tidak ada salinan tersimpan di halaman ini.</footer>
 </div>
 
+<!-- ================= POPUP: Input kegiatan ================= -->
+<div class="modal-overlay" id="m-kegiatan">
+  <div class="modal-box">
+    <h3>Input kegiatan baru</h3>
+    <form id="kegiatanForm" novalidate>
+      <label>Item kegiatan
+        <input type="text" id="k-item" placeholder="Contoh: sewa rak display Malang">
+        <span class="field-error" id="err-k-item">Wajib diisi.</span></label>
+
+      <label>Kategori
+        <select id="k-kategori">
+          <option value="">Pilih kategori…</option>
+          <option>Peralatan/Kulak</option>
+          <option>Packaging Tambahan</option>
+          <option>Ongkos Kirim/Logistik</option>
+          <option>Konten &amp; Aktivasi Akar</option>
+          <option>Operasional Tim</option>
+          <option>Lain-lain</option>
+        </select>
+        <span class="field-error" id="err-k-kategori">Wajib dipilih.</span></label>
+
+      <label>Tipe
+        <select id="k-tipe">
+          <option value="Capex">Capex — barang/aset tahan lama</option>
+          <option value="Opex" selected>Opex — operasional / habis pakai</option>
+        </select>
+        <span class="field-error" id="err-k-tipe">Wajib dipilih.</span></label>
+
+      <label>Jalur
+        <select id="k-jalur">
+          <option value="">Pilih jalur…</option>
+          <option>Fixed</option>
+          <option>Pengajuan</option>
+        </select>
+        <span class="field-error" id="err-k-jalur">Wajib dipilih.</span></label>
+
+      <label>PIC
+        <select id="k-pic">
+          <option value="">Pilih PIC…</option>
+          <option>Lenno</option><option>Ricko</option><option>Yanuar</option><option>Christina</option>
+        </select>
+        <span class="field-error" id="err-k-pic">Wajib dipilih.</span></label>
+
+      <label>Estimasi (Rp)
+        <input type="number" id="k-estimasi" placeholder="0" min="0" step="1000" inputmode="numeric">
+        <span class="field-error" id="err-k-estimasi">Isi angka lebih dari 0.</span></label>
+
+      <label>Deadline kegiatan (opsional)
+        <input type="date" id="k-deadline"></label>
+
+      <label>Status
+        <select id="k-status">
+          <option value="Draft">Draft — masih perlu dicek dulu</option>
+          <option value="Siap Ajukan">Siap Ajukan — tinggal masuk antrean</option>
+          <option value="Diajukan" selected>Diajukan — langsung ke Lemon</option>
+        </select></label>
+
+      <div class="msg" id="k-msg"></div>
+      <div class="modal-actions">
+        <button type="button" class="btn-cancel" onclick="closeModal('m-kegiatan')">Tutup</button>
+        <button type="submit" class="btn-submit" id="k-submit">Simpan kegiatan</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- ================= POPUP: Lengkapi kegiatan ================= -->
+<div class="modal-overlay" id="m-complete">
+  <div class="modal-box">
+    <h3>Lengkapi kegiatan</h3>
+    <div class="msg" id="c-status"></div>
+    <div class="info" id="c-info" style="display:none">
+      <div class="info-row"><span class="k">Item Kegiatan</span><span class="v" id="c-i-item"></span></div>
+      <div class="info-row"><span class="k">Kategori</span><span class="v" id="c-i-kategori"></span></div>
+      <div class="info-row"><span class="k">Estimasi</span><span class="v" id="c-i-estimasi"></span></div>
+      <div class="info-row"><span class="k">Nominal Transfer</span><span class="v" id="c-i-transfer"></span></div>
+    </div>
+    <form id="completeForm" style="display:none" novalidate>
+      <label>Actual (Rp)
+        <input type="number" id="c-actual" placeholder="0" min="0" step="1" inputmode="numeric">
+        <span class="field-error" id="err-c-actual">Isi angka lebih dari 0.</span></label>
+
+      <label>Foto nota
+        <input type="file" id="c-photo" accept="image/*" capture="environment">
+        <span class="hint">Opsional. Foto dikecilkan otomatis sebelum dikirim.</span>
+        <div class="preview" id="c-preview">
+          <img id="c-previewImg" alt="Preview nota">
+          <div class="size" id="c-previewSize"></div>
+        </div></label>
+
+      <div class="msg" id="c-msg"></div>
+      <div class="modal-actions">
+        <button type="button" class="btn-cancel" onclick="closeModal('m-complete')">Batal</button>
+        <button type="submit" class="btn-submit" id="c-submit">Simpan &amp; tandai selesai</button>
+      </div>
+    </form>
+    <div class="msg" id="c-msg-done"></div>
+    <div class="modal-actions" id="c-close-row" style="display:none">
+      <button type="button" class="btn-cancel" onclick="closeModal('m-complete')">Tutup</button>
+    </div>
+  </div>
+</div>
+
+<!-- ================= POPUP: Tandai ditransfer ================= -->
 <div class="modal-overlay" id="transferModal">
   <div class="modal-box">
     <h3>Tandai Ditransfer</h3>
-    <label>
-      PIC Transaksi
-      <select id="tf-pic">
-        <option value="">Pilih PIC…</option>
-      </select>
-    </label>
-    <label>
-      Nominal Transfer (Rp)
-      <input type="number" id="tf-nominal" placeholder="0" min="0" step="1000">
-    </label>
-    <label>
-      Tanggal Transfer
-      <input type="date" id="tf-tanggal">
-    </label>
+    <label>PIC Transaksi
+      <select id="tf-pic"><option value="">Pilih PIC…</option></select></label>
+    <label>Nominal Transfer (Rp)
+      <input type="number" id="tf-nominal" placeholder="0" min="0" step="1000" inputmode="numeric"></label>
+    <label>Tanggal Transfer
+      <input type="date" id="tf-tanggal"></label>
     <div class="modal-err" id="tf-err"></div>
     <div class="modal-actions">
       <button type="button" class="btn-cancel" onclick="closeTransferModal()">Batal</button>
@@ -256,267 +241,100 @@
   </div>
 </div>
 
+<!-- ================= POPUP: Strategi baru ================= -->
+<div class="modal-overlay" id="m-strategi">
+  <div class="modal-box">
+    <h3>Strategi baru</h3>
+    <div class="hint">Lane = produk yang diangkat. Channel = tempat programnya jalan. Boleh pilih lebih dari satu.</div>
+    <form id="strategiForm" novalidate>
+      <label>Nama strategi
+        <input type="text" id="s-nama" placeholder="Contoh: Hook launch November">
+        <span class="field-error" id="err-s-nama">Wajib diisi.</span></label>
+
+      <label>Pesan inti
+        <textarea id="s-pesan" placeholder="Satu-dua kalimat: apa yang mau orang tangkap?"></textarea>
+        <span class="field-error" id="err-s-pesan">Wajib diisi.</span></label>
+
+      <div class="l">Lane
+        <div class="chips" id="s-laneChips"></div>
+        <div class="addrow"><input type="text" id="s-laneNew" placeholder="Tambah lane baru…"><button type="button" class="btn ghost" data-add="lane">Tambah</button></div>
+        <span class="field-error" id="err-s-lane">Pilih minimal satu lane.</span></div>
+
+      <div class="l">Channel
+        <div class="chips" id="s-channelChips"></div>
+        <div class="addrow"><input type="text" id="s-channelNew" placeholder="Tambah channel baru…"><button type="button" class="btn ghost" data-add="channel">Tambah</button></div>
+        <span class="field-error" id="err-s-channel">Pilih minimal satu channel.</span></div>
+
+      <div class="row2">
+        <label>Mulai<input type="date" id="s-mulai"><span class="field-error" id="err-s-mulai">Wajib diisi.</span></label>
+        <label>Selesai (opsional)<input type="date" id="s-selesai"><span class="field-error" id="err-s-selesai">Tidak boleh sebelum tanggal mulai.</span></label>
+      </div>
+
+      <div class="row2">
+        <label>PIC
+          <select id="s-pic"><option value="">Pilih…</option><option>Lenno</option><option>Ricko</option><option>Yanuar</option><option>Christina</option></select>
+          <span class="field-error" id="err-s-pic">Wajib dipilih.</span></label>
+        <label>Status
+          <select id="s-status"><option>Ide</option><option>Jalan</option><option>Selesai</option></select></label>
+      </div>
+
+      <div class="msg" id="s-msg"></div>
+      <div class="modal-actions">
+        <button type="button" class="btn-cancel" onclick="closeModal('m-strategi')">Tutup</button>
+        <button type="submit" class="btn-submit" id="s-submit">Simpan strategi</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- ================= POPUP: Hasil event ================= -->
+<div class="modal-overlay" id="m-event">
+  <div class="modal-box">
+    <h3>Hasil event</h3>
+    <div class="hint">Diisi H+1 sampai H+3 setelah event. Angka order bisa dilengkapi belakangan langsung di tab hasil_event pada Sheet.</div>
+    <form id="eventForm" novalidate>
+      <label>Nama event
+        <input type="text" id="e-nama" placeholder="Contoh: Fun run komunitas Surabaya">
+        <span class="field-error" id="err-e-nama">Wajib diisi.</span></label>
+
+      <div class="row2">
+        <label>Tanggal event<input type="date" id="e-tanggal"><span class="field-error" id="err-e-tanggal">Wajib diisi.</span></label>
+        <label>PIC pencatat
+          <select id="e-pic"><option value="">Pilih…</option><option>Lenno</option><option>Ricko</option><option>Yanuar</option><option>Christina</option></select>
+          <span class="field-error" id="err-e-pic">Wajib dipilih.</span></label>
+      </div>
+
+      <label>Channel (jenis komunitas)
+        <select id="e-channel"></select>
+        <input type="text" id="e-channelNew" placeholder="atau tulis channel baru (kalau diisi, ini yang dipakai)">
+        <span class="field-error" id="err-e-channel">Pilih atau tulis channel.</span></label>
+
+      <label>Nama komunitas<input type="text" id="e-komunitas" placeholder="Contoh: Surabaya Runners"></label>
+      <label>Kode voucher / link unik event<input type="text" id="e-kode" placeholder="Contoh: RUNSBY10"></label>
+
+      <div class="row2">
+        <label>Hadir<input type="number" id="e-hadir" min="0" step="1" placeholder="0" inputmode="numeric"></label>
+        <label>Coba produk / dapat sampel<input type="number" id="e-coba" min="0" step="1" placeholder="0" inputmode="numeric"></label>
+        <label>Tanya "belinya di mana"<input type="number" id="e-tanya" min="0" step="1" placeholder="0" inputmode="numeric"></label>
+        <label>Order via kode<input type="number" id="e-order" min="0" step="1" placeholder="0" inputmode="numeric"></label>
+      </div>
+      <label>Konten buatan orang (foto/story pakai produk)<input type="number" id="e-ugc" min="0" step="1" placeholder="0" inputmode="numeric"></label>
+
+      <label>Strategi terkait (opsional)<select id="e-strategi"><option value="">-</option></select></label>
+
+      <div class="msg" id="e-msg"></div>
+      <div class="modal-actions">
+        <button type="button" class="btn-cancel" onclick="closeModal('m-event')">Tutup</button>
+        <button type="submit" class="btn-submit" id="e-submit">Simpan hasil event</button>
+      </div>
+    </form>
+  </div>
+</div>
+
 <script src="common.js"></script>
-<script>
-const PIC_LIST = ['Lenno', 'Ricko', 'Yanuar', 'Christina'];
-const TIPE_LIST = ['Capex', 'Opex'];
-let cachedPin = null;
-
-async function updateStatus(row, newStatus) {
-  let pin = cachedPin;
-  if (!pin) {
-    pin = prompt('PIN approve/reject dari Lemon:');
-    if (!pin) return;
-  }
-  try {
-    const json = await zApi.post({ action: 'update_status', row: row, status: newStatus, pin: pin });
-    if (json.ok) {
-      cachedPin = pin; // biar tidak nanya PIN tiap klik dalam sesi yang sama
-      loadData();
-    } else {
-      cachedPin = null;
-      alert('Gagal: ' + json.error);
-    }
-  } catch (err) {
-    alert('Gagal kirim: ' + err.message);
-  }
-}
-const STATUS_ORDER = ['Draft','Siap Ajukan','Diajukan','Approved','Ditolak','Revisi','Ditransfer','Selesai'];
-const STATUS_CLASS = {
-  'Draft':'draft','Siap Ajukan':'siap','Diajukan':'diajukan','Approved':'approved',
-  'Ditolak':'ditolak','Revisi':'revisi','Ditransfer':'ditransfer','Selesai':'selesai'
-};
-
-let kegiatanData = [];
-let plafonData = [];
-
-function fmtRupiah(n) {
-  if (n === null || n === undefined || n === '' || isNaN(n)) return '-';
-  const num = Number(n);
-  if (num === 0) return '-';
-  return (num < 0 ? '-Rp' : 'Rp') + Math.abs(Math.round(num)).toLocaleString('id-ID');
-}
-
-function fmtDate(d) {
-  if (!d) return '-';
-  const dt = new Date(d);
-  if (isNaN(dt.getTime())) return d;
-  return dt.toLocaleDateString('id-ID', { day: '2-digit', month: 'short', year: '2-digit' });
-}
-
-function daysUntil(d) {
-  if (!d) return null;
-  const dt = new Date(d);
-  if (isNaN(dt.getTime())) return null;
-  const today = new Date(); today.setHours(0,0,0,0);
-  dt.setHours(0,0,0,0);
-  return Math.round((dt - today) / 86400000);
-}
-
-function setStatus(msg, isErr) {
-  const el = document.getElementById('lastSync');
-  el.textContent = msg;
-  el.style.color = isErr ? 'var(--red)' : '';
-}
-
-async function loadData() {
-  setStatus('Memuat…', false);
-  try {
-    const json = await zApi.get();
-    if (json.ok === false) throw new Error(json.error || 'Gagal');
-    kegiatanData = json.kegiatan || [];
-    plafonData = json.plafon_fixed || [];
-    setStatus('Terakhir ambil data: ' + new Date().toLocaleString('id-ID'), false);
-    populateFilters();
-    renderCards();
-    renderTable();
-  } catch (err) {
-    setStatus('Gagal ambil data: ' + err.message + ' — cek kode akses tim & konfigurasi proxy di Vercel.', true);
-  }
-}
-
-function populateFilters() {
-  const kategoris = [...new Set(kegiatanData.map(r => r['Kategori']).filter(Boolean))].sort();
-  const selKat = document.getElementById('filterKategori');
-  selKat.innerHTML = '<option value="">Semua Kategori</option>' +
-    kategoris.map(k => `<option value="${zEsc(k)}">${zEsc(k)}</option>`).join('');
-
-  const selTipe = document.getElementById('filterTipe');
-  selTipe.innerHTML = '<option value="">Semua Tipe</option>' +
-    TIPE_LIST.map(t => `<option value="${t}">${t}</option>`).join('');
-
-  const selPic = document.getElementById('filterPic');
-  selPic.innerHTML = '<option value="">Semua PIC</option>' +
-    PIC_LIST.map(p => `<option value="${p}">${p}</option>`).join('');
-
-  const selStatus = document.getElementById('filterStatus');
-  selStatus.innerHTML = '<option value="">Semua Status</option>' +
-    STATUS_ORDER.map(s => `<option value="${s}">${s}</option>`).join('');
-}
-
-function renderCards() {
-  // Menunggu Approve: jumlah + total estimasi kegiatan berstatus Diajukan
-  const menunggu = kegiatanData.filter(r => r['Status'] === 'Diajukan');
-  const menungguTotal = menunggu.reduce((sum, r) => sum + (Number(r['Estimasi (Rp)']) || 0), 0);
-  document.getElementById('menungguCard').innerHTML = menunggu.length === 0
-    ? '<div class="card-empty">Tidak ada yang menunggu approve.</div>'
-    : `<div class="card-big">${menunggu.length} kegiatan</div>
-       <div class="card-sub">Total estimasi ${fmtRupiah(menungguTotal)}</div>`;
-
-  // Sudah Cair, Belum Ada Nota: (nominal transfer) - (actual dari baris yang sama)
-  const sudahCair = kegiatanData.filter(r => r['Nominal Transfer (Rp)'] !== null && r['Nominal Transfer (Rp)'] !== '' && r['Nominal Transfer (Rp)'] !== undefined);
-  const diterima = sudahCair.reduce((sum, r) => sum + (Number(r['Nominal Transfer (Rp)']) || 0), 0);
-  const actualDariItu = sudahCair.reduce((sum, r) => sum + (Number(r['Actual (Rp)']) || 0), 0);
-  const belumNota = diterima - actualDariItu;
-  document.getElementById('belumNotaCard').innerHTML =
-    `<div class="card-big ${belumNota === 0 ? 'zero' : ''}">${fmtRupiah(belumNota)}</div>
-     <div class="card-sub">Diterima ${fmtRupiah(diterima)} − actual ${fmtRupiah(actualDariItu)}</div>`;
-
-  // Deadline terdekat (belum Selesai, ada tanggal, urut terdekat, max 5)
-  const upcoming = kegiatanData
-    .filter(r => r['Status'] !== 'Selesai' && r['Deadline Kegiatan'])
-    .map(r => ({ item: r['Item Kegiatan'], date: r['Deadline Kegiatan'], days: daysUntil(r['Deadline Kegiatan']) }))
-    .sort((a, b) => new Date(a.date) - new Date(b.date))
-    .slice(0, 5);
-
-  if (upcoming.length === 0) {
-    document.getElementById('deadlineCard').innerHTML = '<div class="card-empty">Tidak ada deadline mendatang.</div>';
-  } else {
-    document.getElementById('deadlineCard').innerHTML = upcoming.map(u => {
-      const soon = u.days !== null && u.days <= 3;
-      const dayLabel = u.days === null ? '' : (u.days < 0 ? `${Math.abs(u.days)}h lewat` : u.days === 0 ? 'hari ini' : `${u.days}h lagi`);
-      return `<div class="card-row">
-        <span class="label" style="max-width:65%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${zEsc(u.item || '-')}</span>
-        <span class="value ${soon ? 'deadline-soon' : ''}">${dayLabel}</span>
-      </div>`;
-    }).join('');
-  }
-}
-
-function filterMenungguApprove() {
-  document.getElementById('filterStatus').value = 'Diajukan';
-  renderTable();
-  document.querySelector('table').scrollIntoView({ behavior: 'smooth', block: 'start' });
-}
-
-function renderTable() {
-  const kat = document.getElementById('filterKategori').value;
-  const tipe = document.getElementById('filterTipe').value;
-  const pic = document.getElementById('filterPic').value;
-  const status = document.getElementById('filterStatus').value;
-  const search = document.getElementById('searchBox').value.trim().toLowerCase();
-
-  let rows = kegiatanData.filter(r => {
-    if (kat && r['Kategori'] !== kat) return false;
-    if (tipe && r['Tipe'] !== tipe) return false;
-    if (pic && r['PIC'] !== pic) return false;
-    if (status && r['Status'] !== status) return false;
-    if (search && !(r['Item Kegiatan'] || '').toLowerCase().includes(search)) return false;
-    return true;
-  });
-
-  document.getElementById('rowCount').textContent = rows.length + ' kegiatan';
-
-  const tbody = document.getElementById('tableBody');
-  if (rows.length === 0) {
-    tbody.innerHTML = '<tr><td colspan="10" class="empty-state">Tidak ada kegiatan yang cocok dengan filter.</td></tr>';
-    return;
-  }
-
-  tbody.innerHTML = rows.map(r => {
-    const statusClass = STATUS_CLASS[r['Status']] || 'draft';
-    const days = daysUntil(r['Deadline Kegiatan']);
-    const deadlineSoon = r['Status'] !== 'Selesai' && days !== null && days <= 3;
-    const selisih = r['Selisih (Rp)'];
-    let aksi = '';
-    if (r['Status'] === 'Diajukan') {
-      aksi = `<button class="aksi-btn approve" onclick="updateStatus(${r['_row']}, 'Approved')">Approve</button>
-         <button class="aksi-btn reject" onclick="updateStatus(${r['_row']}, 'Ditolak')">Reject</button>`;
-    } else if (r['Status'] === 'Ditransfer') {
-      aksi = `<a class="aksi-btn approve" href="complete.html?row=${r['_row']}">Lengkapi</a>`;
-    } else if (r['Status'] !== 'Selesai' && (r['Jalur'] === 'Fixed' || r['Status'] === 'Approved')) {
-      aksi = `<button class="aksi-btn approve" onclick="openTransferModal(${r['_row']})">Tandai Ditransfer</button>`;
-    }
-    return `<tr>
-      <td class="item">${zEsc(r['Item Kegiatan'] || '-')}</td>
-      <td>${zEsc(r['Kategori'] || '-')}</td>
-      <td>${zEsc(r['Tipe'] || '-')}</td>
-      <td>${zEsc(r['PIC'] || '-')}</td>
-      <td><span class="badge ${statusClass}">${zEsc(r['Status'] || 'Draft')}</span></td>
-      <td class="${deadlineSoon ? 'deadline-soon' : ''}">${zEsc(fmtDate(r['Deadline Kegiatan']))}</td>
-      <td class="num">${fmtRupiah(r['Estimasi (Rp)'])}</td>
-      <td class="num">${fmtRupiah(r['Actual (Rp)'])}</td>
-      <td class="num">${fmtRupiah(selisih)}</td>
-      <td>${aksi}</td>
-    </tr>`;
-  }).join('');
-}
-
-let transferRow = null;
-
-function openTransferModal(row) {
-  transferRow = row;
-  const selPic = document.getElementById('tf-pic');
-  selPic.innerHTML = '<option value="">Pilih PIC…</option>' +
-    PIC_LIST.map(p => `<option value="${p}">${p}</option>`).join('');
-  document.getElementById('tf-nominal').value = '';
-  document.getElementById('tf-tanggal').value = new Date().toISOString().slice(0, 10);
-  const errEl = document.getElementById('tf-err');
-  errEl.textContent = '';
-  errEl.classList.remove('show');
-  document.getElementById('transferModal').classList.add('show');
-}
-
-function closeTransferModal() {
-  document.getElementById('transferModal').classList.remove('show');
-  transferRow = null;
-}
-
-async function submitTransfer() {
-  const pic = document.getElementById('tf-pic').value;
-  const nominal = document.getElementById('tf-nominal').value;
-  const tanggal = document.getElementById('tf-tanggal').value;
-  const errEl = document.getElementById('tf-err');
-  errEl.classList.remove('show');
-
-  if (!pic || !nominal || Number(nominal) <= 0) {
-    errEl.textContent = 'Isi PIC Transaksi dan Nominal Transfer (lebih dari 0) dulu.';
-    errEl.classList.add('show');
-    return;
-  }
-
-  const submitBtn = document.getElementById('tf-submit');
-  submitBtn.disabled = true;
-  submitBtn.textContent = 'Menyimpan…';
-
-  try {
-    const json = await zApi.post({
-      action: 'mark_transferred',
-      row: transferRow,
-      picTransaksi: pic,
-      nominalTransfer: Number(nominal),
-      tglTransfer: tanggal,
-    });
-    if (json.ok) {
-      closeTransferModal();
-      loadData();
-    } else {
-      errEl.textContent = json.error || 'Gagal menyimpan.';
-      errEl.classList.add('show');
-    }
-  } catch (err) {
-    errEl.textContent = 'Gagal kirim: ' + err.message;
-    errEl.classList.add('show');
-  } finally {
-    submitBtn.disabled = false;
-    submitBtn.textContent = 'Simpan';
-  }
-}
-
-// auto-load saved URL on page open
-window.addEventListener('DOMContentLoaded', () => {
-  loadData();
-});
-</script>
+<script src="app.js"></script>
+<script src="tracker.js"></script>
+<script src="marketing.js"></script>
+<script>boot();</script>
 </body>
 </html>

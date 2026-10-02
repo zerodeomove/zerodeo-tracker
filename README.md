@@ -9,7 +9,7 @@ dan budgeting launch, plus proses approve/reject oleh Lemon. Ada juga modul mark
 - **Jalur Pengajuan:** Draft -> Siap Ajukan -> Diajukan -> (tombol Approve/Reject,
   pakai PIN Lemon) -> Approved -> (tombol "Tandai Ditransfer" di dashboard, isi PIC
   Transaksi + Nominal Transfer + Tgl Transfer) -> Ditransfer -> (tombol "Lengkapi"
-  di dashboard, buka complete.html, isi Actual + foto nota) -> Selesai.
+  di dashboard, buka popup, isi Actual + foto nota) -> Selesai.
 - **Jalur Fixed:** lompat approve. Begitu statusnya belum Ditransfer/Selesai, tombol
   "Tandai Ditransfer" langsung muncul di dashboard, tanpa perlu PIN.
 
@@ -35,18 +35,31 @@ Google Sheet itu sendiri yang jadi database.
 
 ## File di repo ini
 
-Halaman (static HTML, root domain di Vercel):
-- `index.html` — dashboard tracker (halaman utama)
-- `input.html` — form input kegiatan baru (termasuk Tipe Capex/Opex)
-- `complete.html` — form lengkapi kegiatan (dibuka dari tombol "Lengkapi" di
-  dashboard untuk baris berstatus "Ditransfer", pakai `?row=<nomor baris>`).
-  Foto nota dikompres di browser (max 1600px, JPEG) sebelum dikirim.
-- `marketing.html` — dashboard marketing: strategi, hasil event per channel, semua hasil event
-- `strategi-input.html` — form strategi baru (lane + channel boleh lebih dari satu)
-- `hasil-event.html` — form hasil event (diisi H+1 sampai H+3 setelah event)
-- `common.js` — helper bersama: kode akses tim, `zApi.get/post` ke `/api/proxy`,
-  dan `zEsc()` (wajib dipakai untuk semua teks dari data yang masuk ke innerHTML)
-- `common.css` — style halaman marketing
+Satu halaman (`index.html`) dengan tab di atas. Data tracker dan marketing ditarik
+sekali lewat satu panggilan, semua form berupa popup:
+
+- Tab **Tracker**: kartu ringkas + tabel kegiatan. Popup: Input Kegiatan (Tipe
+  Capex/Opex), Tandai Ditransfer, Lengkapi (Actual + foto nota, dikompres di browser
+  max 1600px JPEG sebelum dikirim).
+- Tab **Marketing**, sub-tab **Strategi** dan **Hasil Event**. Popup: Strategi baru
+  (lane + channel boleh lebih dari satu) dan Hasil Event (diisi H+1 sampai H+3
+  setelah event).
+
+File:
+- `index.html` — kerangka halaman: tab, panel, dan semua popup
+- `style.css` — satu stylesheet untuk semuanya
+- `app.js` — helper bersama, tab/routing, popup, dan pemuatan data
+- `tracker.js` — logika tab Tracker (kartu, tabel, approve/reject, ditransfer, input, lengkapi)
+- `marketing.js` — logika tab Marketing (strategi, hasil event, popup inputnya)
+- `common.js` — kode akses tim, `zApi.get/post` ke `/api/proxy`, dan `zEsc()`
+  (wajib dipakai untuk semua teks dari data yang masuk ke innerHTML)
+- `input.html`, `complete.html`, `marketing.html`, `strategi-input.html`,
+  `hasil-event.html` — **alamat lama saja**, isinya pengalih otomatis ke `index.html`
+  (misalnya `input.html` membuka popup Input Kegiatan) supaya bookmark tim tidak putus.
+  Aman dihapus kalau sudah tidak ada yang memakai alamat lama.
+
+Link langsung ke bagian tertentu: `/#tracker`, `/#strategi`, `/#event`,
+`/#tambah-kegiatan`, `/#tambah-strategi`, `/#tambah-event`, `/#lengkapi=<nomor baris>`.
 
 Vercel Function:
 - `api/proxy.js` — perantara browser -> Apps Script. Tanpa package.json, tanpa build step.
@@ -91,7 +104,7 @@ Project Settings -> Script Properties (nilainya tidak ditulis di file mana pun d
    Google minta izin (akses Drive untuk foto nota).
 3. Isi env di Vercel: `TEAM_CODE`, `APPS_SCRIPT_URL`, `SHARED_SECRET`.
 4. Redeploy di Vercel.
-5. Tes semua halaman: index, input, complete, marketing, strategi-input, hasil-event.
+5. Tes halaman: buka situsnya, kedua tab (Tracker, Marketing) dan tiap popup.
    Tanpa kode -> halaman meminta kode akses; kode benar -> data tampil.
 6. BARU SETELAH semua halaman terbukti jalan lewat proxy: isi Script Properties
    `SHARED_SECRET` (sama dengan Vercel) dan `APPROVAL_PIN` (PIN baru, jangan pakai
@@ -125,13 +138,13 @@ jadi URL lama tidak berguna tanpa secret. Jangan menunda langkah 6 terlalu lama.
 ## Deploy target
 
 - GitHub organization: `zerodeomove`
-- Hosting: Vercel. Halaman = plain static HTML di root (bukan React/Node), ditambah
-  satu Vercel Function di `api/proxy.js`. Tidak butuh build step.
+- Hosting: Vercel. Halaman = plain static HTML/JS/CSS di root (bukan React/Node),
+  ditambah satu Vercel Function di `api/proxy.js`. Tidak butuh build step.
 
 ## Status saat ini (2 Okt 2026)
 
 Baru tahap testing internal, dipakai tim 4 orang. Belum ada data kegiatan
-sungguhan, masih 1 baris contoh. Modul Marketing sekarang ada di `marketing.html`
+sungguhan, masih 1 baris contoh. Modul Marketing sekarang jadi tab di halaman utama
 (strategi, lane, channel, hasil event); Ops sengaja belum jadi tab/halaman
 terpisah — sekarang cukup difilter dari tabel kegiatan yang sama di dashboard.
 Dashboard khusus buat Pak Budianto (ringkas, tanpa detail internal) belum dibuat —
