@@ -17,6 +17,10 @@
  * Menjalankan "Setup / Reset Tracker" lagi kapan saja akan MENGOSONGKAN
  * ULANG ketiga tab itu ke kondisi awal (formula & struktur, bukan data
  * yang sudah diisi tim) — hati-hati kalau sudah ada isian asli.
+ *
+ * PENTING: Code.gs sekarang bergantung pada Marketing.gs (isAuthorized_,
+ * mkt_getData, mkt_handlePost). Di project Apps Script, paste KEDUANYA
+ * sebagai file terpisah, lalu Deploy -> New version.
  */
 
 var HEADER_ROW = 4;
@@ -306,12 +310,21 @@ function buildRingkasanSheet(ss) {
 // API — expose data as JSON (dipakai dashboard nanti)
 // ============================================================
 function doGet(e) {
+  // isAuthorized_ ada di Marketing.gs (file terpisah di project Apps Script ini).
+  if (!isAuthorized_(e && e.parameter && e.parameter.secret)) {
+    return jsonResponse({ ok: false, error: 'unauthorized' });
+  }
   var ss = SpreadsheetApp.getActiveSpreadsheet();
   var payload = {
     generated_at: new Date().toISOString(),
     kegiatan: sheetToObjects(ss.getSheetByName('kegiatan')),
     plafon_fixed: sheetToObjects(ss.getSheetByName('plafon_fixed')),
   };
+  var m = mkt_getData();
+  payload.strategi = m.strategi;
+  payload.lane = m.lane;
+  payload.channel = m.channel;
+  payload.hasil_event = m.hasil_event;
   return jsonResponse(payload);
 }
 
@@ -323,6 +336,13 @@ function doGet(e) {
 function doPost(e) {
   try {
     var data = JSON.parse(e.postData.contents);
+
+    if (!isAuthorized_(data.secret)) {
+      return jsonResponse({ ok: false, error: 'unauthorized' });
+    }
+    // Aksi modul marketing (Marketing.gs). Return null = bukan aksi marketing.
+    var mres = mkt_handlePost(data);
+    if (mres) return jsonResponse(mres);
 
     if (data.action === 'update_status') {
       return handleUpdateStatus(data);
