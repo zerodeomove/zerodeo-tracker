@@ -38,7 +38,7 @@ Google Sheet itu sendiri yang jadi database.
 Satu halaman (`index.html`) dengan tab di atas. Data tracker dan marketing ditarik
 sekali lewat satu panggilan, semua form berupa popup:
 
-- Tab **Budgeting**: kartu ringkas + tabel kegiatan. Popup: Input Kegiatan (Tipe
+- Tab **Budgeting**: kartu ringkas + tabel kegiatan. Popup: Kegiatan baru (Tipe
   Capex/Opex), Tandai Ditransfer, Lengkapi (Actual + foto nota, dikompres di browser
   max 1600px JPEG sebelum dikirim).
 - Tab **Marketing**, sub-tab **Strategi** dan **Hasil Event**. Popup: Strategi baru
@@ -55,7 +55,7 @@ File:
   (wajib dipakai untuk semua teks dari data yang masuk ke innerHTML)
 - `input.html`, `complete.html`, `marketing.html`, `strategi-input.html`,
   `hasil-event.html` — **alamat lama saja**, isinya pengalih otomatis ke `index.html`
-  (misalnya `input.html` membuka popup Input Kegiatan) supaya bookmark tim tidak putus.
+  (misalnya `input.html` membuka popup Kegiatan baru) supaya bookmark tim tidak putus.
   Aman dihapus kalau sudah tidak ada yang memakai alamat lama.
 
 Link langsung ke bagian tertentu: `/#tracker`, `/#strategi`, `/#event`,
