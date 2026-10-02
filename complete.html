@@ -112,8 +112,8 @@
   <div class="msg" id="msgBox"></div>
 </div>
 
+<script src="common.js"></script>
 <script>
-const API_URL = 'https://script.google.com/macros/s/AKfycbwdL2REXUggjk_6wEj5vT1Odw1sV2FzGtp6NSU2JmVQtuTTflMLkhKQ6Py4zUd6zKkD/exec';
 const MAX_DIM = 1600;
 const JPEG_QUALITY = 0.7;
 
@@ -151,9 +151,8 @@ async function init() {
   }
   showStatus('Memuat data kegiatan…', 'warn');
   try {
-    const res = await fetch(API_URL);
-    if (!res.ok) throw new Error('HTTP ' + res.status);
-    const json = await res.json();
+    const json = await zApi.get();
+    if (json.ok === false) throw new Error(json.error || 'Gagal');
     const item = (json.kegiatan || []).find(r => r['_row'] === rowNum);
 
     if (!item) {
@@ -239,17 +238,13 @@ form.addEventListener('submit', async (e) => {
   submitBtn.textContent = 'Menyimpan…';
 
   try {
-    const res = await fetch(API_URL, {
-      method: 'POST',
-      body: JSON.stringify({
-        action: 'complete_kegiatan',
-        row: rowNum,
-        actual: Number(actual),
-        photoBase64: photoBase64,
-        photoMime: 'image/jpeg',
-      }), // Content-Type text/plain default -> hindari CORS preflight
+    const json = await zApi.post({
+      action: 'complete_kegiatan',
+      row: rowNum,
+      actual: Number(actual),
+      photoBase64: photoBase64,
+      photoMime: 'image/jpeg',
     });
-    const json = await res.json();
     if (json.ok) {
       form.style.display = 'none';
       showMsg('Tersimpan. Kegiatan ditandai Selesai.', true);
