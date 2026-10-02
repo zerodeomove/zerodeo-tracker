@@ -35,7 +35,9 @@ header.top {
   display: flex; align-items: flex-start; justify-content: space-between;
   margin-bottom: 14px; flex-wrap: wrap; gap: 8px;
 }
-header.top h1 { font-size: 20px; font-weight: 600; margin: 0; letter-spacing: -0.01em; }
+header.top h1 { font-size: 20px; font-weight: 600; margin: 0; letter-spacing: -0.01em; line-height: 0; }
+.logo { height: 30px; width: auto; display: block; margin-bottom: 8px; }
+@media (max-width: 600px) { .logo { height: 26px; } }
 .sub { color: var(--text-muted); font-size: 13px; }
 
 /* ---------- tombol ---------- */
