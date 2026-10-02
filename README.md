@@ -38,7 +38,7 @@ Google Sheet itu sendiri yang jadi database.
 Satu halaman (`index.html`) dengan tab di atas. Data tracker dan marketing ditarik
 sekali lewat satu panggilan, semua form berupa popup:
 
-- Tab **Tracker**: kartu ringkas + tabel kegiatan. Popup: Input Kegiatan (Tipe
+- Tab **Budgeting**: kartu ringkas + tabel kegiatan. Popup: Input Kegiatan (Tipe
   Capex/Opex), Tandai Ditransfer, Lengkapi (Actual + foto nota, dikompres di browser
   max 1600px JPEG sebelum dikirim).
 - Tab **Marketing**, sub-tab **Strategi** dan **Hasil Event**. Popup: Strategi baru
@@ -49,7 +49,7 @@ File:
 - `index.html` — kerangka halaman: tab, panel, dan semua popup
 - `style.css` — satu stylesheet untuk semuanya
 - `app.js` — helper bersama, tab/routing, popup, dan pemuatan data
-- `tracker.js` — logika tab Tracker (kartu, tabel, approve/reject, ditransfer, input, lengkapi)
+- `tracker.js` — logika tab Budgeting (kartu, tabel, approve/reject, ditransfer, input, lengkapi)
 - `marketing.js` — logika tab Marketing (strategi, hasil event, popup inputnya)
 - `common.js` — kode akses tim, `zApi.get/post` ke `/api/proxy`, dan `zEsc()`
   (wajib dipakai untuk semua teks dari data yang masuk ke innerHTML)
@@ -104,7 +104,7 @@ Project Settings -> Script Properties (nilainya tidak ditulis di file mana pun d
    Google minta izin (akses Drive untuk foto nota).
 3. Isi env di Vercel: `TEAM_CODE`, `APPS_SCRIPT_URL`, `SHARED_SECRET`.
 4. Redeploy di Vercel.
-5. Tes halaman: buka situsnya, kedua tab (Tracker, Marketing) dan tiap popup.
+5. Tes halaman: buka situsnya, kedua tab (Budgeting, Marketing) dan tiap popup.
    Tanpa kode -> halaman meminta kode akses; kode benar -> data tampil.
 6. BARU SETELAH semua halaman terbukti jalan lewat proxy: isi Script Properties
    `SHARED_SECRET` (sama dengan Vercel) dan `APPROVAL_PIN` (PIN baru, jangan pakai
