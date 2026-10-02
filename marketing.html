@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Zerodeo — Marketing</title>
+<link rel="stylesheet" href="common.css">
+</head>
+<body>
+<div class="wrap">
+  <div class="nav"><a href="index.html">Tracker</a><a class="on" href="marketing.html">Marketing</a></div>
+
+  <div class="top">
+    <div>
+      <h1>Zerodeo — Marketing</h1>
+      <div class="sub" id="sync">Memuat…</div>
+    </div>
+    <div>
+      <button class="btn ghost" onclick="load()">Refresh</button>
+      <a class="btn green" href="strategi-input.html">+ Strategi</a>
+      <a class="btn green" href="hasil-event.html">+ Hasil Event</a>
+    </div>
+  </div>
+
+  <h2 class="sec" style="margin-top:0">Strategi</h2>
+  <div class="toolbar">
+    <select id="fLane" onchange="renderStrategi()"></select>
+    <select id="fChannel" onchange="renderStrategi()"></select>
+    <select id="fStatus" onchange="renderStrategi()">
+      <option value="">Semua Status</option><option>Ide</option><option>Jalan</option><option>Selesai</option>
+    </select>
+    <input type="text" id="fSearch" placeholder="Cari strategi…" oninput="renderStrategi()" style="flex:1;min-width:140px">
+    <span class="sub" id="countS"></span>
+  </div>
+  <div class="scroll">
+    <table>
+      <thead><tr><th>Strategi</th><th>Lane</th><th>Channel</th><th>Periode</th><th>PIC</th><th>Status</th></tr></thead>
+      <tbody id="bodyS"><tr><td colspan="6" class="empty">Memuat…</td></tr></tbody>
+    </table>
+  </div>
+
+  <h2 class="sec">Hasil event per channel</h2>
+  <div class="sub" style="margin-bottom:8px">Angka di awal masih tipis. Jangan buru-buru memutuskan scale up sebelum satu channel punya beberapa event.</div>
+  <div class="scroll">
+    <table>
+      <thead><tr><th>Channel</th><th>Event</th><th>Hadir</th><th>Coba</th><th>Tanya beli</th><th>Order</th><th>UGC</th><th>Order / Hadir</th></tr></thead>
+      <tbody id="bodySum"><tr><td colspan="8" class="empty">Memuat…</td></tr></tbody>
+    </table>
+  </div>
+
+  <h2 class="sec">Semua hasil event</h2>
+  <div class="scroll">
+    <table>
+      <thead><tr><th>Tanggal</th><th>Event</th><th>Channel</th><th>Komunitas</th><th>Kode</th><th>Hadir</th><th>Coba</th><th>Tanya</th><th>Order</th><th>UGC</th></tr></thead>
+      <tbody id="bodyE"><tr><td colspan="10" class="empty">Memuat…</td></tr></tbody>
+    </table>
+  </div>
+</div>
+
+<script src="common.js"></script>
+<script>
+const STATUS = ['Ide', 'Jalan', 'Selesai'];
+const RANK = { Jalan: 0, Ide: 1, Selesai: 2 };
+const esc = window.zEsc;
+const $ = (id) => document.getElementById(id);
+let D = { strategi: [], lane: [], channel: [], hasil_event: [] };
+
+function split(s) { return s ? String(s).split(',').map((x) => x.trim()).filter(Boolean) : []; }
+function fd(s) {
+  if (!s) return '';
+  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(s));
+  if (!m) return esc(s);
+  return new Date(+m[1], +m[2] - 1, +m[3]).toLocaleDateString('id-ID', { day: '2-digit', month: 'short', year: '2-digit' });
+}
+
+async function load() {
+  $('sync').textContent = 'Memuat…';
+  try {
+    const j = await zApi.get();
+    if (j.ok === false) throw new Error(j.error || 'Gagal');
+    if (!('strategi' in j)) throw new Error('Apps Script belum punya modul marketing (hook di Code.gs belum dipasang atau belum redeploy).');
+    D = { strategi: j.strategi || [], lane: j.lane || [], channel: j.channel || [], hasil_event: j.hasil_event || [] };
+    $('sync').textContent = 'Terakhir ambil data: ' + new Date().toLocaleString('id-ID');
+    fillFilters();
+    renderStrategi();
+    renderEvents();
+  } catch (e) {
+    $('sync').textContent = 'Gagal ambil data: ' + e.message;
+  }
+}
+
+function fillFilters() {
+  const fill = (id, all, list) => {
+    const cur = $(id).value;
+    $(id).innerHTML = '<option value="">' + all + '</option>' + list.map((x) => '<option>' + esc(x) + '</option>').join('');
+    if (list.indexOf(cur) !== -1) $(id).value = cur;
+  };
+  fill('fLane', 'Semua Lane', D.lane);
+  fill('fChannel', 'Semua Channel', D.channel);
+}
+
+function renderStrategi() {
+  const fl = $('fLane').value, fc = $('fChannel').value, fs = $('fStatus').value;
+  const q = $('fSearch').value.trim().toLowerCase();
+  const rows = D.strategi.filter((r) => {
+    if (fl && split(r.Lane).indexOf(fl) === -1) return false;
+    if (fc && split(r.Channel).indexOf(fc) === -1) return false;
+    if (fs && r.Status !== fs) return false;
+    if (q && !((r['Nama Strategi'] || '') + ' ' + (r['Pesan Inti'] || '')).toLowerCase().includes(q)) return false;
+    return true;
+  }).sort((a, b) => (RANK[a.Status] - RANK[b.Status]) || String(a.Mulai || '').localeCompare(String(b.Mulai || '')));
+
+  $('countS').textContent = rows.length + ' strategi';
+  if (!rows.length) { $('bodyS').innerHTML = '<tr><td colspan="6" class="empty">Belum ada strategi yang cocok.</td></tr>'; return; }
+  $('bodyS').innerHTML = rows.map((r) => `<tr>
+    <td style="max-width:300px"><b>${esc(r['Nama Strategi'])}</b><div class="sub">${esc(r['Pesan Inti'])}</div></td>
+    <td>${split(r.Lane).map((x) => `<span class="pill">${esc(x)}</span>`).join('')}</td>
+    <td>${split(r.Channel).map((x) => `<span class="pill alt">${esc(x)}</span>`).join('')}</td>
+    <td style="white-space:nowrap">${fd(r.Mulai)}${r.Selesai ? ' – ' + fd(r.Selesai) : ' →'}</td>
+    <td>${esc(r.PIC)}</td>
+    <td><select data-id="${esc(r.ID)}" onchange="setStatus(this.dataset.id, this.value)">${STATUS.map((s) => `<option ${s === r.Status ? 'selected' : ''}>${s}</option>`).join('')}</select></td>
+  </tr>`).join('');
+}
+
+async function setStatus(id, status) {
+  try {
+    const j = await zApi.post({ action: 'update_strategi_status', id: id, status: status });
+    if (!j.ok) throw new Error(j.error || 'Gagal');
+    load();
+  } catch (e) {
+    alert('Gagal ubah status: ' + e.message);
+    load();
+  }
+}
+
+function renderEvents() {
+  const ev = D.hasil_event;
+  if (!ev.length) {
+    $('bodySum').innerHTML = '<tr><td colspan="8" class="empty">Belum ada hasil event.</td></tr>';
+    $('bodyE').innerHTML = '<tr><td colspan="10" class="empty">Belum ada hasil event.</td></tr>';
+    return;
+  }
+  const g = {};
+  ev.forEach((e) => {
+    const k = e.Channel || '(tanpa channel)';
+    const a = g[k] || (g[k] = { n: 0, h: 0, c: 0, t: 0, o: 0, u: 0 });
+    a.n++; a.h += +e.Hadir || 0; a.c += +e['Coba Produk'] || 0;
+    a.t += +e['Tanya Beli Di Mana'] || 0; a.o += +e['Order via Kode'] || 0; a.u += +e['Konten UGC'] || 0;
+  });
+  $('bodySum').innerHTML = Object.keys(g).sort((x, y) => g[y].o - g[x].o).map((k) => {
+    const a = g[k];
+    return `<tr><td><b>${esc(k)}</b></td><td class="num">${a.n}</td><td class="num">${a.h}</td><td class="num">${a.c}</td>
+      <td class="num">${a.t}</td><td class="num">${a.o}</td><td class="num">${a.u}</td>
+      <td class="num">${a.h ? (a.o / a.h * 100).toFixed(1) + '%' : '-'}</td></tr>`;
+  }).join('');
+
+  $('bodyE').innerHTML = ev.slice().sort((a, b) => String(b['Tanggal Event'] || '').localeCompare(String(a['Tanggal Event'] || ''))).map((e) => `<tr>
+    <td style="white-space:nowrap">${fd(e['Tanggal Event'])}</td><td>${esc(e['Nama Event'])}</td><td>${esc(e.Channel)}</td>
+    <td>${esc(e['Nama Komunitas'])}</td><td>${esc(e['Kode Voucher'])}</td>
+    <td class="num">${+e.Hadir || 0}</td><td class="num">${+e['Coba Produk'] || 0}</td>
+    <td class="num">${+e['Tanya Beli Di Mana'] || 0}</td><td class="num">${+e['Order via Kode'] || 0}</td>
+    <td class="num">${+e['Konten UGC'] || 0}</td></tr>`).join('');
+}
+
+load();
+</script>
+</body>
+</html>

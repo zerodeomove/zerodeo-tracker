@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Zerodeo — Hasil Event</title>
+<link rel="stylesheet" href="common.css">
+</head>
+<body>
+<div class="wrap narrow">
+  <div class="nav"><a href="index.html">Tracker</a><a href="marketing.html">Marketing</a></div>
+  <h1>Hasil event</h1>
+  <div class="sub" style="margin-bottom:16px">Diisi H+1 sampai H+3 setelah event. Angka order bisa dilengkapi belakangan langsung di tab hasil_event pada Sheet.</div>
+
+  <div class="card">
+  <form class="f" id="form">
+    <label class="l">Nama event
+      <input type="text" id="nama" placeholder="Contoh: Fun run komunitas Surabaya">
+      <span class="err" id="e-nama">Wajib diisi.</span></label>
+
+    <div class="row2">
+      <label class="l">Tanggal event<input type="date" id="tanggal"><span class="err" id="e-tanggal">Wajib diisi.</span></label>
+      <label class="l">PIC pencatat
+        <select id="pic"><option value="">Pilih…</option><option>Lenno</option><option>Ricko</option><option>Yanuar</option><option>Christina</option></select>
+        <span class="err" id="e-pic">Wajib dipilih.</span></label>
+    </div>
+
+    <label class="l">Channel (jenis komunitas)
+      <select id="channel"></select>
+      <input type="text" id="channelNew" placeholder="atau tulis channel baru (kalau diisi, ini yang dipakai)">
+      <span class="err" id="e-channel">Pilih atau tulis channel.</span></label>
+
+    <label class="l">Nama komunitas<input type="text" id="komunitas" placeholder="Contoh: Surabaya Runners"></label>
+    <label class="l">Kode voucher / link unik event<input type="text" id="kode" placeholder="Contoh: RUNSBY10"></label>
+
+    <div class="row2">
+      <label class="l">Hadir<input type="number" id="hadir" min="0" step="1" placeholder="0"></label>
+      <label class="l">Coba produk / dapat sampel<input type="number" id="coba" min="0" step="1" placeholder="0"></label>
+      <label class="l">Tanya "belinya di mana"<input type="number" id="tanya" min="0" step="1" placeholder="0"></label>
+      <label class="l">Order via kode<input type="number" id="order" min="0" step="1" placeholder="0"></label>
+    </div>
+    <label class="l">Konten buatan orang (foto/story pakai produk)<input type="number" id="ugc" min="0" step="1" placeholder="0"></label>
+
+    <label class="l">Strategi terkait (opsional)<select id="strategi"><option value="">-</option></select></label>
+
+    <button type="submit" class="btn" id="submit" style="padding:13px;font-size:15px">Simpan hasil event</button>
+  </form>
+  </div>
+  <div class="msg" id="msg"></div>
+</div>
+
+<script src="common.js"></script>
+<script>
+const esc = window.zEsc;
+const $ = (id) => document.getElementById(id);
+function today() { return new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 10); }
+function showMsg(t, ok) { $('msg').textContent = t; $('msg').className = 'msg ' + (ok ? 'ok' : 'bad'); }
+
+async function init() {
+  $('tanggal').value = today();
+  try {
+    const j = await zApi.get();
+    if (j.ok === false) throw new Error(j.error || 'Gagal');
+    $('channel').innerHTML = '<option value="">Pilih channel…</option>' + (j.channel || []).map((c) => '<option>' + esc(c) + '</option>').join('');
+    $('strategi').innerHTML = '<option value="">-</option>' + (j.strategi || []).map((s) => '<option>' + esc(s['Nama Strategi']) + '</option>').join('');
+  } catch (e) { showMsg('Gagal ambil daftar channel/strategi: ' + e.message, false); }
+}
+
+$('form').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  $('msg').className = 'msg';
+  document.querySelectorAll('.err').forEach((x) => x.classList.remove('show'));
+  const channel = $('channelNew').value.trim() || $('channel').value;
+  let ok = true;
+  const bad = (id) => { $(id).classList.add('show'); ok = false; };
+  if (!$('nama').value.trim()) bad('e-nama');
+  if (!$('tanggal').value) bad('e-tanggal');
+  if (!$('pic').value) bad('e-pic');
+  if (!channel) bad('e-channel');
+  if (!ok) return;
+
+  $('submit').disabled = true; $('submit').textContent = 'Menyimpan…';
+  try {
+    const j = await zApi.post({
+      action: 'add_hasil_event', nama: $('nama').value.trim(), tanggal: $('tanggal').value, channel: channel,
+      komunitas: $('komunitas').value.trim(), kode: $('kode').value.trim(),
+      hadir: $('hadir').value, coba: $('coba').value, tanya: $('tanya').value, order: $('order').value, ugc: $('ugc').value,
+      strategi: $('strategi').value, pic: $('pic').value
+    });
+    if (!j.ok) throw new Error(j.error || 'Gagal');
+    showMsg('Tersimpan.', true);
+    $('form').reset(); $('tanggal').value = today();
+    init();
+  } catch (err) { showMsg('Gagal simpan: ' + err.message, false); }
+  finally { $('submit').disabled = false; $('submit').textContent = 'Simpan hasil event'; }
+});
+
+init();
+</script>
+</body>
+</html>
