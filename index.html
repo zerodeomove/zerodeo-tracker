@@ -44,11 +44,20 @@
       </div>
     </div>
 
+    <div id="danaSection" style="display:none">
+      <div class="sec-head">
+        <h2 class="sec">Dana</h2>
+        <button class="btn green" onclick="openDana()">+ Dana</button>
+      </div>
+      <div id="danaList" class="dana-grid"></div>
+    </div>
+
     <div class="toolbar">
       <select id="filterKategori" onchange="renderTable()"><option value="">Semua Kategori</option></select>
       <select id="filterTipe" onchange="renderTable()"><option value="">Semua Tipe</option></select>
       <select id="filterPic" onchange="renderTable()"><option value="">Semua PIC</option></select>
       <select id="filterStatus" onchange="renderTable()"><option value="">Semua Status</option></select>
+      <select id="filterDana" onchange="renderTable()" style="display:none"><option value="">Semua Dana</option></select>
       <input type="text" id="searchBox" placeholder="Cari item kegiatan…" oninput="renderTable()">
       <span class="push">
         <span class="count" id="rowCount"></span>
@@ -150,7 +159,11 @@
         </select>
         <span class="field-error" id="err-k-tipe">Wajib dipilih.</span></label>
 
-      <label>Jalur
+      <label id="k-dana-wrap" style="display:none">Dibayar dari dana <span class="opt">(opsional)</span>
+        <select id="k-dana"><option value="">Bukan dari dana (ajukan biasa)</option></select>
+        <span class="hint" id="k-dana-hint"></span></label>
+
+      <label id="k-jalur-wrap">Jalur
         <select id="k-jalur">
           <option value="">Pilih jalur…</option>
           <option>Fixed</option>
@@ -177,13 +190,13 @@
         <label>Actual (Rp)
           <input type="number" id="k-actual" placeholder="0" min="0" step="1" inputmode="numeric">
           <span class="field-error" id="err-k-actual">Isi angka lebih dari 0.</span></label>
-        <label>Nominal transfer (Rp) <span class="opt">— opsional, kalau kosong sama dengan Actual</span>
+        <label id="k-nominal-wrap">Nominal transfer (Rp) <span class="opt">— opsional, kalau kosong sama dengan Actual</span>
           <input type="number" id="k-nominal" placeholder="0" min="0" step="1" inputmode="numeric"></label>
         <div class="row2">
           <label>PIC Transaksi <span class="opt">(opsional)</span>
             <select id="k-pictrans"><option value="">Sama dengan PIC</option>
               <option>Lenno</option><option>Ricko</option><option>Yanuar</option><option>Christina</option></select></label>
-          <label>Tgl transfer <span class="opt">(opsional)</span>
+          <label>Tanggal <span class="opt">(kapan dibayar)</span>
             <input type="date" id="k-tgltf"></label>
         </div>
         <label>Link nota <span class="opt">(opsional)</span>
@@ -202,6 +215,40 @@
       <div class="modal-actions">
         <button type="button" class="btn-cancel" onclick="closeModal('m-kegiatan')">Tutup</button>
         <button type="submit" class="btn-submit" id="k-submit">Simpan kegiatan</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- ================= POPUP: Dana baru ================= -->
+<div class="modal-overlay" id="m-dana">
+  <div class="modal-box">
+    <h3>Dana baru</h3>
+    <div class="hint">Transfer bulk yang dipakai untuk banyak kebutuhan. Setelah dicatat, kebutuhan bisa "dibayar dari dana" ini dan saldonya terhitung otomatis.</div>
+    <form id="danaForm" novalidate>
+      <label>Nama dana
+        <input type="text" id="d-nama" placeholder="Contoh: Modal produksi Agustus">
+        <span class="field-error" id="err-d-nama">Wajib diisi.</span></label>
+
+      <label>Nominal (Rp)
+        <input type="number" id="d-nominal" placeholder="0" min="0" step="1000" inputmode="numeric">
+        <span class="field-error" id="err-d-nominal">Isi angka lebih dari 0.</span></label>
+
+      <div class="row2">
+        <label>Tgl transfer<input type="date" id="d-tgl"></label>
+        <label>Diterima oleh
+          <select id="d-pic"><option value="">Pilih PIC…</option>
+            <option>Lenno</option><option>Ricko</option><option>Yanuar</option><option>Christina</option></select>
+          <span class="field-error" id="err-d-pic">Wajib dipilih.</span></label>
+      </div>
+
+      <label>Catatan <span class="opt">(opsional)</span>
+        <input type="text" id="d-catatan" placeholder="Contoh: approved Lemon, untuk launch"></label>
+
+      <div class="msg" id="d-msg"></div>
+      <div class="modal-actions">
+        <button type="button" class="btn-cancel" onclick="closeModal('m-dana')">Tutup</button>
+        <button type="submit" class="btn-submit" id="d-submit">Simpan dana</button>
       </div>
     </form>
   </div>

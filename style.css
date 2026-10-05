@@ -156,6 +156,29 @@ td.empty-state, td.empty { text-align: center; color: var(--text-muted); padding
 .deadline-soon { color: var(--red); font-weight: 600; }
 footer { margin-top: 24px; color: var(--text-muted); font-size: 12px; text-align: center; }
 
+/* ---------- dana (transfer bulk) ---------- */
+.sec-head { display: flex; justify-content: space-between; align-items: center; margin: 4px 0 10px; gap: 10px; }
+.sec-head h2.sec { margin: 0; }
+.dana-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 12px; margin-bottom: 20px; }
+.dana-empty { color: var(--text-muted); font-size: 13px; padding: 10px 2px; grid-column: 1 / -1; }
+.dana-card {
+  background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius);
+  padding: 14px 16px; cursor: pointer; min-width: 0;
+}
+.dana-card:hover { border-color: var(--accent); }
+.dana-card.on { border-color: var(--accent); background: var(--accent-light); }
+.dana-name { font-weight: 600; font-size: 14px; overflow-wrap: anywhere; }
+.dana-meta { color: var(--text-muted); font-size: 12px; }
+.dana-nums { display: flex; justify-content: space-between; gap: 8px; font-size: 12px; color: var(--text-muted); margin-top: 8px; font-variant-numeric: tabular-nums; }
+.dana-bar { height: 6px; background: var(--bg); border-radius: 4px; overflow: hidden; margin: 6px 0 8px; }
+.dana-fill { height: 100%; background: var(--accent); border-radius: 4px; }
+.dana-fill.over { background: var(--red); }
+.dana-saldo { font-size: 13px; font-variant-numeric: tabular-nums; }
+.dana-saldo b { font-size: 18px; }
+.dana-saldo.minus b { color: var(--red); }
+.dana-plan { font-size: 12px; color: var(--text-muted); margin-top: 4px; }
+td.item .sub { margin-top: 2px; }
+
 /* ---------- marketing ---------- */
 h2.sec { font-size: 15px; font-weight: 600; margin: 24px 0 10px; }
 h2.sec:first-child { margin-top: 0; }

@@ -46,7 +46,8 @@ var TIPE_LIST = ['Capex', 'Opex'];
 var COL = {
   NO: 1, TGL_DICATAT: 2, DEADLINE: 3, PROJECT: 4, ITEM: 5, KATEGORI: 6, TIPE: 7,
   JALUR: 8, PIC: 9, ESTIMASI: 10, STATUS: 11, PIC_TRANSAKSI: 12,
-  NOMINAL_TRANSFER: 13, TGL_TRANSFER: 14, ACTUAL: 15, SELISIH: 16, NOTA: 17, CATATAN: 18
+  NOMINAL_TRANSFER: 13, TGL_TRANSFER: 14, ACTUAL: 15, SELISIH: 16, NOTA: 17, CATATAN: 18,
+  DANA: 19
 };
 
 var NOTA_FOLDER_NAME = 'Zerodeo - Nota Bukti';
@@ -193,6 +194,155 @@ function resolveKategori_(raw) {
 }
 
 // ============================================================
+// DANA — transfer bulk yang dipakai untuk banyak kebutuhan
+// Tab "dana" (dibuat otomatis): satu baris per transfer bulk. Kebutuhan ditautkan
+// lewat kolom "Dana" (S) di tab kegiatan. Saldo = Nominal - total Actual kebutuhan
+// yang tertaut. Kebutuhan tertaut tidak punya Nominal Transfer sendiri (uangnya sudah
+// ada di dana), jadi tidak terhitung dua kali. Jalurnya "Dana", dan statusnya langsung
+// "Ditransfer" sehingga tinggal di-Lengkapi.
+// Setup / Reset Tracker TIDAK menghapus tab "dana".
+// ============================================================
+var DANA_TAB = 'dana';
+var DANA_HEADERS = ['Nama Dana', 'Nominal (Rp)', 'Tgl Transfer', 'PIC Transaksi', 'Catatan', 'Terpakai (Rp)', 'Saldo (Rp)', 'Dicatat Pada'];
+var JALUR_DANA = 'Dana';
+
+function colLetter_(n) {
+  var s = '';
+  while (n > 0) {
+    var m = (n - 1) % 26;
+    s = String.fromCharCode(65 + m) + s;
+    n = Math.floor((n - 1) / 26);
+  }
+  return s;
+}
+
+function kegiatanRange_(col) {
+  var L = colLetter_(col);
+  return 'kegiatan!$' + L + '$' + (HEADER_ROW + 1) + ':$' + L + '$' + LAST_DATA_ROW;
+}
+
+function cleanText_(s, max) {
+  return String(s === null || s === undefined ? '' : s).replace(/\s+/g, ' ').trim().slice(0, max || 200);
+}
+
+// Cegah teks yang diawali = + - @ dibaca Sheets sebagai formula.
+function safeText_(s) {
+  return /^[=+\-@]/.test(s) ? ' ' + s : s;
+}
+
+function ensureDanaTab_() {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var sheet = ss.getSheetByName(DANA_TAB);
+  if (sheet) return sheet;
+  sheet = ss.insertSheet(DANA_TAB);
+  sheet.getRange(1, 1, 1, DANA_HEADERS.length).setValues([DANA_HEADERS])
+    .setFontWeight('bold').setFontColor('#FFFFFF').setBackground('#1F4E5F');
+  sheet.setFrozenRows(1);
+  [220, 130, 100, 110, 220, 130, 130, 110].forEach(function (w, i) { sheet.setColumnWidth(i + 1, w); });
+  return sheet;
+}
+
+// Header kolom "Dana" di tab kegiatan. Sheet yang dibuat sebelum fitur ini belum
+// punya kolom itu, jadi ditambahkan di sini (hanya kalau selnya masih kosong).
+function ensureDanaColumn_() {
+  var sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('kegiatan');
+  if (!sheet) return;
+  var cell = sheet.getRange(HEADER_ROW, COL.DANA);
+  if (String(cell.getValue() || '').trim() !== '') return;
+  cell.setValue('Dana')
+    .setFontWeight('bold').setFontColor('#FFFFFF').setBackground('#1F4E5F')
+    .setHorizontalAlignment('center').setVerticalAlignment('middle').setWrap(true);
+  sheet.setColumnWidth(COL.DANA, 140);
+}
+
+function readDana_() {
+  var sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(DANA_TAB);
+  if (!sheet || sheet.getLastRow() < 2) return [];
+  var rows = sheet.getRange(2, 1, sheet.getLastRow() - 1, DANA_HEADERS.length).getValues();
+  var tz = Session.getScriptTimeZone();
+  var out = [];
+  rows.forEach(function (row, i) {
+    var nama = cleanText_(row[0], 80);
+    if (!nama) return;
+    var o = { _row: i + 2 };
+    DANA_HEADERS.forEach(function (h, c) {
+      var v = row[c];
+      if (v instanceof Date) v = Utilities.formatDate(v, tz, 'yyyy-MM-dd');
+      o[h] = (v === '' || v === null) ? null : v;
+    });
+    o['Nama Dana'] = nama;
+    out.push(o);
+  });
+  return out;
+}
+
+function getDanaData_() {
+  ensureDanaTab_();
+  ensureDanaColumn_();
+  return readDana_();
+}
+
+function getDanaNames_() {
+  return readDana_().map(function (d) { return d['Nama Dana']; });
+}
+
+function findDana_(name) {
+  var key = cleanText_(name, 80).toLowerCase();
+  if (!key) return null;
+  var list = readDana_();
+  for (var i = 0; i < list.length; i++) {
+    if (list[i]['Nama Dana'].toLowerCase() === key) return list[i];
+  }
+  return null;
+}
+
+function refreshDanaDropdown_() {
+  var sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('kegiatan');
+  var names = getDanaNames_();
+  if (!sheet || !names.length) return;
+  var L = colLetter_(COL.DANA);
+  setDropdown(sheet, L + (HEADER_ROW + 1) + ':' + L + LAST_DATA_ROW, names);
+}
+
+// Catat transfer bulk baru.
+function handleAddDana(data) {
+  var nama = cleanText_(data.nama, 80);
+  if (!nama) return jsonResponse({ ok: false, error: 'Nama dana wajib diisi.' });
+  var nominal = Number(data.nominal);
+  if (!nominal || nominal <= 0) return jsonResponse({ ok: false, error: 'Nominal dana harus angka lebih dari 0.' });
+  if (PIC_LIST.indexOf(data.picTransaksi) === -1) return jsonResponse({ ok: false, error: 'PIC Transaksi tidak dikenali.' });
+  var tgl = new Date();
+  if (data.tglTransfer) {
+    tgl = new Date(data.tglTransfer);
+    if (isNaN(tgl.getTime())) return jsonResponse({ ok: false, error: 'Tanggal transfer tidak valid.' });
+  }
+  var catatan = cleanText_(data.catatan, 200);
+
+  var lock = LockService.getScriptLock();
+  if (!lock.tryLock(15000)) return jsonResponse({ ok: false, error: 'Server sedang sibuk, coba lagi sebentar.' });
+  try {
+    ensureDanaColumn_();
+    var sheet = ensureDanaTab_();
+    if (findDana_(nama)) {
+      return jsonResponse({ ok: false, error: 'Sudah ada dana dengan nama itu. Pakai nama lain.' });
+    }
+    sheet.appendRow([safeText_(nama), nominal, tgl, data.picTransaksi, safeText_(catatan), '', '', new Date()]);
+    var r = sheet.getLastRow();
+    sheet.getRange(r, 2).setNumberFormat(CURR_FORMAT);
+    sheet.getRange(r, 3).setNumberFormat(DATE_FORMAT);
+    sheet.getRange(r, 6)
+      .setFormula('=SUMIFS(' + kegiatanRange_(COL.ACTUAL) + ',' + kegiatanRange_(COL.DANA) + ',A' + r + ')')
+      .setNumberFormat(CURR_FORMAT);
+    sheet.getRange(r, 7).setFormula('=B' + r + '-F' + r).setNumberFormat(CURR_FORMAT);
+    sheet.getRange(r, 8).setNumberFormat(DATE_FORMAT);
+    refreshDanaDropdown_();
+    return jsonResponse({ ok: true, row: r, nama: nama });
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+// ============================================================
 // TAB 1 — kegiatan
 // ============================================================
 function buildKegiatanSheet(ss) {
@@ -207,7 +357,7 @@ function buildKegiatanSheet(ss) {
   // Urutan harus sama dengan COL di atas.
   var headers = ['No', 'Tanggal Dicatat', 'Deadline Kegiatan', 'Project/Brand', 'Item Kegiatan',
                   'Kategori', 'Tipe', 'Jalur', 'PIC', 'Estimasi (Rp)', 'Status', 'PIC Transaksi',
-                  'Nominal Transfer (Rp)', 'Tgl Transfer', 'Actual (Rp)', 'Selisih (Rp)', 'Nota/Bukti', 'Catatan'];
+                  'Nominal Transfer (Rp)', 'Tgl Transfer', 'Actual (Rp)', 'Selisih (Rp)', 'Nota/Bukti', 'Catatan', 'Dana'];
   sheet.getRange(HEADER_ROW, 1, 1, headers.length).setValues([headers]);
   styleHeaderRow(sheet, HEADER_ROW, headers.length);
 
@@ -242,7 +392,10 @@ function buildKegiatanSheet(ss) {
   setDropdown(sheet, 'K' + firstDataRow + ':K' + LAST_DATA_ROW, STATUS_LIST);
   setDropdown(sheet, 'L' + firstDataRow + ':L' + LAST_DATA_ROW, PIC_LIST);
 
-  var widths = [40, 90, 90, 80, 260, 150, 70, 80, 70, 100, 90, 100, 110, 90, 100, 100, 120, 160];
+  var danaNames = getDanaNames_();
+  if (danaNames.length) setDropdown(sheet, colLetter_(COL.DANA) + firstDataRow + ':' + colLetter_(COL.DANA) + LAST_DATA_ROW, danaNames);
+
+  var widths = [40, 90, 90, 80, 260, 150, 70, 80, 70, 100, 90, 100, 110, 90, 100, 100, 120, 160, 140];
   for (var i = 0; i < widths.length; i++) sheet.setColumnWidth(i + 1, widths[i]);
 
   sheet.setFrozenRows(HEADER_ROW);
@@ -376,8 +529,11 @@ function doGet(e) {
     generated_at: new Date().toISOString(),
     kegiatan: sheetToObjects(ss.getSheetByName('kegiatan')),
     plafon_fixed: sheetToObjects(ss.getSheetByName('plafon_fixed')),
-    kategori: getKategoriList(),
   };
+  // Fitur tambahan dibungkus supaya kalau salah satunya error, tracker utama tetap
+  // jalan. Dashboard menganggap fitur itu belum tersedia kalau kuncinya tidak ada.
+  try { payload.kategori = getKategoriList(); } catch (err) { payload.kategori_error = String(err.message); }
+  try { payload.dana = getDanaData_(); } catch (err) { payload.dana_error = String(err.message); }
   var m = mkt_getData();
   payload.strategi = m.strategi;
   payload.lane = m.lane;
@@ -410,6 +566,9 @@ function doPost(e) {
     }
     if (data.action === 'mark_transferred') {
       return handleMarkTransferred(data);
+    }
+    if (data.action === 'add_dana') {
+      return handleAddDana(data);
     }
     return handleAddKegiatan(data);
   } catch (err) {
@@ -460,7 +619,19 @@ function handleAddKegiatan(data) {
       return jsonResponse({ ok: false, error: 'Tabel kegiatan sudah penuh (sampai baris ' + LAST_DATA_ROW + ' di Sheet). Tambah baris manual dulu di Sheet, atau minta perluas template.' });
     }
 
-    sheet.getRange(targetRow, COL.TGL_DICATAT).setValue(new Date()).setNumberFormat(DATE_FORMAT);
+    // Dibayar dari dana bulk: uangnya sudah ada di dana, jadi tidak ada approve/transfer
+    // sendiri. Jalur "Dana", status langsung "Ditransfer" (tinggal Lengkapi), dan
+    // Nominal Transfer dikosongkan supaya tidak terhitung dua kali.
+    var danaName = '';
+    if (data.dana) {
+      ensureDanaColumn_();
+      var dn = findDana_(data.dana);
+      if (!dn) return jsonResponse({ ok: false, error: 'Dana tidak ditemukan: ' + cleanText_(data.dana, 80) });
+      danaName = dn['Nama Dana'];
+    }
+
+    // Data lama: kalau tanggalnya diisi, itu dipakai sebagai Tanggal Dicatat.
+    sheet.getRange(targetRow, COL.TGL_DICATAT).setValue(arsip && tglTf ? tglTf : new Date()).setNumberFormat(DATE_FORMAT);
     if (data.deadline) {
       sheet.getRange(targetRow, COL.DEADLINE).setValue(new Date(data.deadline)).setNumberFormat(DATE_FORMAT);
     }
@@ -468,14 +639,15 @@ function handleAddKegiatan(data) {
     sheet.getRange(targetRow, COL.ITEM).setValue(data.item || '');
     sheet.getRange(targetRow, COL.KATEGORI).setValue(resolveKategori_(data.kategori));
     sheet.getRange(targetRow, COL.TIPE).setValue(data.tipe || '');
-    sheet.getRange(targetRow, COL.JALUR).setValue(data.jalur || '');
+    sheet.getRange(targetRow, COL.JALUR).setValue(danaName ? JALUR_DANA : (data.jalur || ''));
     sheet.getRange(targetRow, COL.PIC).setValue(data.pic || '');
     sheet.getRange(targetRow, COL.ESTIMASI).setValue(Number(data.estimasi) || actual || 0).setNumberFormat(CURR_FORMAT);
-    sheet.getRange(targetRow, COL.STATUS).setValue(arsip ? 'Selesai' : (data.status || 'Draft'));
+    sheet.getRange(targetRow, COL.STATUS).setValue(arsip ? 'Selesai' : (danaName ? 'Ditransfer' : (data.status || 'Draft')));
+    if (danaName) sheet.getRange(targetRow, COL.DANA).setValue(danaName);
 
     if (arsip) {
       if (picTrans) sheet.getRange(targetRow, COL.PIC_TRANSAKSI).setValue(picTrans);
-      sheet.getRange(targetRow, COL.NOMINAL_TRANSFER).setValue(nominal).setNumberFormat(CURR_FORMAT);
+      if (!danaName) sheet.getRange(targetRow, COL.NOMINAL_TRANSFER).setValue(nominal).setNumberFormat(CURR_FORMAT);
       if (tglTf) sheet.getRange(targetRow, COL.TGL_TRANSFER).setValue(tglTf).setNumberFormat(DATE_FORMAT);
       sheet.getRange(targetRow, COL.ACTUAL).setValue(actual).setNumberFormat(CURR_FORMAT);
       if (nota) sheet.getRange(targetRow, COL.NOTA).setValue(nota);

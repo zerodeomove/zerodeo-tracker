@@ -14,13 +14,39 @@ dan budgeting launch, plus proses approve/reject oleh Lemon. Ada juga modul mark
   "Tandai Ditransfer" langsung muncul di dashboard, tanpa perlu PIN.
 - **Data lama** (kegiatan yang sudah selesai sebelum dashboard dipakai): di popup
   "Kebutuhan baru" centang **Data lama**. Yang wajib hanya Actual; Nominal transfer,
-  PIC Transaksi, Tgl transfer, dan link nota opsional (kosong = Nominal sama dengan
-  Actual, PIC Transaksi sama dengan PIC). Langsung tersimpan berstatus **Selesai**,
+  PIC Transaksi, Tanggal (kapan dibayar), dan link nota opsional (kosong = Nominal sama
+  dengan Actual, PIC Transaksi sama dengan PIC). Langsung tersimpan berstatus **Selesai**,
   dengan catatan "Data lama" di kolom Catatan. Opsi ini hanya muncul kalau Apps Script
   sudah versi terbaru.
 - **Urgent:** kartu **Perlu Ditransfer** di atas tabel menghitung kegiatan berstatus
   Approved yang belum ditransfer. Kartu menyala kuning kalau ada isinya; diklik, muncul
   daftarnya (urut deadline) dengan tombol Tandai Ditransfer di tiap baris.
+
+## Dana (transfer bulk)
+
+Untuk kasus satu transfer besar yang dipakai membayar banyak kebutuhan (misalnya modal
+Rp11.280.000 yang dibelanjakan satu-satu, ada yang lebih murah atau lebih mahal dari
+rencana):
+
+1. Catat transfernya sekali lewat **+ Dana** (nama, nominal, tanggal, PIC penerima).
+2. Di popup **Kebutuhan baru** pilih **Dibayar dari dana**. Kebutuhan itu tidak perlu
+   approve/transfer sendiri (uangnya sudah ada), jadi langsung berstatus **Ditransfer**
+   dengan jalur **Dana**, tinggal **Lengkapi** dengan Actual dan nota. Kebutuhan dari dana
+   tidak punya Nominal Transfer sendiri supaya tidak terhitung dua kali.
+3. Kartu dana menampilkan: dana, **terpakai** (total Actual kebutuhan tertaut), **saldo**
+   (dana dikurangi terpakai), serta **rencana belum jalan** (estimasi kebutuhan yang belum
+   selesai) dan **sisa bebas** (saldo dikurangi rencana). Pengeluaran yang lebih mahal atau
+   tak terduga otomatis mengurangi saldo; kalau melebihi dana, tampil **Kelebihan** merah.
+   Klik kartu dana untuk menyaring tabel ke kebutuhan dari dana itu.
+4. Kartu **Sudah Cair, Belum Ada Nota** ikut menghitung saldo dana.
+
+Data lama juga bisa ditautkan ke dana: centang **Data lama** lalu pilih dananya. Isian
+**Tanggal** di mode Data lama menjadi Tanggal Dicatat di Sheet.
+
+Di Sheet: tab **`dana`** (satu baris per transfer, kolom Terpakai dan Saldo berformula) dan
+kolom **Dana** (S) di tab `kegiatan`, dibuat otomatis. Nama dana harus unik; jangan ubah
+nama di tab `dana` kalau sudah ada kebutuhan yang tertaut (tautannya memakai nama).
+Catatan: tab `ringkasan` belum menghitung dana.
 
 ## Kategori
 
@@ -59,7 +85,8 @@ sekali lewat satu panggilan, semua form berupa popup:
 
 - Tab **Budgeting**: 4 kartu ringkas (Menunggu Approve, Perlu Ditransfer, Sudah Cair
   Belum Ada Nota, Deadline Terdekat) + tabel kegiatan. Popup: Kebutuhan baru (Tipe
-  Capex/Opex, kategori, mode Data lama), Perlu ditransfer, Tandai Ditransfer, Lengkapi
+  Capex/Opex, kategori, mode Data lama, dibayar dari dana), Dana baru, Perlu ditransfer,
+  Tandai Ditransfer, Lengkapi
   (Actual + foto nota, dikompres di browser max 1600px JPEG sebelum dikirim).
 - Tab **Marketing**, sub-tab **Strategi** dan **Hasil Event**. Popup: Strategi baru
   (lane + channel boleh lebih dari satu) dan Hasil Event (diisi H+1 sampai H+3
@@ -154,9 +181,11 @@ jadi URL lama tidak berguna tanpa secret. Jangan menunda langkah 6 terlalu lama.
    dan "Ditransfer ke" diganti nama jadi "PIC Transaksi". Sheet lama harus
    dijalankan ulang lewat Zerodeo Tools -> Setup / Reset Tracker (mengosongkan
    isi tab), atau kolomnya digeser manual sesuai urutan header di Code.gs.
-7. Versi dengan tab `kategori`, mode Data lama, dan kartu Perlu Ditransfer: cukup paste
-   Code.gs terbaru lalu Deploy -> New version. **Tidak perlu Setup / Reset** (tidak ada
-   kolom yang berubah). Tab `kategori` dibuat otomatis saat halaman dibuka pertama kali.
+7. Versi dengan tab `kategori`, mode Data lama, kartu Perlu Ditransfer, dan Dana: cukup
+   paste Code.gs terbaru lalu Deploy -> New version. **Tidak perlu Setup / Reset.** Tab
+   `kategori` dan `dana` serta header kolom **Dana** (S) di tab `kegiatan` dibuat otomatis
+   saat halaman dibuka pertama kali. (Setup / Reset Tracker tidak menghapus tab `kategori`
+   dan `dana`, tapi tetap mengosongkan tab `kegiatan`.)
 8. Tab `kegiatan` hanya punya baris data sampai baris 60 di Sheet (formula No dan Selisih
    hanya ada sampai situ). Kalau mengisi banyak data lama, perhatikan batas ini.
 

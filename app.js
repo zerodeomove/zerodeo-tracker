@@ -118,6 +118,8 @@ async function load() {
     kegiatanData = json.kegiatan || [];
     plafonData = json.plafon_fixed || [];
     backendBaru = Array.isArray(json.kategori);
+    backendDana = Array.isArray(json.dana);
+    danaList = backendDana ? json.dana : [];
     kategoriList = (json.kategori && json.kategori.length) ? json.kategori : KATEGORI_DEFAULT.slice();
     M = {
       ada: 'strategi' in json,
