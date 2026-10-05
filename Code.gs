@@ -684,6 +684,12 @@ function doPost(e) {
     if (data.action === 'link_dana') {
       return handleLinkDana(data);
     }
+    if (data.action === 'link_dana_batch') {
+      return handleLinkDanaBatch(data);
+    }
+    if (data.action === 'complete_batch') {
+      return handleCompleteBatch(data);
+    }
     return handleAddKegiatan(data);
   } catch (err) {
     return jsonResponse({ ok: false, error: err.message });
@@ -912,28 +918,106 @@ function handleLinkDana(data) {
     if (!dn) return jsonResponse({ ok: false, error: 'Dana tidak ditemukan: ' + cleanText_(data.dana, 80) });
 
     var sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('kegiatan');
-    if (!sheet.getRange(row, COL.ITEM).getValue()) {
-      return jsonResponse({ ok: false, error: 'Baris itu kosong.' });
-    }
-    var already = String(sheet.getRange(row, COL.DANA).getValue() || '').trim();
-    if (already) {
-      return jsonResponse({ ok: false, error: 'Baris ini sudah tertaut ke dana "' + already + '".' });
-    }
-    var status = sheet.getRange(row, COL.STATUS).getValue();
-    var jalur = sheet.getRange(row, COL.JALUR).getValue();
-    var fixedOk = jalur === 'Fixed' && ['Ditransfer', 'Selesai', 'Ditolak'].indexOf(status) === -1;
-    if (status !== 'Approved' && !fixedOk) {
-      return jsonResponse({ ok: false, error: 'Baris ini statusnya "' + status + '" (Jalur ' + jalur + ') — baru bisa dibayar dari dana setelah Approved (atau jalur Fixed yang belum Ditransfer).' });
-    }
+    var err = linkRowToDana_(sheet, row, dn['Nama Dana']);
+    if (err) return jsonResponse({ ok: false, error: err });
+    return jsonResponse({ ok: true, row: row, dana: dn['Nama Dana'] });
+  } finally {
+    lock.releaseLock();
+  }
+}
 
-    var nama = dn['Nama Dana'];
-    sheet.getRange(row, COL.DANA).setValue(nama);
-    sheet.getRange(row, COL.STATUS).setValue('Ditransfer');
-    var noteCell = sheet.getRange(row, COL.CATATAN);
-    var existing = noteCell.getValue();
-    var stamp = 'Dibayar dari dana "' + nama + '" (' + Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'dd-MMM-yy') + ')';
-    noteCell.setValue(existing ? (existing + ' | ' + stamp) : stamp);
-    return jsonResponse({ ok: true, row: row, dana: nama });
+// Satu baris ditautkan ke dana. Return '' kalau berhasil, atau pesan alasan penolakan
+// (tidak menulis apa pun kalau ditolak). Dipakai satuan dan sekaligus.
+function linkRowToDana_(sheet, row, nama) {
+  if (!row || row < HEADER_ROW + 1 || row > sheet.getLastRow()) return 'Baris tidak valid.';
+  if (!sheet.getRange(row, COL.ITEM).getValue()) return 'Baris itu kosong.';
+  var already = String(sheet.getRange(row, COL.DANA).getValue() || '').trim();
+  if (already) return 'Baris ini sudah tertaut ke dana "' + already + '".';
+  var status = sheet.getRange(row, COL.STATUS).getValue();
+  var jalur = sheet.getRange(row, COL.JALUR).getValue();
+  var fixedOk = jalur === 'Fixed' && ['Ditransfer', 'Selesai', 'Ditolak'].indexOf(status) === -1;
+  if (status !== 'Approved' && !fixedOk) {
+    return 'Baris ini statusnya "' + status + '" (Jalur ' + jalur + ') — baru bisa dibayar dari dana setelah Approved (atau jalur Fixed yang belum Ditransfer).';
+  }
+  sheet.getRange(row, COL.DANA).setValue(nama);
+  sheet.getRange(row, COL.STATUS).setValue('Ditransfer');
+  var noteCell = sheet.getRange(row, COL.CATATAN);
+  var existing = noteCell.getValue();
+  var stamp = 'Dibayar dari dana "' + nama + '" (' + Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'dd-MMM-yy') + ')';
+  noteCell.setValue(existing ? (existing + ' | ' + stamp) : stamp);
+  return '';
+}
+
+var MAX_BATCH = 200;
+
+// Bayar SEMUA sekaligus: tautkan banyak kegiatan ke satu dana dalam satu kiriman.
+// Baris yang tidak memenuhi syarat dilewati (dilaporkan di "skipped" beserta alasannya),
+// sisanya tetap diproses. ok = true kalau minimal satu baris tertaut.
+function handleLinkDanaBatch(data) {
+  var rows = (Array.isArray(data.rows) ? data.rows : []).map(Number).filter(function (n, i, a) {
+    return n && a.indexOf(n) === i;
+  });
+  if (!rows.length) return jsonResponse({ ok: false, error: 'Tidak ada baris yang dipilih.' });
+  if (rows.length > MAX_BATCH) return jsonResponse({ ok: false, error: 'Terlalu banyak sekaligus (maksimal ' + MAX_BATCH + ' baris).' });
+  if (!cleanText_(data.dana, 80)) return jsonResponse({ ok: false, error: 'Pilih dananya dulu.' });
+
+  var lock = LockService.getScriptLock();
+  if (!lock.tryLock(15000)) return jsonResponse({ ok: false, error: 'Server sedang sibuk, coba lagi sebentar.' });
+  try {
+    ensureDanaColumn_();
+    var dn = findDana_(data.dana);
+    if (!dn) return jsonResponse({ ok: false, error: 'Dana tidak ditemukan: ' + cleanText_(data.dana, 80) });
+    var sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('kegiatan');
+    var linked = [], skipped = [];
+    rows.forEach(function (r) {
+      var err = linkRowToDana_(sheet, r, dn['Nama Dana']);
+      if (err) skipped.push({ row: r, alasan: err }); else linked.push(r);
+    });
+    return jsonResponse({
+      ok: linked.length > 0, dana: dn['Nama Dana'], linked: linked, skipped: skipped,
+      error: linked.length ? undefined : (skipped.length ? skipped[0].alasan : 'Tidak ada yang tertaut.')
+    });
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+// Isi Actual SEKALIGUS: banyak kegiatan berstatus Ditransfer diselesaikan dalam satu
+// kiriman (Actual wajib, link nota opsional). Foto nota tidak lewat sini; kegiatan yang
+// mau diberi foto dilengkapi satu-satu lewat Lengkapi. Yang tidak memenuhi syarat dilewati
+// dan dilaporkan di "skipped".
+function handleCompleteBatch(data) {
+  var items = Array.isArray(data.items) ? data.items : [];
+  if (!items.length) return jsonResponse({ ok: false, error: 'Tidak ada yang diisi.' });
+  if (items.length > MAX_BATCH) return jsonResponse({ ok: false, error: 'Terlalu banyak sekaligus (maksimal ' + MAX_BATCH + ' baris).' });
+
+  var lock = LockService.getScriptLock();
+  if (!lock.tryLock(15000)) return jsonResponse({ ok: false, error: 'Server sedang sibuk, coba lagi sebentar.' });
+  try {
+    var sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('kegiatan');
+    var completed = [], skipped = [];
+    items.forEach(function (it) {
+      var row = Number(it && it.row);
+      var actual = Number(it && it.actual);
+      var nota = String((it && it.nota) || '').trim();
+      var err = '';
+      if (!row || row < HEADER_ROW + 1 || row > sheet.getLastRow()) err = 'Baris tidak valid.';
+      else if (!actual || actual <= 0) err = 'Actual harus angka lebih dari 0.';
+      else if (nota && !/^https?:\/\/\S+$/i.test(nota)) err = 'Link nota harus diawali http:// atau https://';
+      else {
+        var status = sheet.getRange(row, COL.STATUS).getValue();
+        if (status !== 'Ditransfer') err = 'Statusnya "' + status + '", bukan "Ditransfer".';
+      }
+      if (err) { skipped.push({ row: row || null, alasan: err }); return; }
+      sheet.getRange(row, COL.ACTUAL).setValue(actual).setNumberFormat(CURR_FORMAT);
+      if (nota) sheet.getRange(row, COL.NOTA).setValue(nota);
+      sheet.getRange(row, COL.STATUS).setValue('Selesai');
+      completed.push(row);
+    });
+    return jsonResponse({
+      ok: completed.length > 0, completed: completed, skipped: skipped,
+      error: completed.length ? undefined : (skipped.length ? skipped[0].alasan : 'Tidak ada yang selesai.')
+    });
   } finally {
     lock.releaseLock();
   }

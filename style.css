@@ -178,6 +178,17 @@ footer { margin-top: 24px; color: var(--text-muted); font-size: 12px; text-align
 .dana-saldo b { font-size: 18px; }
 .dana-saldo.minus b { color: var(--red); }
 .dana-plan { font-size: 12px; color: var(--text-muted); margin-top: 4px; }
+.dana-actions { margin-top: 8px; }
+.bulkbar {
+  display: flex; flex-direction: column; gap: 8px; border: 1px dashed var(--border);
+  border-radius: 8px; padding: 12px; background: var(--bg);
+}
+.modal-box .bulkbar .btn { align-self: flex-start; }
+.settle-sum { font-size: 13px; color: var(--text-muted); font-variant-numeric: tabular-nums; }
+.modal-box .settle-in, .modal-box .settle-nota { font-size: 14px; padding: 6px 8px; width: 100%; }
+.settle-in { min-width: 110px; }
+.settle-nota { min-width: 160px; }
+.settle-row-err td { background: var(--red-bg); }
 td.item .sub { margin-top: 2px; }
 
 /* ---------- marketing ---------- */

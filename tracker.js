@@ -55,6 +55,7 @@ function renderTracker() {
   fillKategori();
   fillDana();
   if ($('m-urgent').classList.contains('show')) renderUrgentList();
+  if ($('m-settle').classList.contains('show')) renderSettle();
 }
 
 function populateFilters() {
@@ -110,6 +111,7 @@ function renderUrgentList() {
   const items = urgentItems();
   if (items.length === 0) {
     $('urgentBody').innerHTML = '<tr><td colspan="5" class="empty">Semua yang sudah di-approve sudah ditransfer.</td></tr>';
+    renderUrgentBulk();
     return;
   }
   $('urgentBody').innerHTML = items.map((r) => {
@@ -123,10 +125,12 @@ function renderUrgentList() {
       <td><button class="aksi-btn approve" onclick="openTransferModal(${Number(r['_row'])})">Tandai Ditransfer</button>${bayarDanaBtn(Number(r['_row']))}</td>
     </tr>`;
   }).join('');
+  renderUrgentBulk();
 }
 
 function openUrgent() {
   if (urgentItems().length === 0) return;
+  setMsg($('ub-msg'), '', '');
   renderUrgentList();
   openModal('m-urgent');
 }
@@ -330,14 +334,15 @@ function danaStats() {
     const saldo = nominal - terpakai;
     return {
       nama: nama, nominal: nominal, tgl: d['Tgl Transfer'], pic: d['PIC Transaksi'], catatan: d['Catatan'],
-      terpakai: terpakai, rencana: rencana, saldo: saldo, bebas: saldo - rencana, jumlah: linked.length
+      terpakai: terpakai, rencana: rencana, saldo: saldo, bebas: saldo - rencana, jumlah: linked.length,
+      menunggu: linked.filter((r) => r['Status'] === 'Ditransfer').length // menunggu Actual
     };
   });
 }
 
 function renderDana() {
   $('danaSection').style.display = backendDana ? '' : 'none';
-  if (!backendDana) return;
+  if (!backendDana) { $('danaList').innerHTML = ''; return; }
   const stats = danaStats();
   if (!stats.length) {
     $('danaList').innerHTML = '<div class="dana-empty">Belum ada dana. Pakai <b>+ Dana</b> kalau ada transfer bulk yang dipakai untuk banyak kebutuhan.</div>';
@@ -354,6 +359,7 @@ function renderDana() {
       <div class="dana-bar"><div class="dana-fill ${minus ? 'over' : ''}" style="width:${pct}%"></div></div>
       <div class="dana-saldo ${minus ? 'minus' : ''}">${minus ? 'Kelebihan' : 'Saldo'} <b>${fmtDanaRp(Math.abs(d.saldo))}</b></div>
       ${d.rencana > 0 ? `<div class="dana-plan">Rencana belum jalan ${fmtDanaRp(d.rencana)} · sisa bebas ${fmtDanaRp(d.bebas)}</div>` : ''}
+      ${d.menunggu > 0 ? `<div class="dana-actions"><button class="aksi-btn dana" data-nama="${zEsc(d.nama)}" onclick="event.stopPropagation(); openSettle(this.dataset.nama)">Isi Actual sekaligus (${d.menunggu})</button></div>` : ''}
     </div>`;
   }).join('');
 }
@@ -423,6 +429,181 @@ async function submitBayarDana() {
   } finally {
     btn.disabled = false;
     btn.textContent = 'Simpan';
+  }
+}
+
+// ---------- laporan hasil kiriman sekaligus (yang berhasil + yang dilewati beserta alasannya) ----------
+function namaBaris(row) {
+  const r = kegiatanData.find((x) => x['_row'] === row);
+  return r ? (r['Item Kegiatan'] || '') : '';
+}
+
+function batchReport(el, json, doneKey, okLabel) {
+  const done = json[doneKey] || [];
+  const skipped = json.skipped || [];
+  const lines = [];
+  if (done.length) lines.push(okLabel(done.length));
+  if (skipped.length) {
+    lines.push(skipped.length + ' dilewati: ' + skipped.map((s) => (namaBaris(s.row) || ('baris ' + s.row)) + ' (' + s.alasan + ')').join('; '));
+  }
+  if (!done.length && !skipped.length) lines.push(json.error || 'Tidak ada yang diproses.');
+  setMsg(el, lines.join(' · '), done.length ? (skipped.length ? 'warn' : 'ok') : 'err');
+}
+
+// ---------- bayar SEMUA pengajuan Approved dari satu dana ----------
+let ubConfirm = false; // klik pertama minta konfirmasi, klik kedua baru jalan
+
+function renderUrgentBulk() {
+  const show = backendDana && danaList.length > 0 && urgentItems().length > 0;
+  $('urgentBulk').style.display = show ? '' : 'none';
+  if (!show) return;
+  const cur = $('ub-dana').value;
+  $('ub-dana').innerHTML = danaStats().map((d) =>
+    `<option value="${zEsc(d.nama)}">${zEsc(d.nama)} — sisa bebas ${fmtDanaRp(d.bebas)}</option>`).join('');
+  if (danaList.some((d) => d['Nama Dana'] === cur)) $('ub-dana').value = cur;
+  updateUrgentBulkHint();
+}
+
+function updateUrgentBulkHint() {
+  ubConfirm = false;
+  const items = urgentItems();
+  const d = danaStats().find((x) => x.nama === $('ub-dana').value);
+  const total = items.reduce((s, r) => s + (Number(r['Estimasi (Rp)']) || 0), 0);
+  $('ub-btn').textContent = 'Bayar semua dari dana (' + items.length + ')';
+  const el = $('ub-hint');
+  if (!d) { el.textContent = ''; el.style.color = ''; return; }
+  const sisa = d.bebas - total;
+  el.textContent = items.length + ' pengajuan · total estimasi ' + fmtDanaRp(total) + ' · sisa bebas dana setelah ini ' +
+    fmtDanaRp(sisa) + (sisa < 0 ? ' ⚠ Melebihi sisa dana.' : '.');
+  el.style.color = sisa < 0 ? 'var(--red)' : '';
+}
+
+async function submitUrgentBulk() {
+  const items = urgentItems();
+  const dana = $('ub-dana').value;
+  if (!items.length || !dana) return;
+  const btn = $('ub-btn');
+  if (!ubConfirm) {
+    ubConfirm = true;
+    btn.textContent = 'Yakin? Klik lagi untuk menautkan ' + items.length + ' pengajuan';
+    return;
+  }
+  btn.disabled = true;
+  btn.textContent = 'Menyimpan…';
+  try {
+    const json = await zApi.post({ action: 'link_dana_batch', rows: items.map((r) => Number(r['_row'])), dana: dana });
+    batchReport($('ub-msg'), json, 'linked', (n) => n + ' pengajuan dibayar dari dana "' + dana + '" (status Ditransfer, tinggal diisi Actual-nya)');
+    await load();
+  } catch (err) {
+    setMsg($('ub-msg'), 'Gagal kirim: ' + err.message, 'err');
+  } finally {
+    btn.disabled = false;
+    updateUrgentBulkHint();
+  }
+}
+
+// ---------- isi Actual SEKALIGUS untuk kebutuhan dari satu dana ----------
+let settleDana = null;
+
+function settleItems() {
+  return kegiatanData.filter((r) => r['Dana'] === settleDana && r['Status'] === 'Ditransfer');
+}
+
+function openSettle(nama) {
+  settleDana = nama;
+  setMsg($('st-msg'), '', '');
+  $('st-err').classList.remove('show');
+  $('settleBody').innerHTML = '';
+  renderSettle();
+  openModal('m-settle');
+}
+
+// Dibangun ulang dari data terbaru; isian yang sudah diketik dipertahankan.
+function renderSettle() {
+  const keep = {};
+  document.querySelectorAll('#settleBody tr[data-row]').forEach((tr) => {
+    keep[tr.dataset.row] = { a: tr.querySelector('.settle-in').value, n: tr.querySelector('.settle-nota').value };
+  });
+  const items = settleItems();
+  $('st-sub').textContent = 'Dana: ' + settleDana + ' · ' + items.length + ' kebutuhan menunggu Actual. Kosongkan baris yang belum dibelanjakan, atau yang mau di-Lengkapi sendiri dengan foto nota.';
+  if (!items.length) {
+    $('settleBody').innerHTML = '<tr><td colspan="4" class="empty">Semua kebutuhan dari dana ini sudah selesai.</td></tr>';
+  } else {
+    $('settleBody').innerHTML = items.map((r) => {
+      const rowNo = Number(r['_row']);
+      const k = keep[rowNo] || { a: '', n: '' };
+      return `<tr data-row="${rowNo}">
+        <td class="item">${zEsc(r['Item Kegiatan'] || '-')}</td>
+        <td class="num">${fmtRupiah(r['Estimasi (Rp)'])}</td>
+        <td><input type="number" class="settle-in" min="0" step="1" inputmode="numeric" placeholder="0" value="${zEsc(k.a)}" oninput="updateSettleSum()"></td>
+        <td><input type="text" class="settle-nota" placeholder="https://…" value="${zEsc(k.n)}"></td>
+      </tr>`;
+    }).join('');
+  }
+  $('st-submit').disabled = !items.length;
+  updateSettleSum();
+}
+
+function updateSettleSum() {
+  const rows = [...document.querySelectorAll('#settleBody tr[data-row]')];
+  const el = $('st-sum');
+  if (!rows.length) { el.textContent = ''; return; }
+  let total = 0, filled = 0;
+  rows.forEach((tr) => {
+    const v = Number(tr.querySelector('.settle-in').value);
+    if (v > 0) { total += v; filled++; }
+  });
+  const d = danaStats().find((x) => x.nama === settleDana);
+  const sesudah = d ? d.saldo - total : null;
+  el.textContent = 'Terisi ' + filled + ' dari ' + rows.length + ' · total Actual ' + fmtDanaRp(total) +
+    (d ? ' · saldo dana setelah ini ' + fmtDanaRp(sesudah) + (sesudah < 0 ? ' ⚠ Melebihi dana.' : '') : '');
+  el.style.color = d && sesudah < 0 ? 'var(--red)' : '';
+}
+
+// Isi baris yang masih kosong dengan estimasinya (berguna kalau realisasi = rencana).
+function settleFillEst() {
+  document.querySelectorAll('#settleBody tr[data-row]').forEach((tr) => {
+    const input = tr.querySelector('.settle-in');
+    if (input.value.trim() !== '') return;
+    const r = kegiatanData.find((x) => x['_row'] === Number(tr.dataset.row));
+    const est = r ? Number(r['Estimasi (Rp)']) : 0;
+    if (est > 0) input.value = est;
+  });
+  updateSettleSum();
+}
+
+async function submitSettle() {
+  const errEl = $('st-err');
+  errEl.classList.remove('show');
+  setMsg($('st-msg'), '', '');
+  const items = [];
+  let bad = '';
+  document.querySelectorAll('#settleBody tr[data-row]').forEach((tr) => {
+    tr.classList.remove('settle-row-err');
+    const a = tr.querySelector('.settle-in').value.trim();
+    const n = tr.querySelector('.settle-nota').value.trim();
+    if (a === '' && n === '') return; // dibiarkan: tetap Ditransfer
+    if (!(Number(a) > 0)) { bad = 'Actual harus angka lebih dari 0 (atau kosongkan barisnya).'; tr.classList.add('settle-row-err'); return; }
+    if (n && !/^https?:\/\/\S+$/i.test(n)) { bad = 'Link nota harus diawali http:// atau https://'; tr.classList.add('settle-row-err'); return; }
+    items.push({ row: Number(tr.dataset.row), actual: Number(a), nota: n || null });
+  });
+  if (bad || !items.length) {
+    errEl.textContent = bad || 'Isi Actual minimal satu kebutuhan.';
+    errEl.classList.add('show');
+    return;
+  }
+  const btn = $('st-submit');
+  btn.disabled = true;
+  btn.textContent = 'Menyimpan…';
+  try {
+    const json = await zApi.post({ action: 'complete_batch', items: items });
+    batchReport($('st-msg'), json, 'completed', (n) => n + ' kebutuhan ditandai Selesai');
+    await load();
+  } catch (err) {
+    setMsg($('st-msg'), 'Gagal kirim: ' + err.message, 'err');
+  } finally {
+    btn.textContent = 'Simpan semua';
+    btn.disabled = settleItems().length === 0;
   }
 }
 

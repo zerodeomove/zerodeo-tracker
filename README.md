@@ -45,6 +45,19 @@ rencana):
    Ditransfer tanpa nominal sendiri, tinggal Lengkapi. Berlaku juga untuk jalur Fixed
    yang belum ditransfer. Dana tidak menautkan pengajuan sendiri secara otomatis.
 
+6. **Bayar semua sekaligus:** di popup Perlu Ditransfer ada bar "Bayar semua dari dana".
+   Pilih dana, lalu klik dua kali (klik pertama meminta konfirmasi) untuk menautkan semua
+   pengajuan Approved yang belum tertaut. Total estimasi dan sisa bebas dana ditampilkan
+   dulu. Baris yang tidak memenuhi syarat dilewati dan dilaporkan beserta alasannya.
+7. **Isi Actual sekaligus:** tombol di kartu dana membuka tabel semua kebutuhan dari dana
+   itu yang menunggu Actual. Isi Actual (link nota opsional) per baris atau pakai "Samakan
+   dengan estimasi", lalu Simpan semua. Baris yang dikosongkan tetap Ditransfer, jadi
+   bisa di-Lengkapi sendiri dengan foto nota (foto tidak lewat tabel ini).
+
+**Alur khas (pengajuan Rp12 juta, ditransfer bulk, diberesin belakangan):** ajukan tiap
+item -> Lemon approve -> catat transfernya lewat + Dana -> Bayar semua dari dana ->
+setelah dibelanjakan, Isi Actual sekaligus -> saldo dana menunjukkan sisanya.
+
 **Penjaga anti-dobel:** baris yang tertaut ke dana tidak bisa lagi di-Tandai Ditransfer
 (ditolak di Apps Script), tidak masuk kartu Perlu Ditransfer, dan nominal transfer di
 barisnya (kalau terisi manual di Sheet) diabaikan di hitungan dashboard, karena uangnya

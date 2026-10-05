@@ -302,6 +302,13 @@
         <tbody id="urgentBody"></tbody>
       </table>
     </div>
+    <div class="bulkbar" id="urgentBulk" style="display:none">
+      <label>Uangnya datang sebagai dana bulk? Bayar semua dari dana
+        <select id="ub-dana" onchange="updateUrgentBulkHint()"></select>
+        <span class="hint" id="ub-hint"></span></label>
+      <div class="msg" id="ub-msg"></div>
+      <button type="button" class="btn green" id="ub-btn" onclick="submitUrgentBulk()">Bayar semua dari dana</button>
+    </div>
     <div class="modal-actions">
       <button type="button" class="btn-cancel" onclick="closeModal('m-urgent')">Tutup</button>
     </div>
@@ -342,6 +349,28 @@
     <div class="modal-actions">
       <button type="button" class="btn-cancel" onclick="closeModal('m-bayardana')">Batal</button>
       <button type="button" class="btn-submit" id="bd-submit" onclick="submitBayarDana()">Simpan</button>
+    </div>
+  </div>
+</div>
+
+<!-- ================= POPUP: Isi Actual sekaligus (per dana) ================= -->
+<div class="modal-overlay" id="m-settle">
+  <div class="modal-box wide">
+    <h3>Isi Actual sekaligus</h3>
+    <div class="hint" id="st-sub"></div>
+    <div class="scroll">
+      <table>
+        <thead><tr><th>Item Kegiatan</th><th>Estimasi</th><th>Actual (Rp)</th><th>Link nota <span class="opt">(opsional)</span></th></tr></thead>
+        <tbody id="settleBody"></tbody>
+      </table>
+    </div>
+    <div class="settle-sum" id="st-sum"></div>
+    <div class="modal-err" id="st-err"></div>
+    <div class="msg" id="st-msg"></div>
+    <div class="modal-actions">
+      <button type="button" class="btn-cancel" onclick="settleFillEst()">Samakan dengan estimasi</button>
+      <button type="button" class="btn-cancel" onclick="closeModal('m-settle')">Tutup</button>
+      <button type="button" class="btn-submit" id="st-submit" onclick="submitSettle()">Simpan semua</button>
     </div>
   </div>
 </div>
