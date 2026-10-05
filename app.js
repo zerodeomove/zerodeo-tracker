@@ -48,6 +48,16 @@ function clearErrors(root) {
   root.querySelectorAll('.field-error').forEach((x) => x.classList.remove('show'));
 }
 
+// Notifikasi kecil di bawah layar (hilang sendiri). Dipakai setelah simpan, karena popup ditutup.
+let toastTimer = null;
+function toast(msg, kind) {
+  const el = $('toast');
+  el.textContent = msg;
+  el.className = 'toast show' + (kind === 'err' ? ' err' : '');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => { el.className = 'toast'; }, kind === 'err' ? 6000 : 4000);
+}
+
 // ---------- popup ----------
 function openModal(id) {
   $(id).classList.add('show');
@@ -131,6 +141,7 @@ async function load() {
     renderMarketing();
   } catch (err) {
     setSync('Gagal ambil data: ' + err.message + ' — cek kode akses tim & konfigurasi proxy di Vercel.', true);
+    toast('Gagal memuat data. Tekan Refresh.', 'err');
     showLoadError();
   } finally {
     dataLoaded = true;

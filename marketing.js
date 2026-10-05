@@ -186,11 +186,9 @@ $('strategiForm').addEventListener('submit', async (e) => {
     });
     if (!j.ok) throw new Error(j.error || 'Gagal');
     $('strategiForm').reset(); sSel.lane.clear(); sSel.channel.clear();
-    $('s-mulai').value = todayStr();
-    await load(); // lane/channel baru ikut masuk daftar
-    sOpts.lane = M.lane.slice(); sOpts.channel = M.channel.slice();
-    renderChips('lane'); renderChips('channel');
-    setMsg($('s-msg'), 'Tersimpan. Lane/channel baru otomatis masuk daftar untuk semua orang.', 'ok');
+    closeModal('m-strategi');
+    toast('Strategi "' + v.nama + '" tersimpan. Lane/channel baru otomatis masuk daftar untuk semua orang.');
+    await load();
   } catch (err) {
     setMsg($('s-msg'), 'Gagal simpan: ' + err.message, 'bad');
   } finally {
@@ -233,10 +231,11 @@ $('eventForm').addEventListener('submit', async (e) => {
       strategi: $('e-strategi').value, pic: $('e-pic').value
     });
     if (!j.ok) throw new Error(j.error || 'Gagal');
-    $('eventForm').reset(); $('e-tanggal').value = todayStr();
+    const namaEvent = $('e-nama').value.trim();
+    $('eventForm').reset();
+    closeModal('m-event');
+    toast('Hasil event "' + namaEvent + '" tersimpan.');
     await load();
-    $('e-channel').innerHTML = '<option value="">Pilih channel…</option>' + M.channel.map((c) => '<option>' + zEsc(c) + '</option>').join('');
-    setMsg($('e-msg'), 'Tersimpan.', 'ok');
   } catch (err) {
     setMsg($('e-msg'), 'Gagal simpan: ' + err.message, 'bad');
   } finally {

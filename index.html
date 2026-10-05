@@ -214,7 +214,8 @@
       <div class="msg" id="k-msg"></div>
       <div class="modal-actions">
         <button type="button" class="btn-cancel" onclick="closeModal('m-kegiatan')">Tutup</button>
-        <button type="submit" class="btn-submit" id="k-submit">Simpan kegiatan</button>
+        <button type="submit" class="btn-more" id="k-submit-more">Simpan &amp; tambah lagi</button>
+        <button type="submit" class="btn-submit" id="k-submit">Simpan</button>
       </div>
     </form>
   </div>
@@ -464,6 +465,8 @@
     </form>
   </div>
 </div>
+
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
 
 <script src="common.js"></script>
 <script src="app.js"></script>

@@ -22,6 +22,20 @@ dan budgeting launch, plus proses approve/reject oleh Lemon. Ada juga modul mark
   Approved yang belum ditransfer. Kartu menyala kuning kalau ada isinya; diklik, muncul
   daftarnya (urut deadline) dengan tombol Tandai Ditransfer di tiap baris.
 
+## Setelah menyimpan
+
+Setelah simpan di popup mana pun (Kebutuhan, Dana, Lengkapi, Strategi, Hasil Event, Tandai
+Ditransfer, Bayar dari dana), popup **menutup**, muncul notifikasi kecil di atas layar, dan
+data **dimuat ulang otomatis**, jadi tidak perlu refresh manual. Kalau simpan gagal, popup
+tetap terbuka dengan pesan galat dan isianmu tidak hilang. Pengecualian: popup yang
+melaporkan hasil per baris (Isi Actual sekaligus, Bayar semua) tetap terbuka kalau ada baris
+yang dilewati, supaya alasannya terbaca.
+
+Di popup **Kebutuhan baru** ada tombol **Simpan & tambah lagi** untuk memasukkan banyak data
+berurutan (misalnya data lama dari Excel). Popup tetap terbuka; item, jumlah, dan nota
+dikosongkan, sedangkan isian yang biasanya sama (Data lama, dana, kategori, tipe, PIC,
+tanggal) dipertahankan.
+
 ## Dana (transfer bulk)
 
 Untuk kasus satu transfer besar yang dipakai membayar banyak kebutuhan (misalnya modal

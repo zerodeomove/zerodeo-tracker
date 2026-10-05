@@ -299,8 +299,10 @@ async function submitTransfer() {
       tglTransfer: tanggal,
     });
     if (json.ok) {
+      const nama = namaBaris(transferRow) || 'Kegiatan';
       closeTransferModal();
-      load();
+      toast('Ditransfer: ' + nama + '. Sekarang tinggal Lengkapi dengan Actual.');
+      await load();
     } else {
       errEl.textContent = json.error || 'Gagal menyimpan.';
       errEl.classList.add('show');
@@ -416,9 +418,11 @@ async function submitBayarDana() {
   try {
     const json = await zApi.post({ action: 'link_dana', row: bayarRow, dana: dana });
     if (json.ok) {
+      const nama = namaBaris(bayarRow) || 'Kegiatan';
       closeModal('m-bayardana');
       bayarRow = null;
-      load();
+      toast(nama + ' dibayar dari dana "' + dana + '". Tinggal Lengkapi dengan Actual.');
+      await load();
     } else {
       errEl.textContent = json.error || 'Gagal menyimpan.';
       errEl.classList.add('show');
@@ -493,6 +497,7 @@ async function submitUrgentBulk() {
   try {
     const json = await zApi.post({ action: 'link_dana_batch', rows: items.map((r) => Number(r['_row'])), dana: dana });
     batchReport($('ub-msg'), json, 'linked', (n) => n + ' pengajuan dibayar dari dana "' + dana + '" (status Ditransfer, tinggal diisi Actual-nya)');
+    if (json.ok) toast((json.linked || []).length + ' pengajuan dibayar dari dana "' + dana + '".');
     await load();
   } catch (err) {
     setMsg($('ub-msg'), 'Gagal kirim: ' + err.message, 'err');
@@ -597,7 +602,14 @@ async function submitSettle() {
   btn.textContent = 'Menyimpan…';
   try {
     const json = await zApi.post({ action: 'complete_batch', items: items });
-    batchReport($('st-msg'), json, 'completed', (n) => n + ' kebutuhan ditandai Selesai');
+    if (json.ok && !(json.skipped || []).length) {
+      // semua beres: tutup dan kembali ke dashboard. Kalau ada yang dilewati, popup tetap
+      // terbuka supaya alasannya terbaca.
+      closeModal('m-settle');
+      toast((json.completed || []).length + ' kebutuhan ditandai Selesai.');
+    } else {
+      batchReport($('st-msg'), json, 'completed', (n) => n + ' kebutuhan ditandai Selesai');
+    }
     await load();
   } catch (err) {
     setMsg($('st-msg'), 'Gagal kirim: ' + err.message, 'err');
@@ -647,10 +659,11 @@ $('danaForm').addEventListener('submit', async (e) => {
       tglTransfer: $('d-tgl').value || null, picTransaksi: pic, catatan: $('d-catatan').value.trim() || null,
     });
     if (json.ok) {
-      setMsg($('d-msg'), 'Dana "' + (json.nama || nama) + '" tersimpan. Sekarang bisa dipilih di form Kebutuhan baru.', 'ok');
       $('danaForm').reset();
-      $('d-tgl').value = todayStr();
-      load();
+      closeModal('m-dana');
+      toast('Dana "' + (json.nama || nama) + '" tersimpan. Sekarang bisa dipilih di form Kebutuhan baru.');
+      await load();
+      $('danaSection').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
     } else {
       setMsg($('d-msg'), 'Gagal simpan: ' + (json.error || 'error tidak diketahui.'), 'err');
     }
@@ -751,10 +764,27 @@ function validateKegiatan() {
   return valid;
 }
 
+// "Simpan & tambah lagi" menjaga popup tetap terbuka untuk input berikutnya; "Simpan" menutupnya.
+let keepOpenAfterSave = false;
+$('k-submit').addEventListener('click', () => { keepOpenAfterSave = false; });
+$('k-submit-more').addEventListener('click', () => { keepOpenAfterSave = true; });
+
+// Untuk input berikutnya: kosongkan yang biasanya beda tiap baris (item, jumlah, nota), tapi
+// pertahankan yang sering sama (Data lama, dana, kategori, tipe, PIC, tanggal) supaya
+// memasukkan banyak data berurutan cepat.
+function clearForNext() {
+  ['k-item', 'k-estimasi', 'k-deadline', 'k-actual', 'k-nominal', 'k-nota', 'k-kategoriNew'].forEach((id) => { $(id).value = ''; });
+  clearErrors($('kegiatanForm'));
+  syncKegiatanForm();
+  $('k-item').focus();
+}
+
 $('kegiatanForm').addEventListener('submit', async (e) => {
   e.preventDefault();
   setMsg($('k-msg'), '', '');
   if (!validateKegiatan()) return;
+  const keepOpen = keepOpenAfterSave;
+  keepOpenAfterSave = false;
 
   const arsip = backendBaru && $('k-arsip').checked;
   const payload = {
@@ -784,26 +814,34 @@ $('kegiatanForm').addEventListener('submit', async (e) => {
     if (arsip) payload.nominalTransfer = null; // uangnya sudah ada di dana
   }
 
-  const btn = $('k-submit');
-  btn.disabled = true;
+  const btn = keepOpen ? $('k-submit-more') : $('k-submit');
+  const btnLabel = btn.textContent;
+  $('k-submit').disabled = true;
+  $('k-submit-more').disabled = true;
   btn.textContent = 'Menyimpan…';
   try {
     const json = await zApi.post(payload);
     if (json.ok) {
-      setMsg($('k-msg'), 'Tersimpan sebagai baris ke-' + json.row +
-        (arsip ? ' (data lama, berstatus Selesai)' : '') + (dana ? ' — dibayar dari dana "' + dana + '"' : '') +
-        '. Form dikosongkan buat input berikutnya.', 'ok');
-      $('kegiatanForm').reset();
-      syncKegiatanForm();
-      load();
+      const ringkas = 'Tersimpan: ' + payload.item + (arsip ? ' (data lama)' : '') + (dana ? ' — dari dana "' + dana + '"' : '');
+      toast(ringkas);
+      if (keepOpen) {
+        setMsg($('k-msg'), ringkas + '. Silakan isi yang berikutnya.', 'ok');
+        clearForNext();
+      } else {
+        $('kegiatanForm').reset();
+        syncKegiatanForm();
+        closeModal('m-kegiatan');
+      }
+      await load();
     } else {
       setMsg($('k-msg'), 'Gagal simpan: ' + (json.error || 'error tidak diketahui.'), 'err');
     }
   } catch (err) {
     setMsg($('k-msg'), 'Gagal kirim: ' + err.message, 'err');
   } finally {
-    btn.disabled = false;
-    btn.textContent = 'Simpan kegiatan';
+    btn.textContent = btnLabel;
+    $('k-submit').disabled = false;
+    $('k-submit-more').disabled = false;
   }
 });
 
@@ -917,10 +955,10 @@ $('completeForm').addEventListener('submit', async (e) => {
       photoMime: 'image/jpeg',
     });
     if (json.ok) {
-      $('completeForm').style.display = 'none';
-      setMsg($('c-msg-done'), 'Tersimpan. Kegiatan ditandai Selesai.', 'ok');
-      $('c-close-row').style.display = 'flex';
-      load();
+      const item = kegiatanData.find((r) => r['_row'] === completeRow);
+      closeModal('m-complete');
+      toast('Selesai: ' + ((item && item['Item Kegiatan']) || 'kegiatan') + (photoBase64 ? ' (nota terunggah)' : ''));
+      await load();
     } else {
       setMsg($('c-msg'), 'Gagal simpan: ' + (json.error || 'error tidak diketahui.'), 'err');
       btn.disabled = false;
