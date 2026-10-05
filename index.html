@@ -30,6 +30,10 @@
         <h2>Menunggu Approve</h2>
         <div id="menungguCard"><div class="card-empty">Belum ada data.</div></div>
       </div>
+      <div class="card clickable" id="urgentWrap" onclick="openUrgent()" title="Klik untuk lihat daftarnya dan tandai ditransfer">
+        <h2>Perlu Ditransfer</h2>
+        <div id="urgentCard"><div class="card-empty">Belum ada data.</div></div>
+      </div>
       <div class="card">
         <h2>Sudah Cair, Belum Ada Nota</h2>
         <div id="belumNotaCard"><div class="card-empty">Belum ada data.</div></div>
@@ -126,21 +130,18 @@
   <div class="modal-box">
     <h3>Kebutuhan baru</h3>
     <form id="kegiatanForm" novalidate>
+      <label class="check">
+        <input type="checkbox" id="k-arsip">
+        <span><b>Data lama</b> — kegiatan ini sudah selesai sebelum dashboard dipakai</span></label>
+
       <label>Item kegiatan
         <input type="text" id="k-item" placeholder="Contoh: sewa rak display Malang">
         <span class="field-error" id="err-k-item">Wajib diisi.</span></label>
 
       <label>Kategori
-        <select id="k-kategori">
-          <option value="">Pilih kategori…</option>
-          <option>Peralatan/Kulak</option>
-          <option>Packaging Tambahan</option>
-          <option>Ongkos Kirim/Logistik</option>
-          <option>Konten &amp; Aktivasi Akar</option>
-          <option>Operasional Tim</option>
-          <option>Lain-lain</option>
-        </select>
-        <span class="field-error" id="err-k-kategori">Wajib dipilih.</span></label>
+        <select id="k-kategori"><option value="">Pilih kategori…</option></select>
+        <input type="text" id="k-kategoriNew" placeholder="atau tulis kategori baru">
+        <span class="field-error" id="err-k-kategori">Pilih atau tulis kategori.</span></label>
 
       <label>Tipe
         <select id="k-tipe">
@@ -164,14 +165,33 @@
         </select>
         <span class="field-error" id="err-k-pic">Wajib dipilih.</span></label>
 
-      <label>Estimasi (Rp)
+      <label>Estimasi (Rp)<span class="opt" id="k-est-opt" style="display:none"> — opsional, kalau kosong sama dengan Actual</span>
         <input type="number" id="k-estimasi" placeholder="0" min="0" step="1000" inputmode="numeric">
         <span class="field-error" id="err-k-estimasi">Isi angka lebih dari 0.</span></label>
 
       <label>Deadline kegiatan (opsional)
         <input type="date" id="k-deadline"></label>
 
-      <label>Status
+      <div class="stack" id="k-arsip-box" style="display:none">
+        <div class="hint">Dicatat langsung berstatus <b>Selesai</b>. Yang wajib hanya Actual.</div>
+        <label>Actual (Rp)
+          <input type="number" id="k-actual" placeholder="0" min="0" step="1" inputmode="numeric">
+          <span class="field-error" id="err-k-actual">Isi angka lebih dari 0.</span></label>
+        <label>Nominal transfer (Rp) <span class="opt">— opsional, kalau kosong sama dengan Actual</span>
+          <input type="number" id="k-nominal" placeholder="0" min="0" step="1" inputmode="numeric"></label>
+        <div class="row2">
+          <label>PIC Transaksi <span class="opt">(opsional)</span>
+            <select id="k-pictrans"><option value="">Sama dengan PIC</option>
+              <option>Lenno</option><option>Ricko</option><option>Yanuar</option><option>Christina</option></select></label>
+          <label>Tgl transfer <span class="opt">(opsional)</span>
+            <input type="date" id="k-tgltf"></label>
+        </div>
+        <label>Link nota <span class="opt">(opsional)</span>
+          <input type="text" id="k-nota" placeholder="https://… (link Drive/foto nota)" inputmode="url">
+          <span class="field-error" id="err-k-nota">Harus diawali http:// atau https://</span></label>
+      </div>
+
+      <label id="k-status-wrap">Status
         <select id="k-status">
           <option value="Draft">Draft — masih perlu dicek dulu</option>
           <option value="Siap Ajukan">Siap Ajukan — tinggal masuk antrean</option>
@@ -220,6 +240,23 @@
     <div class="msg" id="c-msg-done"></div>
     <div class="modal-actions" id="c-close-row" style="display:none">
       <button type="button" class="btn-cancel" onclick="closeModal('m-complete')">Tutup</button>
+    </div>
+  </div>
+</div>
+
+<!-- ================= POPUP: Perlu ditransfer (daftar urgent) ================= -->
+<div class="modal-overlay" id="m-urgent">
+  <div class="modal-box wide">
+    <h3>Perlu ditransfer</h3>
+    <div class="hint">Sudah di-approve, tinggal ditransfer. Klik <b>Tandai Ditransfer</b> setelah uangnya dikirim.</div>
+    <div class="scroll">
+      <table>
+        <thead><tr><th>Item Kegiatan</th><th>PIC</th><th>Estimasi</th><th>Deadline</th><th></th></tr></thead>
+        <tbody id="urgentBody"></tbody>
+      </table>
+    </div>
+    <div class="modal-actions">
+      <button type="button" class="btn-cancel" onclick="closeModal('m-urgent')">Tutup</button>
     </div>
   </div>
 </div>

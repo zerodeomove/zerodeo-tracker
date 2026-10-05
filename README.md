@@ -12,6 +12,25 @@ dan budgeting launch, plus proses approve/reject oleh Lemon. Ada juga modul mark
   di dashboard, buka popup, isi Actual + foto nota) -> Selesai.
 - **Jalur Fixed:** lompat approve. Begitu statusnya belum Ditransfer/Selesai, tombol
   "Tandai Ditransfer" langsung muncul di dashboard, tanpa perlu PIN.
+- **Data lama** (kegiatan yang sudah selesai sebelum dashboard dipakai): di popup
+  "Kebutuhan baru" centang **Data lama**. Yang wajib hanya Actual; Nominal transfer,
+  PIC Transaksi, Tgl transfer, dan link nota opsional (kosong = Nominal sama dengan
+  Actual, PIC Transaksi sama dengan PIC). Langsung tersimpan berstatus **Selesai**,
+  dengan catatan "Data lama" di kolom Catatan. Opsi ini hanya muncul kalau Apps Script
+  sudah versi terbaru.
+- **Urgent:** kartu **Perlu Ditransfer** di atas tabel menghitung kegiatan berstatus
+  Approved yang belum ditransfer. Kartu menyala kuning kalau ada isinya; diklik, muncul
+  daftarnya (urut deadline) dengan tombol Tandai Ditransfer di tiap baris.
+
+## Kategori
+
+Daftar kategori disimpan di tab **`kategori`** di Sheet (dibuat otomatis, isi awal 6
+kategori bawaan). Di popup "Kebutuhan baru" pilih dari daftar, atau tulis kategori
+baru di kolom di bawahnya. Kategori baru otomatis masuk ke tab `kategori` dan ke
+dropdown di tab `kegiatan`; huruf besar/kecil dan spasi berlebih disamakan. Bisa juga
+ditambah/diubah langsung di tab `kategori`. Setup / Reset Tracker tidak menghapus tab ini.
+Catatan: tab `plafon_fixed` dan scorecard Marketing/Ops di tab `ringkasan` masih memakai
+6 kategori bawaan, jadi kategori tambahan belum masuk ke dua tempat itu.
 
 ## Arsitektur
 
@@ -38,9 +57,10 @@ Google Sheet itu sendiri yang jadi database.
 Satu halaman (`index.html`) dengan tab di atas. Data tracker dan marketing ditarik
 sekali lewat satu panggilan, semua form berupa popup:
 
-- Tab **Budgeting**: kartu ringkas + tabel kegiatan. Popup: Kebutuhan baru (Tipe
-  Capex/Opex), Tandai Ditransfer, Lengkapi (Actual + foto nota, dikompres di browser
-  max 1600px JPEG sebelum dikirim).
+- Tab **Budgeting**: 4 kartu ringkas (Menunggu Approve, Perlu Ditransfer, Sudah Cair
+  Belum Ada Nota, Deadline Terdekat) + tabel kegiatan. Popup: Kebutuhan baru (Tipe
+  Capex/Opex, kategori, mode Data lama), Perlu ditransfer, Tandai Ditransfer, Lengkapi
+  (Actual + foto nota, dikompres di browser max 1600px JPEG sebelum dikirim).
 - Tab **Marketing**, sub-tab **Strategi** dan **Hasil Event**. Popup: Strategi baru
   (lane + channel boleh lebih dari satu) dan Hasil Event (diisi H+1 sampai H+3
   setelah event).
@@ -134,6 +154,11 @@ jadi URL lama tidak berguna tanpa secret. Jangan menunda langkah 6 terlalu lama.
    dan "Ditransfer ke" diganti nama jadi "PIC Transaksi". Sheet lama harus
    dijalankan ulang lewat Zerodeo Tools -> Setup / Reset Tracker (mengosongkan
    isi tab), atau kolomnya digeser manual sesuai urutan header di Code.gs.
+7. Versi dengan tab `kategori`, mode Data lama, dan kartu Perlu Ditransfer: cukup paste
+   Code.gs terbaru lalu Deploy -> New version. **Tidak perlu Setup / Reset** (tidak ada
+   kolom yang berubah). Tab `kategori` dibuat otomatis saat halaman dibuka pertama kali.
+8. Tab `kegiatan` hanya punya baris data sampai baris 60 di Sheet (formula No dan Selisih
+   hanya ada sampai situ). Kalau mengisi banyak data lama, perhatikan batas ini.
 
 ## Deploy target
 

@@ -136,6 +136,63 @@ function setDropdown(sheet, a1, list) {
 }
 
 // ============================================================
+// KATEGORI — daftar yang bisa bertambah
+// Disimpan di tab "kategori" (dibuat otomatis, isi awal = KATEGORI_LIST).
+// Kategori baru dari form dashboard ditambahkan ke sini. Setup / Reset Tracker
+// TIDAK menghapus tab ini, jadi kategori tambahan tidak hilang.
+// ============================================================
+var KATEGORI_TAB = 'kategori';
+
+function ensureKategoriTab_() {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var sheet = ss.getSheetByName(KATEGORI_TAB);
+  if (sheet) return sheet;
+  sheet = ss.insertSheet(KATEGORI_TAB);
+  sheet.getRange(1, 1).setValue('Kategori')
+    .setFontWeight('bold').setFontColor('#FFFFFF').setBackground('#1F4E5F');
+  sheet.setFrozenRows(1);
+  sheet.setColumnWidth(1, 260);
+  sheet.getRange(2, 1, KATEGORI_LIST.length, 1).setValues(KATEGORI_LIST.map(function (k) { return [k]; }));
+  return sheet;
+}
+
+function cleanKategori_(s) {
+  return String(s === null || s === undefined ? '' : s).replace(/\s+/g, ' ').trim().slice(0, 60);
+}
+
+function getKategoriList() {
+  var sheet = ensureKategoriTab_();
+  var last = sheet.getLastRow();
+  var out = [];
+  if (last >= 2) {
+    sheet.getRange(2, 1, last - 1, 1).getValues().forEach(function (row) {
+      var k = cleanKategori_(row[0]);
+      if (k) out.push(k);
+    });
+  }
+  return out.length ? out : KATEGORI_LIST.slice();
+}
+
+// Samakan dengan daftar yang ada (abaikan huruf besar/kecil dan spasi berlebih).
+// Kategori yang benar-benar baru ditambahkan ke tab "kategori" dan dropdown
+// di tab kegiatan ikut diperbarui. Return nama kanonik ('' kalau kosong).
+function resolveKategori_(raw) {
+  var clean = cleanKategori_(raw);
+  if (!clean) return '';
+  var list = getKategoriList();
+  for (var i = 0; i < list.length; i++) {
+    if (list[i].toLowerCase() === clean.toLowerCase()) return list[i];
+  }
+  // Cegah teks yang diawali = + - @ dibaca Sheets sebagai formula.
+  var safe = /^[=+\-@]/.test(clean) ? ' ' + clean : clean;
+  ensureKategoriTab_().appendRow([safe]);
+  list.push(clean);
+  var kegiatan = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('kegiatan');
+  if (kegiatan) setDropdown(kegiatan, 'F' + (HEADER_ROW + 1) + ':F' + LAST_DATA_ROW, list);
+  return clean;
+}
+
+// ============================================================
 // TAB 1 — kegiatan
 // ============================================================
 function buildKegiatanSheet(ss) {
@@ -178,7 +235,7 @@ function buildKegiatanSheet(ss) {
   sheet.getRange(firstDataRow, COL.SELISIH, numDataRows, 1).setNumberFormat(CURR_FORMAT);
 
   setDropdown(sheet, 'D' + firstDataRow + ':D' + LAST_DATA_ROW, ['Zerodeo']);
-  setDropdown(sheet, 'F' + firstDataRow + ':F' + LAST_DATA_ROW, KATEGORI_LIST);
+  setDropdown(sheet, 'F' + firstDataRow + ':F' + LAST_DATA_ROW, getKategoriList());
   setDropdown(sheet, 'G' + firstDataRow + ':G' + LAST_DATA_ROW, TIPE_LIST);
   setDropdown(sheet, 'H' + firstDataRow + ':H' + LAST_DATA_ROW, ['Fixed', 'Pengajuan']);
   setDropdown(sheet, 'I' + firstDataRow + ':I' + LAST_DATA_ROW, PIC_LIST);
@@ -319,6 +376,7 @@ function doGet(e) {
     generated_at: new Date().toISOString(),
     kegiatan: sheetToObjects(ss.getSheetByName('kegiatan')),
     plafon_fixed: sheetToObjects(ss.getSheetByName('plafon_fixed')),
+    kategori: getKategoriList(),
   };
   var m = mkt_getData();
   payload.strategi = m.strategi;
@@ -359,11 +417,39 @@ function doPost(e) {
   }
 }
 
+// Tambah kegiatan baru. Kalau data.arsip === true, ini data lama: kegiatan yang
+// sudah selesai sebelum dashboard dipakai. Dicatat langsung berstatus Selesai
+// lengkap dengan Actual (+ transfer dan link nota kalau diisi).
 function handleAddKegiatan(data) {
-    var ss = SpreadsheetApp.getActiveSpreadsheet();
-    var sheet = ss.getSheetByName('kegiatan');
-    if (!sheet) return jsonResponse({ ok: false, error: 'Tab kegiatan tidak ditemukan.' });
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var sheet = ss.getSheetByName('kegiatan');
+  if (!sheet) return jsonResponse({ ok: false, error: 'Tab kegiatan tidak ditemukan.' });
 
+  var arsip = data.arsip === true;
+  var actual = 0, nominal = 0, picTrans = '', tglTf = null, nota = '';
+  if (arsip) {
+    actual = Number(data.actual);
+    if (!actual || actual <= 0) {
+      return jsonResponse({ ok: false, error: 'Data lama: Actual harus angka lebih dari 0.' });
+    }
+    nominal = Number(data.nominalTransfer) || actual;
+    picTrans = data.picTransaksi || data.pic || '';
+    if (picTrans && PIC_LIST.indexOf(picTrans) === -1) {
+      return jsonResponse({ ok: false, error: 'PIC Transaksi tidak dikenali.' });
+    }
+    if (data.tglTransfer) {
+      tglTf = new Date(data.tglTransfer);
+      if (isNaN(tglTf.getTime())) return jsonResponse({ ok: false, error: 'Tanggal transfer tidak valid.' });
+    }
+    nota = String(data.nota || '').trim();
+    if (nota && !/^https?:\/\/\S+$/i.test(nota)) {
+      return jsonResponse({ ok: false, error: 'Link nota harus diawali http:// atau https://' });
+    }
+  }
+
+  var lock = LockService.getScriptLock();
+  if (!lock.tryLock(15000)) return jsonResponse({ ok: false, error: 'Server sedang sibuk, coba lagi sebentar.' });
+  try {
     var firstDataRow = HEADER_ROW + 1;
     var targetRow = null;
     for (var r = firstDataRow; r <= LAST_DATA_ROW; r++) {
@@ -371,7 +457,7 @@ function handleAddKegiatan(data) {
       if (!itemVal) { targetRow = r; break; }
     }
     if (!targetRow) {
-      return jsonResponse({ ok: false, error: 'Tabel kegiatan sudah penuh (60 baris). Tambah baris manual dulu di Sheet, atau minta perluas template.' });
+      return jsonResponse({ ok: false, error: 'Tabel kegiatan sudah penuh (sampai baris ' + LAST_DATA_ROW + ' di Sheet). Tambah baris manual dulu di Sheet, atau minta perluas template.' });
     }
 
     sheet.getRange(targetRow, COL.TGL_DICATAT).setValue(new Date()).setNumberFormat(DATE_FORMAT);
@@ -380,14 +466,27 @@ function handleAddKegiatan(data) {
     }
     sheet.getRange(targetRow, COL.PROJECT).setValue('Zerodeo');
     sheet.getRange(targetRow, COL.ITEM).setValue(data.item || '');
-    sheet.getRange(targetRow, COL.KATEGORI).setValue(data.kategori || '');
+    sheet.getRange(targetRow, COL.KATEGORI).setValue(resolveKategori_(data.kategori));
     sheet.getRange(targetRow, COL.TIPE).setValue(data.tipe || '');
     sheet.getRange(targetRow, COL.JALUR).setValue(data.jalur || '');
     sheet.getRange(targetRow, COL.PIC).setValue(data.pic || '');
-    sheet.getRange(targetRow, COL.ESTIMASI).setValue(Number(data.estimasi) || 0).setNumberFormat(CURR_FORMAT);
-    sheet.getRange(targetRow, COL.STATUS).setValue(data.status || 'Draft');
+    sheet.getRange(targetRow, COL.ESTIMASI).setValue(Number(data.estimasi) || actual || 0).setNumberFormat(CURR_FORMAT);
+    sheet.getRange(targetRow, COL.STATUS).setValue(arsip ? 'Selesai' : (data.status || 'Draft'));
+
+    if (arsip) {
+      if (picTrans) sheet.getRange(targetRow, COL.PIC_TRANSAKSI).setValue(picTrans);
+      sheet.getRange(targetRow, COL.NOMINAL_TRANSFER).setValue(nominal).setNumberFormat(CURR_FORMAT);
+      if (tglTf) sheet.getRange(targetRow, COL.TGL_TRANSFER).setValue(tglTf).setNumberFormat(DATE_FORMAT);
+      sheet.getRange(targetRow, COL.ACTUAL).setValue(actual).setNumberFormat(CURR_FORMAT);
+      if (nota) sheet.getRange(targetRow, COL.NOTA).setValue(nota);
+      var stamp = Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'dd-MMM-yy');
+      sheet.getRange(targetRow, COL.CATATAN).setValue('Data lama, dicatat dari dashboard ' + stamp);
+    }
 
     return jsonResponse({ ok: true, row: targetRow });
+  } finally {
+    lock.releaseLock();
+  }
 }
 
 // Approve / Reject — hanya jalan kalau PIN cocok. Row diambil dari

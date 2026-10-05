@@ -117,6 +117,8 @@ async function load() {
     if (json.ok === false) throw new Error(json.error || 'Gagal');
     kegiatanData = json.kegiatan || [];
     plafonData = json.plafon_fixed || [];
+    backendBaru = Array.isArray(json.kategori);
+    kategoriList = (json.kategori && json.kategori.length) ? json.kategori : KATEGORI_DEFAULT.slice();
     M = {
       ada: 'strategi' in json,
       strategi: json.strategi || [], lane: json.lane || [],

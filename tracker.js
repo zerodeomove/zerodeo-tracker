@@ -11,6 +11,15 @@ let kegiatanData = [];
 let plafonData = []; // sengaja belum dirender ke UI (konsep plafon belum settle)
 let cachedPin = null;
 
+// Daftar kategori sebenarnya dari tab "kategori" di Sheet (dikirim di doGet).
+// Daftar bawaan ini hanya cadangan kalau Apps Script belum di-update.
+const KATEGORI_DEFAULT = ['Peralatan/Kulak', 'Packaging Tambahan', 'Ongkos Kirim/Logistik',
+  'Konten & Aktivasi Akar', 'Operasional Tim', 'Lain-lain'];
+let kategoriList = KATEGORI_DEFAULT.slice();
+// Apps Script versi baru mengirim daftar "kategori" dan mengerti data lama (arsip).
+// Kalau belum di-update, mode Data lama disembunyikan supaya tidak tersimpan salah.
+let backendBaru = false;
+
 // ---------- approve / reject (PIN diverifikasi di Apps Script) ----------
 async function updateStatus(row, newStatus) {
   let pin = cachedPin;
@@ -37,6 +46,8 @@ function renderTracker() {
   populateFilters();
   renderCards();
   renderTable();
+  fillKategori();
+  if ($('m-urgent').classList.contains('show')) renderUrgentList();
 }
 
 function populateFilters() {
@@ -51,7 +62,65 @@ function populateFilters() {
     STATUS_ORDER.map((s) => `<option value="${s}">${s}</option>`).join('');
 }
 
+// ---------- urgent: sudah di-approve, belum ditransfer ----------
+function deadlineKey(r) { return r['Deadline Kegiatan'] || '9999-12-31'; }
+
+function urgentItems() {
+  return kegiatanData
+    .filter((r) => r['Status'] === 'Approved')
+    .sort((a, b) => deadlineKey(a).localeCompare(deadlineKey(b)));
+}
+
+function dayLabel(days) {
+  if (days === null) return '';
+  return days < 0 ? `${Math.abs(days)}h lewat` : days === 0 ? 'hari ini' : `${days}h lagi`;
+}
+
+function renderUrgentCard() {
+  const items = urgentItems();
+  const wrap = $('urgentWrap');
+  wrap.classList.toggle('alert', items.length > 0);
+  wrap.classList.toggle('idle', items.length === 0);
+  if (items.length === 0) {
+    $('urgentCard').innerHTML = '<div class="card-empty">Tidak ada. Semua yang sudah di-approve sudah ditransfer.</div>';
+    return;
+  }
+  const total = items.reduce((sum, r) => sum + (Number(r['Estimasi (Rp)']) || 0), 0);
+  const withDeadline = items.find((r) => r['Deadline Kegiatan']);
+  const days = withDeadline ? daysUntil(withDeadline['Deadline Kegiatan']) : null;
+  $('urgentCard').innerHTML =
+    `<div class="card-big">${items.length} kegiatan</div>
+     <div class="card-sub">Sudah di-approve, belum ditransfer · ${fmtRupiah(total)}</div>` +
+    (days === null ? '' : `<div class="card-sub">Deadline terdekat: <span class="${days <= 3 ? 'deadline-soon' : ''}">${dayLabel(days)}</span></div>`);
+}
+
+function renderUrgentList() {
+  const items = urgentItems();
+  if (items.length === 0) {
+    $('urgentBody').innerHTML = '<tr><td colspan="5" class="empty">Semua yang sudah di-approve sudah ditransfer.</td></tr>';
+    return;
+  }
+  $('urgentBody').innerHTML = items.map((r) => {
+    const days = daysUntil(r['Deadline Kegiatan']);
+    const soon = days !== null && days <= 3;
+    return `<tr>
+      <td class="item">${zEsc(r['Item Kegiatan'] || '-')}</td>
+      <td>${zEsc(r['PIC'] || '-')}</td>
+      <td class="num">${fmtRupiah(r['Estimasi (Rp)'])}</td>
+      <td class="${soon ? 'deadline-soon' : ''}">${zEsc(fmtDate(r['Deadline Kegiatan']))}${days === null ? '' : ' (' + dayLabel(days) + ')'}</td>
+      <td><button class="aksi-btn approve" onclick="openTransferModal(${Number(r['_row'])})">Tandai Ditransfer</button></td>
+    </tr>`;
+  }).join('');
+}
+
+function openUrgent() {
+  if (urgentItems().length === 0) return;
+  renderUrgentList();
+  openModal('m-urgent');
+}
+
 function renderCards() {
+  renderUrgentCard();
   // Menunggu Approve: jumlah + total estimasi kegiatan berstatus Diajukan
   const menunggu = kegiatanData.filter((r) => r['Status'] === 'Diajukan');
   const menungguTotal = menunggu.reduce((sum, r) => sum + (Number(r['Estimasi (Rp)']) || 0), 0);
@@ -211,24 +280,56 @@ async function submitTransfer() {
 }
 
 // ---------- popup: input kegiatan baru ----------
+// Isi pilihan kategori dari daftar di Sheet. Pilihan yang sedang dipilih dipertahankan.
+function fillKategori() {
+  const cur = $('k-kategori').value;
+  $('k-kategori').innerHTML = '<option value="">Pilih kategori…</option>' +
+    kategoriList.map((k) => `<option value="${zEsc(k)}">${zEsc(k)}</option>`).join('');
+  if (kategoriList.indexOf(cur) !== -1) $('k-kategori').value = cur;
+}
+
+// Mode "Data lama": kegiatan yang sudah selesai sebelum dashboard dipakai.
+function toggleArsip() {
+  const on = $('k-arsip').checked;
+  $('k-arsip-box').style.display = on ? 'flex' : 'none';
+  $('k-status-wrap').style.display = on ? 'none' : '';
+  $('k-est-opt').style.display = on ? 'inline' : 'none';
+}
+$('k-arsip').addEventListener('change', toggleArsip);
+
 function openKegiatan() {
   $('kegiatanForm').reset();
   clearErrors($('kegiatanForm'));
   setMsg($('k-msg'), '', '');
+  fillKategori();
+  $('k-arsip').closest('label').style.display = backendBaru ? '' : 'none';
+  toggleArsip();
   openModal('m-kegiatan');
+}
+
+function chosenKategori() {
+  return $('k-kategoriNew').value.trim() || $('k-kategori').value;
 }
 
 function validateKegiatan() {
   clearErrors($('kegiatanForm'));
+  const arsip = backendBaru && $('k-arsip').checked;
   let valid = true;
   const need = (field, bad) => { if (bad) { $('err-k-' + field).classList.add('show'); valid = false; } };
   need('item', !$('k-item').value.trim());
-  need('kategori', !$('k-kategori').value);
+  need('kategori', !chosenKategori());
   need('tipe', !$('k-tipe').value);
   need('jalur', !$('k-jalur').value);
   need('pic', !$('k-pic').value);
   const est = $('k-estimasi').value;
-  need('estimasi', !est || Number(est) <= 0);
+  if (arsip) {
+    const actual = $('k-actual').value;
+    need('actual', !actual || Number(actual) <= 0);
+    const nota = $('k-nota').value.trim();
+    need('nota', nota !== '' && !/^https?:\/\/\S+$/i.test(nota));
+  } else {
+    need('estimasi', !est || Number(est) <= 0);
+  }
   return valid;
 }
 
@@ -237,9 +338,10 @@ $('kegiatanForm').addEventListener('submit', async (e) => {
   setMsg($('k-msg'), '', '');
   if (!validateKegiatan()) return;
 
+  const arsip = backendBaru && $('k-arsip').checked;
   const payload = {
     item: $('k-item').value.trim(),
-    kategori: $('k-kategori').value,
+    kategori: chosenKategori(),
     tipe: $('k-tipe').value,
     jalur: $('k-jalur').value,
     pic: $('k-pic').value,
@@ -247,6 +349,17 @@ $('kegiatanForm').addEventListener('submit', async (e) => {
     deadline: $('k-deadline').value || null,
     status: $('k-status').value,
   };
+  if (arsip) {
+    Object.assign(payload, {
+      arsip: true,
+      status: 'Selesai',
+      actual: Number($('k-actual').value),
+      nominalTransfer: $('k-nominal').value || null,
+      picTransaksi: $('k-pictrans').value || null,
+      tglTransfer: $('k-tgltf').value || null,
+      nota: $('k-nota').value.trim() || null,
+    });
+  }
 
   const btn = $('k-submit');
   btn.disabled = true;
@@ -254,8 +367,9 @@ $('kegiatanForm').addEventListener('submit', async (e) => {
   try {
     const json = await zApi.post(payload);
     if (json.ok) {
-      setMsg($('k-msg'), 'Tersimpan sebagai baris ke-' + json.row + '. Form dikosongkan buat input berikutnya.', 'ok');
+      setMsg($('k-msg'), 'Tersimpan sebagai baris ke-' + json.row + (arsip ? ' (data lama, berstatus Selesai)' : '') + '. Form dikosongkan buat input berikutnya.', 'ok');
       $('kegiatanForm').reset();
+      toggleArsip();
       load();
     } else {
       setMsg($('k-msg'), 'Gagal simpan: ' + (json.error || 'error tidak diketahui.'), 'err');
