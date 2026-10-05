@@ -75,9 +75,11 @@ function populateFilters() {
 // ---------- urgent: sudah di-approve, belum ditransfer ----------
 function deadlineKey(r) { return r['Deadline Kegiatan'] || '9999-12-31'; }
 
+// Sudah di-approve dan belum ditransfer. Yang dibayar dari dana tidak dihitung (uangnya
+// sudah ada di dana).
 function urgentItems() {
   return kegiatanData
-    .filter((r) => r['Status'] === 'Approved')
+    .filter((r) => r['Status'] === 'Approved' && !r['Dana'])
     .sort((a, b) => deadlineKey(a).localeCompare(deadlineKey(b)));
 }
 
@@ -118,7 +120,7 @@ function renderUrgentList() {
       <td>${zEsc(r['PIC'] || '-')}</td>
       <td class="num">${fmtRupiah(r['Estimasi (Rp)'])}</td>
       <td class="${soon ? 'deadline-soon' : ''}">${zEsc(fmtDate(r['Deadline Kegiatan']))}${days === null ? '' : ' (' + dayLabel(days) + ')'}</td>
-      <td><button class="aksi-btn approve" onclick="openTransferModal(${Number(r['_row'])})">Tandai Ditransfer</button></td>
+      <td><button class="aksi-btn approve" onclick="openTransferModal(${Number(r['_row'])})">Tandai Ditransfer</button>${bayarDanaBtn(Number(r['_row']))}</td>
     </tr>`;
   }).join('');
 }
@@ -142,7 +144,9 @@ function renderCards() {
   // Sudah Cair, Belum Ada Nota: (nominal transfer) - (actual dari baris yang sama)
   // Dana bulk ikut dihitung: nominal dana = diterima, total Actual kebutuhan tertaut = terpakai.
   // (Kebutuhan tertaut tidak punya Nominal Transfer sendiri, jadi tidak terhitung dua kali.)
-  const sudahCair = kegiatanData.filter((r) => r['Nominal Transfer (Rp)'] !== null && r['Nominal Transfer (Rp)'] !== '' && r['Nominal Transfer (Rp)'] !== undefined);
+  // Penjaga anti-dobel: baris yang dibayar dari dana diabaikan di sini (nominalnya, kalau ada,
+  // dan Actual-nya sudah dihitung lewat dana).
+  const sudahCair = kegiatanData.filter((r) => !r['Dana'] && r['Nominal Transfer (Rp)'] !== null && r['Nominal Transfer (Rp)'] !== '' && r['Nominal Transfer (Rp)'] !== undefined);
   let diterima = sudahCair.reduce((sum, r) => sum + (Number(r['Nominal Transfer (Rp)']) || 0), 0);
   let actualDariItu = sudahCair.reduce((sum, r) => sum + (Number(r['Actual (Rp)']) || 0), 0);
   if (backendDana) {
@@ -226,8 +230,9 @@ function renderTable() {
          <button class="aksi-btn reject" onclick="updateStatus(${rowNo}, 'Ditolak')">Reject</button>`;
     } else if (r['Status'] === 'Ditransfer') {
       aksi = `<button class="aksi-btn approve" onclick="openComplete(${rowNo})">Lengkapi</button>`;
-    } else if (r['Status'] !== 'Selesai' && (r['Jalur'] === 'Fixed' || r['Status'] === 'Approved')) {
-      aksi = `<button class="aksi-btn approve" onclick="openTransferModal(${rowNo})">Tandai Ditransfer</button>`;
+    } else if (r['Status'] !== 'Selesai' && !r['Dana'] && (r['Jalur'] === 'Fixed' || r['Status'] === 'Approved')) {
+      aksi = `<button class="aksi-btn approve" onclick="openTransferModal(${rowNo})">Tandai Ditransfer</button>` +
+        (r['Status'] !== 'Ditolak' ? bayarDanaBtn(rowNo) : '');
     }
     return `<tr>
       <td class="item">${zEsc(r['Item Kegiatan'] || '-')}${r['Dana'] ? `<div class="sub">Dana: ${zEsc(r['Dana'])}</div>` : ''}</td>
@@ -351,6 +356,74 @@ function renderDana() {
       ${d.rencana > 0 ? `<div class="dana-plan">Rencana belum jalan ${fmtDanaRp(d.rencana)} · sisa bebas ${fmtDanaRp(d.bebas)}</div>` : ''}
     </div>`;
   }).join('');
+}
+
+// Tombol "Bayar dari dana" hanya muncul kalau sudah ada dana.
+function bayarDanaBtn(rowNo) {
+  return backendDana && danaList.length
+    ? ` <button class="aksi-btn dana" onclick="openBayarDana(${rowNo})">Bayar dari dana</button>`
+    : '';
+}
+
+// ---------- popup: bayar dari dana (tautkan kegiatan yang sudah ada ke dana) ----------
+let bayarRow = null;
+
+function updateBayarHint() {
+  const el = $('bd-hint');
+  const item = kegiatanData.find((r) => r['_row'] === bayarRow);
+  const d = danaStats().find((x) => x.nama === $('bd-dana').value);
+  if (!item || !d) { el.textContent = ''; el.style.color = ''; return; }
+  const sisa = d.bebas - (Number(item['Estimasi (Rp)']) || 0);
+  el.textContent = 'Sisa bebas dana setelah ini: ' + fmtDanaRp(sisa) + (sisa < 0 ? ' ⚠ Melebihi sisa dana.' : '.');
+  el.style.color = sisa < 0 ? 'var(--red)' : '';
+}
+
+function openBayarDana(row) {
+  const item = kegiatanData.find((r) => r['_row'] === row);
+  if (!item || !danaList.length) return;
+  bayarRow = row;
+  $('bd-item').textContent = item['Item Kegiatan'] || '-';
+  $('bd-estimasi').textContent = fmtRupiah(item['Estimasi (Rp)']);
+  $('bd-dana').innerHTML = '<option value="">Pilih dana…</option>' +
+    danaStats().map((d) => `<option value="${zEsc(d.nama)}">${zEsc(d.nama)} — saldo ${fmtDanaRp(d.saldo)} · sisa bebas ${fmtDanaRp(d.bebas)}</option>`).join('');
+  if (danaList.length === 1) $('bd-dana').value = danaList[0]['Nama Dana'];
+  $('bd-err').textContent = '';
+  $('bd-err').classList.remove('show');
+  $('bd-submit').disabled = false;
+  $('bd-submit').textContent = 'Simpan';
+  updateBayarHint();
+  openModal('m-bayardana');
+}
+
+async function submitBayarDana() {
+  const dana = $('bd-dana').value;
+  const errEl = $('bd-err');
+  errEl.classList.remove('show');
+  if (!dana) {
+    errEl.textContent = 'Pilih dananya dulu.';
+    errEl.classList.add('show');
+    return;
+  }
+  const btn = $('bd-submit');
+  btn.disabled = true;
+  btn.textContent = 'Menyimpan…';
+  try {
+    const json = await zApi.post({ action: 'link_dana', row: bayarRow, dana: dana });
+    if (json.ok) {
+      closeModal('m-bayardana');
+      bayarRow = null;
+      load();
+    } else {
+      errEl.textContent = json.error || 'Gagal menyimpan.';
+      errEl.classList.add('show');
+    }
+  } catch (err) {
+    errEl.textContent = 'Gagal kirim: ' + err.message;
+    errEl.classList.add('show');
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Simpan';
+  }
 }
 
 // Klik kartu dana = saring tabel ke dana itu (klik lagi = lepas saringan).

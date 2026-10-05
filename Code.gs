@@ -681,6 +681,9 @@ function doPost(e) {
     if (data.action === 'add_dana') {
       return handleAddDana(data);
     }
+    if (data.action === 'link_dana') {
+      return handleLinkDana(data);
+    }
     return handleAddKegiatan(data);
   } catch (err) {
     return jsonResponse({ ok: false, error: err.message });
@@ -867,6 +870,13 @@ function handleMarkTransferred(data) {
   var sheet = ss.getSheetByName('kegiatan');
   var currentStatus = sheet.getRange(row, COL.STATUS).getValue();
   var jalur = sheet.getRange(row, COL.JALUR).getValue();
+
+  // Penjaga anti-dobel: uang baris yang dibayar dari dana sudah dihitung di dana itu.
+  var linkedDana = String(sheet.getRange(row, COL.DANA).getValue() || '').trim();
+  if (linkedDana) {
+    return jsonResponse({ ok: false, error: 'Baris ini dibayar dari dana "' + linkedDana + '", jadi tidak perlu ditandai ditransfer sendiri (nanti uangnya terhitung dua kali). Tinggal Lengkapi dengan Actual.' });
+  }
+
   var isFixedEligible = jalur === 'Fixed' && currentStatus !== 'Ditransfer' && currentStatus !== 'Selesai';
   var isApprovedEligible = currentStatus === 'Approved';
   if (!isFixedEligible && !isApprovedEligible) {
@@ -881,6 +891,52 @@ function handleMarkTransferred(data) {
   sheet.getRange(row, COL.STATUS).setValue('Ditransfer');
 
   return jsonResponse({ ok: true, row: row });
+}
+
+// Bayar dari dana: tautkan kegiatan yang SUDAH ada (pengajuan yang di-approve, atau jalur
+// Fixed) ke sebuah dana bulk. Uangnya sudah ada di dana, jadi baris tidak punya Nominal
+// Transfer sendiri; status langsung "Ditransfer" (tinggal Lengkapi). Syaratnya sama dengan
+// Tandai Ditransfer, ditambah: belum tertaut ke dana, dan bukan yang ditolak.
+function handleLinkDana(data) {
+  var row = Number(data.row);
+  if (!row || row < HEADER_ROW + 1 || row > lastKegiatanRow_()) {
+    return jsonResponse({ ok: false, error: 'Baris tidak valid.' });
+  }
+  if (!cleanText_(data.dana, 80)) return jsonResponse({ ok: false, error: 'Pilih dananya dulu.' });
+
+  var lock = LockService.getScriptLock();
+  if (!lock.tryLock(15000)) return jsonResponse({ ok: false, error: 'Server sedang sibuk, coba lagi sebentar.' });
+  try {
+    ensureDanaColumn_();
+    var dn = findDana_(data.dana);
+    if (!dn) return jsonResponse({ ok: false, error: 'Dana tidak ditemukan: ' + cleanText_(data.dana, 80) });
+
+    var sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('kegiatan');
+    if (!sheet.getRange(row, COL.ITEM).getValue()) {
+      return jsonResponse({ ok: false, error: 'Baris itu kosong.' });
+    }
+    var already = String(sheet.getRange(row, COL.DANA).getValue() || '').trim();
+    if (already) {
+      return jsonResponse({ ok: false, error: 'Baris ini sudah tertaut ke dana "' + already + '".' });
+    }
+    var status = sheet.getRange(row, COL.STATUS).getValue();
+    var jalur = sheet.getRange(row, COL.JALUR).getValue();
+    var fixedOk = jalur === 'Fixed' && ['Ditransfer', 'Selesai', 'Ditolak'].indexOf(status) === -1;
+    if (status !== 'Approved' && !fixedOk) {
+      return jsonResponse({ ok: false, error: 'Baris ini statusnya "' + status + '" (Jalur ' + jalur + ') — baru bisa dibayar dari dana setelah Approved (atau jalur Fixed yang belum Ditransfer).' });
+    }
+
+    var nama = dn['Nama Dana'];
+    sheet.getRange(row, COL.DANA).setValue(nama);
+    sheet.getRange(row, COL.STATUS).setValue('Ditransfer');
+    var noteCell = sheet.getRange(row, COL.CATATAN);
+    var existing = noteCell.getValue();
+    var stamp = 'Dibayar dari dana "' + nama + '" (' + Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'dd-MMM-yy') + ')';
+    noteCell.setValue(existing ? (existing + ' | ' + stamp) : stamp);
+    return jsonResponse({ ok: true, row: row, dana: nama });
+  } finally {
+    lock.releaseLock();
+  }
 }
 
 function jsonResponse(obj) {

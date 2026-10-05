@@ -152,6 +152,7 @@ td.empty-state, td.empty { text-align: center; color: var(--text-muted); padding
 }
 .aksi-btn.approve { background: var(--green-bg); color: var(--green); }
 .aksi-btn.reject { background: var(--red-bg); color: var(--red); }
+.aksi-btn.dana { background: var(--accent-light); color: var(--accent-dark); }
 
 .deadline-soon { color: var(--red); font-weight: 600; }
 footer { margin-top: 24px; color: var(--text-muted); font-size: 12px; text-align: center; }

@@ -39,6 +39,17 @@ rencana):
    tak terduga otomatis mengurangi saldo; kalau melebihi dana, tampil **Kelebihan** merah.
    Klik kartu dana untuk menyaring tabel ke kebutuhan dari dana itu.
 4. Kartu **Sudah Cair, Belum Ada Nota** ikut menghitung saldo dana.
+5. **Pengajuan yang sudah ada** (sudah Approved, lalu uangnya ternyata datang sebagai
+   dana bulk): klik **Bayar dari dana** di barisnya (di tabel atau di daftar Perlu
+   Ditransfer) dan pilih dananya. Barisnya tertaut ke dana dan langsung berstatus
+   Ditransfer tanpa nominal sendiri, tinggal Lengkapi. Berlaku juga untuk jalur Fixed
+   yang belum ditransfer. Dana tidak menautkan pengajuan sendiri secara otomatis.
+
+**Penjaga anti-dobel:** baris yang tertaut ke dana tidak bisa lagi di-Tandai Ditransfer
+(ditolak di Apps Script), tidak masuk kartu Perlu Ditransfer, dan nominal transfer di
+barisnya (kalau terisi manual di Sheet) diabaikan di hitungan dashboard, karena uangnya
+sudah dihitung lewat dana. Jangan mencatat bulk sebagai dana LALU juga men-Tandai
+Ditransfer pengajuan yang sama satu-satu; pakai Bayar dari dana.
 
 Data lama juga bisa ditautkan ke dana: centang **Data lama** lalu pilih dananya. Isian
 **Tanggal** di mode Data lama menjadi Tanggal Dicatat di Sheet.

@@ -326,6 +326,26 @@
   </div>
 </div>
 
+<!-- ================= POPUP: Bayar dari dana (tautkan kegiatan yang sudah ada) ================= -->
+<div class="modal-overlay" id="m-bayardana">
+  <div class="modal-box">
+    <h3>Bayar dari dana</h3>
+    <div class="hint">Uangnya sudah ada di dana, jadi kebutuhan ini tidak perlu ditransfer sendiri. Langsung berstatus Ditransfer, tinggal Lengkapi dengan Actual.</div>
+    <div class="info">
+      <div class="info-row"><span class="k">Item Kegiatan</span><span class="v" id="bd-item"></span></div>
+      <div class="info-row"><span class="k">Estimasi</span><span class="v" id="bd-estimasi"></span></div>
+    </div>
+    <label>Dana
+      <select id="bd-dana" onchange="updateBayarHint()"><option value="">Pilih dana…</option></select>
+      <span class="hint" id="bd-hint"></span></label>
+    <div class="modal-err" id="bd-err"></div>
+    <div class="modal-actions">
+      <button type="button" class="btn-cancel" onclick="closeModal('m-bayardana')">Batal</button>
+      <button type="button" class="btn-submit" id="bd-submit" onclick="submitBayarDana()">Simpan</button>
+    </div>
+  </div>
+</div>
+
 <!-- ================= POPUP: Strategi baru ================= -->
 <div class="modal-overlay" id="m-strategi">
   <div class="modal-box">
