@@ -186,8 +186,16 @@ jadi URL lama tidak berguna tanpa secret. Jangan menunda langkah 6 terlalu lama.
    `kategori` dan `dana` serta header kolom **Dana** (S) di tab `kegiatan` dibuat otomatis
    saat halaman dibuka pertama kali. (Setup / Reset Tracker tidak menghapus tab `kategori`
    dan `dana`, tapi tetap mengosongkan tab `kegiatan`.)
-8. Tab `kegiatan` hanya punya baris data sampai baris 60 di Sheet (formula No dan Selisih
-   hanya ada sampai situ). Kalau mengisi banyak data lama, perhatikan batas ini.
+8. **Tidak ada batas jumlah kegiatan.** Template tab `kegiatan` disiapkan sampai baris 500
+   (rumus No/Selisih, format, dropdown); lewat dari itu, dashboard menambah baris beserta
+   rumusnya sendiri. Sheet yang dibuat versi lama (template cuma sampai baris 60) sebaiknya
+   dijalankan sekali: menu **Zerodeo Tools -> Perluas Tabel**. Menu ini menyiapkan baris
+   sampai 500, membangun ulang tab `ringkasan` (isinya rumus semua), dan memperbarui rumus
+   "Terpakai" di `plafon_fixed` tanpa menyentuh angka Plafon yang diisi manual. **Data tidak
+   dihapus** (beda dengan Setup / Reset), dan aman dijalankan berulang. Tanpa menu ini pun
+   dashboard tetap menerima kegiatan di atas baris 60; yang belum ikut hanya rumus di
+   `ringkasan` dan `plafon_fixed` (masih sampai baris 60) serta rumus No/Selisih untuk baris
+   yang diketik manual (Selisih di dashboard dihitung sendiri kalau kosong).
 
 ## Deploy target
 

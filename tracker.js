@@ -180,6 +180,15 @@ function filterMenungguApprove() {
   $('tableKegiatan').scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
 
+// Selisih dari Sheet (rumus). Baris yang diketik manual di luar template belum berumus,
+// jadi kalau kosong dihitung di sini: Actual - Estimasi.
+function selisihOf(r) {
+  const s = r['Selisih (Rp)'];
+  if (s !== null && s !== undefined && s !== '') return s;
+  const actual = Number(r['Actual (Rp)']);
+  return actual ? actual - (Number(r['Estimasi (Rp)']) || 0) : null;
+}
+
 function renderTable() {
   const kat = $('filterKategori').value;
   const tipe = $('filterTipe').value;
@@ -229,7 +238,7 @@ function renderTable() {
       <td class="${deadlineSoon ? 'deadline-soon' : ''}">${zEsc(fmtDate(r['Deadline Kegiatan']))}</td>
       <td class="num">${fmtRupiah(r['Estimasi (Rp)'])}</td>
       <td class="num">${fmtRupiah(r['Actual (Rp)'])}</td>
-      <td class="num">${fmtRupiah(r['Selisih (Rp)'])}</td>
+      <td class="num">${fmtRupiah(selisihOf(r))}</td>
       <td>${aksi}</td>
     </tr>`;
   }).join('');

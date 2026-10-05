@@ -24,7 +24,10 @@
  */
 
 var HEADER_ROW = 4;
-var LAST_DATA_ROW = 60;
+// BUKAN batas jumlah kegiatan. Ini hanya sampai baris mana template di Sheet disiapkan
+// (rumus No/Selisih, format, dropdown). Lewat dari itu, dashboard membuat baris dan
+// rumusnya sendiri, jadi jumlah kegiatan tidak dibatasi.
+var TEMPLATE_LAST_ROW = 500;
 var CURR_FORMAT = '"Rp"#,##0;("Rp"#,##0);-';
 var DATE_FORMAT = 'dd-mmm-yy';
 
@@ -59,8 +62,46 @@ function onOpen() {
   SpreadsheetApp.getUi()
     .createMenu('Zerodeo Tools')
     .addItem('Setup / Reset Tracker', 'setupTracker')
+    .addItem('Perluas Tabel', 'perluasTabel')
     .addItem('Ganti PIN Lemon', 'gantiPinLemon')
     .addToUi();
+}
+
+// Menyiapkan tab kegiatan sampai baris TEMPLATE_LAST_ROW dan memperbarui rumus tab lain
+// supaya tidak terbatas. Data yang sudah ada TIDAK dihapus (beda dengan Setup / Reset).
+function perluasTabel() {
+  var ui = SpreadsheetApp.getUi();
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var sheet = ss.getSheetByName('kegiatan');
+  if (!sheet) {
+    ui.alert('Tab kegiatan tidak ditemukan. Jalankan Setup / Reset Tracker dulu.');
+    return;
+  }
+  var res = ui.alert('Perluas Tabel',
+    'Menyiapkan rumus, format, dan dropdown tab kegiatan sampai baris ' + TEMPLATE_LAST_ROW +
+    ', serta memperbarui rumus tab ringkasan dan plafon_fixed. Data yang sudah ada TIDAK dihapus. Lanjut?',
+    ui.ButtonSet.OK_CANCEL);
+  if (res !== ui.Button.OK) return;
+  extendTemplate_(ss, sheet);
+  ui.alert('Selesai. Tab kegiatan siap sampai baris ' + TEMPLATE_LAST_ROW +
+    '. Lewat dari itu pun tetap bisa: dashboard menambah baris dan rumusnya otomatis.');
+}
+
+function extendTemplate_(ss, sheet) {
+  applyKegiatanTemplate_(sheet);
+  recreateKegiatanFilter_(sheet);
+  buildRingkasanSheet(ss); // isinya rumus semua, aman dibangun ulang
+
+  // plafon_fixed: perbarui rumus "Terpakai" di tempat (kolom Plafon yang diisi manual tidak disentuh)
+  var plafon = ss.getSheetByName('plafon_fixed');
+  if (plafon) {
+    KATEGORI_LIST.forEach(function (kat, i) {
+      var r = HEADER_ROW + 1 + i;
+      if (plafon.getRange(r, 1).getValue() === kat) {
+        plafon.getRange(r, 3).setFormula(plafonUsedFormula_(r)).setNumberFormat(CURR_FORMAT);
+      }
+    });
+  }
 }
 
 function getApprovalPin() {
@@ -131,11 +172,6 @@ function styleHeaderRow(sheet, row, numCols) {
   sheet.setRowHeight(row, 34);
 }
 
-function setDropdown(sheet, a1, list) {
-  var rule = SpreadsheetApp.newDataValidation().requireValueInList(list, true).setAllowInvalid(true).build();
-  sheet.getRange(a1).setDataValidation(rule);
-}
-
 // ============================================================
 // KATEGORI — daftar yang bisa bertambah
 // Disimpan di tab "kategori" (dibuat otomatis, isi awal = KATEGORI_LIST).
@@ -189,7 +225,7 @@ function resolveKategori_(raw) {
   ensureKategoriTab_().appendRow([safe]);
   list.push(clean);
   var kegiatan = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('kegiatan');
-  if (kegiatan) setDropdown(kegiatan, 'F' + (HEADER_ROW + 1) + ':F' + LAST_DATA_ROW, list);
+  if (kegiatan) setColumnDropdown_(kegiatan, COL.KATEGORI, list);
   return clean;
 }
 
@@ -216,9 +252,108 @@ function colLetter_(n) {
   return s;
 }
 
+// Rentang satu kolom di tab kegiatan, tanpa batas bawah (K5:K), jadi rumus di tab lain
+// otomatis ikut kalau baris bertambah.
 function kegiatanRange_(col) {
   var L = colLetter_(col);
-  return 'kegiatan!$' + L + '$' + (HEADER_ROW + 1) + ':$' + L + '$' + LAST_DATA_ROW;
+  return 'kegiatan!$' + L + '$' + (HEADER_ROW + 1) + ':$' + L;
+}
+
+// ============================================================
+// BARIS KEGIATAN — tidak ada batas jumlah
+// ============================================================
+
+// Dropdown untuk seluruh kolom (dari baris data pertama sampai baris terakhir di sheet).
+function setColumnDropdown_(sheet, col, list) {
+  var rule = SpreadsheetApp.newDataValidation().requireValueInList(list, true).setAllowInvalid(true).build();
+  sheet.getRange(HEADER_ROW + 1, col, Math.max(sheet.getMaxRows() - HEADER_ROW, 1), 1).setDataValidation(rule);
+}
+
+function lastKegiatanRow_() {
+  var sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('kegiatan');
+  return sheet ? sheet.getLastRow() : 0;
+}
+
+// Baris kosong pertama di kolom Item Kegiatan; kalau semuanya terisi, baris setelah yang
+// terakhir. Satu kali baca (bukan satu per baris), dan tanpa batas atas.
+function nextKegiatanRow_(sheet) {
+  var first = HEADER_ROW + 1;
+  var last = sheet.getLastRow();
+  if (last >= first) {
+    var items = sheet.getRange(first, COL.ITEM, last - first + 1, 1).getValues();
+    for (var i = 0; i < items.length; i++) {
+      if (!items[i][0]) return first + i;
+    }
+  }
+  return Math.max(last, first - 1) + 1;
+}
+
+// Pastikan baris ada di grid sheet dan punya rumus No (A) dan Selisih (P).
+function prepareKegiatanRow_(sheet, row) {
+  if (row > sheet.getMaxRows()) {
+    sheet.insertRowsAfter(sheet.getMaxRows(), Math.max(row - sheet.getMaxRows(), 100));
+  }
+  var no = sheet.getRange(row, COL.NO);
+  if (!no.getFormula() && no.getValue() === '') {
+    no.setFormula('=IF(E' + row + '="","",ROW()-' + HEADER_ROW + ')');
+  }
+  var selisih = sheet.getRange(row, COL.SELISIH);
+  if (!selisih.getFormula() && selisih.getValue() === '') {
+    selisih.setFormula('=IF(O' + row + '="","",O' + row + '-J' + row + ')').setNumberFormat(CURR_FORMAT);
+  }
+}
+
+// Isi rumus hanya di sel yang masih kosong (sel berisi, misal angka 1 di baris contoh,
+// tidak disentuh). Satu panggilan per blok sel kosong yang berurutan.
+function fillFormulasWhereMissing_(sheet, col, first, last, makeFormula) {
+  var n = last - first + 1;
+  var range = sheet.getRange(first, col, n, 1);
+  var formulas = range.getFormulas();
+  var values = range.getValues();
+  var missing = function (i) { return formulas[i][0] === '' && (values[i][0] === '' || values[i][0] === null); };
+  var i = 0;
+  while (i < n) {
+    if (!missing(i)) { i++; continue; }
+    var block = [];
+    var j = i;
+    while (j < n && missing(j)) { block.push([makeFormula(first + j)]); j++; }
+    sheet.getRange(first + i, col, block.length, 1).setFormulas(block);
+    i = j;
+  }
+}
+
+// Menyiapkan baris data pertama sampai TEMPLATE_LAST_ROW: rumus, format tanggal/Rp, dropdown.
+// Aman dijalankan berulang dan tidak menghapus data.
+function applyKegiatanTemplate_(sheet) {
+  var first = HEADER_ROW + 1, last = TEMPLATE_LAST_ROW;
+  if (sheet.getMaxRows() < last) sheet.insertRowsAfter(sheet.getMaxRows(), last - sheet.getMaxRows());
+  fillFormulasWhereMissing_(sheet, COL.NO, first, last, function (r) {
+    return '=IF(E' + r + '="","",ROW()-' + HEADER_ROW + ')';
+  });
+  fillFormulasWhereMissing_(sheet, COL.SELISIH, first, last, function (r) {
+    return '=IF(O' + r + '="","",O' + r + '-J' + r + ')';
+  });
+  var n = last - first + 1;
+  [[COL.TGL_DICATAT, DATE_FORMAT], [COL.DEADLINE, DATE_FORMAT], [COL.ESTIMASI, CURR_FORMAT],
+   [COL.NOMINAL_TRANSFER, CURR_FORMAT], [COL.TGL_TRANSFER, DATE_FORMAT], [COL.ACTUAL, CURR_FORMAT],
+   [COL.SELISIH, CURR_FORMAT]].forEach(function (f) {
+    sheet.getRange(first, f[0], n, 1).setNumberFormat(f[1]);
+  });
+  setColumnDropdown_(sheet, COL.PROJECT, ['Zerodeo']);
+  setColumnDropdown_(sheet, COL.KATEGORI, getKategoriList());
+  setColumnDropdown_(sheet, COL.TIPE, TIPE_LIST);
+  setColumnDropdown_(sheet, COL.JALUR, ['Fixed', 'Pengajuan', JALUR_DANA]);
+  setColumnDropdown_(sheet, COL.PIC, PIC_LIST);
+  setColumnDropdown_(sheet, COL.STATUS, STATUS_LIST);
+  setColumnDropdown_(sheet, COL.PIC_TRANSAKSI, PIC_LIST);
+  var danaNames = getDanaNames_();
+  if (danaNames.length) setColumnDropdown_(sheet, COL.DANA, danaNames);
+}
+
+function recreateKegiatanFilter_(sheet) {
+  var existing = sheet.getFilter();
+  if (existing) existing.remove();
+  sheet.getRange(HEADER_ROW, 1, TEMPLATE_LAST_ROW - HEADER_ROW + 1, COL.DANA).createFilter();
 }
 
 function cleanText_(s, max) {
@@ -300,8 +435,7 @@ function refreshDanaDropdown_() {
   var sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('kegiatan');
   var names = getDanaNames_();
   if (!sheet || !names.length) return;
-  var L = colLetter_(COL.DANA);
-  setDropdown(sheet, L + (HEADER_ROW + 1) + ':' + L + LAST_DATA_ROW, names);
+  setColumnDropdown_(sheet, COL.DANA, names);
 }
 
 // Catat transfer bulk baru.
@@ -367,44 +501,26 @@ function buildKegiatanSheet(ss) {
                   1200000, 'Draft', '', '', '', '', '', '', ''];
   sheet.getRange(firstDataRow, 1, 1, example.length).setValues([example]);
   sheet.getRange(firstDataRow, 1, 1, example.length).setBackground('#FFFF00');
-  // Selisih (P) = Actual (O) - Estimasi (J)
-  sheet.getRange(firstDataRow, COL.SELISIH).setFormula('=IF(O' + firstDataRow + '="","",O' + firstDataRow + '-J' + firstDataRow + ')');
 
-  for (var row = firstDataRow + 1; row <= LAST_DATA_ROW; row++) {
-    sheet.getRange(row, COL.NO).setFormula('=IF(E' + row + '="","",ROW()-' + HEADER_ROW + ')');
-    sheet.getRange(row, COL.SELISIH).setFormula('=IF(O' + row + '="","",O' + row + '-J' + row + ')');
-  }
-
-  var numDataRows = LAST_DATA_ROW - firstDataRow + 1;
-  sheet.getRange(firstDataRow, COL.TGL_DICATAT, numDataRows, 1).setNumberFormat(DATE_FORMAT);
-  sheet.getRange(firstDataRow, COL.DEADLINE, numDataRows, 1).setNumberFormat(DATE_FORMAT);
-  sheet.getRange(firstDataRow, COL.ESTIMASI, numDataRows, 1).setNumberFormat(CURR_FORMAT);
-  sheet.getRange(firstDataRow, COL.NOMINAL_TRANSFER, numDataRows, 1).setNumberFormat(CURR_FORMAT);
-  sheet.getRange(firstDataRow, COL.TGL_TRANSFER, numDataRows, 1).setNumberFormat(DATE_FORMAT);
-  sheet.getRange(firstDataRow, COL.ACTUAL, numDataRows, 1).setNumberFormat(CURR_FORMAT);
-  sheet.getRange(firstDataRow, COL.SELISIH, numDataRows, 1).setNumberFormat(CURR_FORMAT);
-
-  setDropdown(sheet, 'D' + firstDataRow + ':D' + LAST_DATA_ROW, ['Zerodeo']);
-  setDropdown(sheet, 'F' + firstDataRow + ':F' + LAST_DATA_ROW, getKategoriList());
-  setDropdown(sheet, 'G' + firstDataRow + ':G' + LAST_DATA_ROW, TIPE_LIST);
-  setDropdown(sheet, 'H' + firstDataRow + ':H' + LAST_DATA_ROW, ['Fixed', 'Pengajuan']);
-  setDropdown(sheet, 'I' + firstDataRow + ':I' + LAST_DATA_ROW, PIC_LIST);
-  setDropdown(sheet, 'K' + firstDataRow + ':K' + LAST_DATA_ROW, STATUS_LIST);
-  setDropdown(sheet, 'L' + firstDataRow + ':L' + LAST_DATA_ROW, PIC_LIST);
-
-  var danaNames = getDanaNames_();
-  if (danaNames.length) setDropdown(sheet, colLetter_(COL.DANA) + firstDataRow + ':' + colLetter_(COL.DANA) + LAST_DATA_ROW, danaNames);
+  // Rumus No/Selisih, format, dan dropdown untuk baris 5..TEMPLATE_LAST_ROW (satu kali, batch).
+  applyKegiatanTemplate_(sheet);
 
   var widths = [40, 90, 90, 80, 260, 150, 70, 80, 70, 100, 90, 100, 110, 90, 100, 100, 120, 160, 140];
   for (var i = 0; i < widths.length; i++) sheet.setColumnWidth(i + 1, widths[i]);
 
   sheet.setFrozenRows(HEADER_ROW);
-  sheet.getRange(HEADER_ROW, 1, LAST_DATA_ROW - HEADER_ROW + 1, headers.length).createFilter();
+  recreateKegiatanFilter_(sheet);
 }
 
 // ============================================================
 // TAB 2 — plafon_fixed
 // ============================================================
+// Rumus "Terpakai" per kategori di plafon_fixed (jalur Fixed yang sudah Selesai), tanpa batas baris.
+function plafonUsedFormula_(r) {
+  return '=SUMIFS(' + kegiatanRange_(COL.ACTUAL) + ',' + kegiatanRange_(COL.KATEGORI) + ',A' + r + ',' +
+    kegiatanRange_(COL.JALUR) + ',"Fixed",' + kegiatanRange_(COL.STATUS) + ',"Selesai")';
+}
+
 function buildPlafonSheet(ss) {
   var sheet = getOrResetSheet(ss, 'plafon_fixed');
   sheet.getRange('A1').setValue('Plafon Budget Fixed per Kategori').setFontWeight('bold').setFontSize(14);
@@ -416,17 +532,13 @@ function buildPlafonSheet(ss) {
   styleHeaderRow(sheet, 4, headers.length);
 
   var firstDataRow = HEADER_ROW + 1;
-  var kegJalur = "kegiatan!$H$" + firstDataRow + ":$H$" + LAST_DATA_ROW;
-  var kegKat = "kegiatan!$F$" + firstDataRow + ":$F$" + LAST_DATA_ROW;
-  var kegStatus = "kegiatan!$K$" + firstDataRow + ":$K$" + LAST_DATA_ROW;
-  var kegActual = "kegiatan!$O$" + firstDataRow + ":$O$" + LAST_DATA_ROW;
 
   var r = firstDataRow;
   KATEGORI_LIST.forEach(function (kat) {
     sheet.getRange(r, 1).setValue(kat);
     sheet.getRange(r, 2).setBackground('#FFFF00').setNumberFormat(CURR_FORMAT);
     sheet.getRange(r, 3)
-      .setFormula('=SUMIFS(' + kegActual + ',' + kegKat + ',A' + r + ',' + kegJalur + ',"Fixed",' + kegStatus + ',"Selesai")')
+      .setFormula(plafonUsedFormula_(r))
       .setNumberFormat(CURR_FORMAT);
     sheet.getRange(r, 4).setFormula('=IF(B' + r + '="","",B' + r + '-C' + r + ')').setNumberFormat(CURR_FORMAT);
     r++;
@@ -451,14 +563,13 @@ function buildRingkasanSheet(ss) {
   sheet.getRange('A2').setValue('Semua angka formula, tarik otomatis dari tab kegiatan.')
     .setFontStyle('italic').setFontColor('#666666').setFontSize(9);
 
-  var firstDataRow = HEADER_ROW + 1;
-  var statusRange = "kegiatan!$K$" + firstDataRow + ":$K$" + LAST_DATA_ROW;
-  var jalurRange = "kegiatan!$H$" + firstDataRow + ":$H$" + LAST_DATA_ROW;
-  var katRange = "kegiatan!$F$" + firstDataRow + ":$F$" + LAST_DATA_ROW;
-  var actualRange = "kegiatan!$O$" + firstDataRow + ":$O$" + LAST_DATA_ROW;
-  var estRange = "kegiatan!$J$" + firstDataRow + ":$J$" + LAST_DATA_ROW;
-  var transferRange = "kegiatan!$M$" + firstDataRow + ":$M$" + LAST_DATA_ROW;
-  var deadlineRange = "kegiatan!$C$" + firstDataRow + ":$C$" + LAST_DATA_ROW;
+  var statusRange = kegiatanRange_(COL.STATUS);
+  var jalurRange = kegiatanRange_(COL.JALUR);
+  var katRange = kegiatanRange_(COL.KATEGORI);
+  var actualRange = kegiatanRange_(COL.ACTUAL);
+  var estRange = kegiatanRange_(COL.ESTIMASI);
+  var transferRange = kegiatanRange_(COL.NOMINAL_TRANSFER);
+  var deadlineRange = kegiatanRange_(COL.DEADLINE);
 
   var r = 4;
   sheet.getRange(r, 1).setValue('Status pengajuan (jalur Pengajuan saja)').setFontWeight('bold');
@@ -609,19 +720,10 @@ function handleAddKegiatan(data) {
   var lock = LockService.getScriptLock();
   if (!lock.tryLock(15000)) return jsonResponse({ ok: false, error: 'Server sedang sibuk, coba lagi sebentar.' });
   try {
-    var firstDataRow = HEADER_ROW + 1;
-    var targetRow = null;
-    for (var r = firstDataRow; r <= LAST_DATA_ROW; r++) {
-      var itemVal = sheet.getRange(r, COL.ITEM).getValue(); // Item Kegiatan
-      if (!itemVal) { targetRow = r; break; }
-    }
-    if (!targetRow) {
-      return jsonResponse({ ok: false, error: 'Tabel kegiatan sudah penuh (sampai baris ' + LAST_DATA_ROW + ' di Sheet). Tambah baris manual dulu di Sheet, atau minta perluas template.' });
-    }
-
     // Dibayar dari dana bulk: uangnya sudah ada di dana, jadi tidak ada approve/transfer
     // sendiri. Jalur "Dana", status langsung "Ditransfer" (tinggal Lengkapi), dan
     // Nominal Transfer dikosongkan supaya tidak terhitung dua kali.
+    // (Divalidasi sebelum baris disiapkan, supaya penolakan tidak meninggalkan sisa di Sheet.)
     var danaName = '';
     if (data.dana) {
       ensureDanaColumn_();
@@ -629,6 +731,11 @@ function handleAddKegiatan(data) {
       if (!dn) return jsonResponse({ ok: false, error: 'Dana tidak ditemukan: ' + cleanText_(data.dana, 80) });
       danaName = dn['Nama Dana'];
     }
+
+    // Tidak ada batas jumlah kegiatan: kalau semua baris template terisi, baris baru
+    // (beserta rumusnya) dibuat otomatis.
+    var targetRow = nextKegiatanRow_(sheet);
+    prepareKegiatanRow_(sheet, targetRow);
 
     // Data lama: kalau tanggalnya diisi, itu dipakai sebagai Tanggal Dicatat.
     sheet.getRange(targetRow, COL.TGL_DICATAT).setValue(arsip && tglTf ? tglTf : new Date()).setNumberFormat(DATE_FORMAT);
@@ -673,7 +780,7 @@ function handleUpdateStatus(data) {
     return jsonResponse({ ok: false, error: 'PIN salah. Cuma yang punya PIN dari Lemon yang bisa approve/reject.' });
   }
   var row = Number(data.row);
-  if (!row || row < HEADER_ROW + 1 || row > LAST_DATA_ROW) {
+  if (!row || row < HEADER_ROW + 1 || row > lastKegiatanRow_()) {
     return jsonResponse({ ok: false, error: 'Baris tidak valid.' });
   }
   var allowedStatus = ['Approved', 'Ditolak', 'Revisi'];
@@ -702,7 +809,7 @@ function handleUpdateStatus(data) {
 // Foto opsional; kalau ada, disimpan ke folder Drive NOTA_FOLDER_NAME.
 function handleCompleteKegiatan(data) {
   var row = Number(data.row);
-  if (!row || row < HEADER_ROW + 1 || row > LAST_DATA_ROW) {
+  if (!row || row < HEADER_ROW + 1 || row > lastKegiatanRow_()) {
     return jsonResponse({ ok: false, error: 'Baris tidak valid.' });
   }
   var actual = Number(data.actual);
@@ -745,7 +852,7 @@ function handleCompleteKegiatan(data) {
 //   sesuai catatan di tab kegiatan).
 function handleMarkTransferred(data) {
   var row = Number(data.row);
-  if (!row || row < HEADER_ROW + 1 || row > LAST_DATA_ROW) {
+  if (!row || row < HEADER_ROW + 1 || row > lastKegiatanRow_()) {
     return jsonResponse({ ok: false, error: 'Baris tidak valid.' });
   }
   var nominal = Number(data.nominalTransfer);
