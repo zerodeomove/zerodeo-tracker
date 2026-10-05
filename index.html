@@ -60,7 +60,7 @@
       <select id="filterDana" onchange="renderTable()" style="display:none"><option value="">Semua Dana</option></select>
       <input type="text" id="searchBox" placeholder="Cari item kegiatan…" oninput="renderTable()">
       <span class="push">
-        <span class="count" id="rowCount"></span>
+        <span class="hidden-hint" id="hiddenHint"></span><span class="count" id="rowCount"></span>
         <button class="btn green" onclick="openKegiatan()">+ Kebutuhan</button>
       </span>
     </div>
@@ -221,11 +221,78 @@
   </div>
 </div>
 
+<!-- ================= POPUP: Edit kegiatan ================= -->
+<div class="modal-overlay" id="m-edit">
+  <div class="modal-box">
+    <h3>Edit kegiatan</h3>
+    <div class="hint" id="ed-sub"></div>
+    <form id="editForm" novalidate>
+      <div class="estack" id="ed-fields">
+        <label>Item kegiatan
+          <input type="text" id="ed-item">
+          <span class="field-error" id="err-ed-item">Wajib diisi.</span></label>
+        <label>Kategori
+          <select id="ed-kategori"></select>
+          <input type="text" id="ed-kategoriNew" placeholder="atau tulis kategori baru"></label>
+        <div class="row2">
+          <label>Tipe
+            <select id="ed-tipe"><option value="Capex">Capex</option><option value="Opex">Opex</option></select></label>
+          <label>PIC
+            <select id="ed-pic"><option>Lenno</option><option>Ricko</option><option>Yanuar</option><option>Christina</option></select></label>
+        </div>
+        <div class="row2">
+          <label>Estimasi (Rp)
+            <input type="number" id="ed-estimasi" min="0" step="1" inputmode="numeric">
+            <span class="field-error" id="err-ed-estimasi">Isi angka lebih dari 0.</span></label>
+          <label>Deadline <span class="opt">(opsional)</span>
+            <input type="date" id="ed-deadline"></label>
+        </div>
+        <div class="estack box" id="ed-tf-box" style="display:none">
+          <label id="ed-nominal-wrap">Nominal transfer (Rp)
+            <input type="number" id="ed-nominal" min="0" step="1" inputmode="numeric">
+            <span class="field-error" id="err-ed-nominal">Isi angka lebih dari 0.</span></label>
+          <div class="row2">
+            <label>PIC Transaksi
+              <select id="ed-pictrans"><option value="">-</option><option>Lenno</option><option>Ricko</option><option>Yanuar</option><option>Christina</option></select></label>
+            <label>Tgl transfer
+              <input type="date" id="ed-tgltf">
+              <span class="field-error" id="err-ed-tgltf">Tanggal wajib diisi.</span></label>
+          </div>
+        </div>
+        <div class="estack box" id="ed-sel-box" style="display:none">
+          <label>Actual (Rp)
+            <input type="number" id="ed-actual" min="0" step="1" inputmode="numeric">
+            <span class="field-error" id="err-ed-actual">Isi angka lebih dari 0.</span></label>
+          <label>Link nota <span class="opt">(opsional)</span>
+            <input type="text" id="ed-nota" placeholder="https://…" inputmode="url">
+            <span class="field-error" id="err-ed-nota">Harus diawali http:// atau https://</span></label>
+        </div>
+      </div>
+
+      <label id="ed-pin-wrap" style="display:none">PIN Lemon
+        <input type="password" id="ed-pin" autocomplete="off" placeholder="PIN">
+        <span class="hint" id="ed-pin-hint">Kegiatan yang sudah Approved/Ditransfer/Selesai butuh PIN Lemon untuk diubah, dibatalkan, atau dipulihkan.</span></label>
+
+      <div class="msg" id="ed-msg"></div>
+      <div class="modal-actions">
+        <button type="button" class="btn-cancel" onclick="closeModal('m-edit')">Tutup</button>
+        <button type="submit" class="btn-submit" id="ed-submit">Simpan perubahan</button>
+      </div>
+    </form>
+    <div class="danger-zone" id="ed-danger">
+      <input type="text" id="ed-alasan" placeholder="Alasan dibatalkan (opsional)" style="display:none">
+      <button type="button" class="btn-danger" id="ed-cancel-btn" onclick="cancelEditRow()">Batalkan kegiatan</button>
+      <button type="button" class="btn-danger" id="ed-restore-btn" onclick="restoreEditRow()" style="display:none;background:var(--accent-light);color:var(--accent-dark)">Pulihkan kegiatan</button>
+      <div class="hint">Kegiatan tidak dihapus, hanya ditandai Dibatalkan (tidak dihitung di total dan saldo) dan bisa dipulihkan kapan saja.</div>
+    </div>
+  </div>
+</div>
+
 <!-- ================= POPUP: Dana baru ================= -->
 <div class="modal-overlay" id="m-dana">
   <div class="modal-box">
-    <h3>Dana baru</h3>
-    <div class="hint">Transfer bulk yang dipakai untuk banyak kebutuhan. Setelah dicatat, kebutuhan bisa "dibayar dari dana" ini dan saldonya terhitung otomatis.</div>
+    <h3 id="d-title">Dana baru</h3>
+    <div class="hint" id="d-intro">Transfer bulk yang dipakai untuk banyak kebutuhan. Setelah dicatat, kebutuhan bisa "dibayar dari dana" ini dan saldonya terhitung otomatis.</div>
     <form id="danaForm" novalidate>
       <label>Nama dana
         <input type="text" id="d-nama" placeholder="Contoh: Modal produksi Agustus">
@@ -245,6 +312,10 @@
 
       <label>Catatan <span class="opt">(opsional)</span>
         <input type="text" id="d-catatan" placeholder="Contoh: approved Lemon, untuk launch"></label>
+
+      <label id="d-pin-wrap" style="display:none">PIN Lemon
+        <input type="password" id="d-pin" autocomplete="off" placeholder="PIN">
+        <span class="hint">Dana ini sudah dipakai kegiatan, jadi mengubahnya butuh PIN Lemon.</span></label>
 
       <div class="msg" id="d-msg"></div>
       <div class="modal-actions">
@@ -466,6 +537,7 @@
   </div>
 </div>
 
+<div class="save-bar" id="saveBar" aria-live="polite"></div>
 <div class="toast" id="toast" role="status" aria-live="polite"></div>
 
 <script src="common.js"></script>

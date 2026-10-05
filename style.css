@@ -282,3 +282,27 @@ h2.sec:first-child { margin-top: 0; }
 .modal-actions .btn-submit { background: var(--accent); color: #fff; }
 .modal-actions .btn-submit:hover { background: var(--accent-dark); }
 .modal-actions .btn-submit:disabled { opacity: 0.6; cursor: default; }
+
+/* bar simpan di background */
+.save-bar { position: fixed; top: 0; left: 0; right: 0; z-index: 120; display: flex; flex-direction: column; pointer-events: none; }
+.sb-item {
+  pointer-events: auto; display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+  padding: 7px 16px; font-size: 13px; background: var(--text); color: #fff; border-bottom: 1px solid rgba(255,255,255,.15);
+}
+.sb-item.ok { background: var(--green); }
+.sb-item.err { background: var(--red); }
+.sb-item.wait { background: #5b6169; }
+.sb-text { flex: 1 1 200px; min-width: 0; overflow-wrap: anywhere; }
+.sb-item button { border: 1px solid rgba(255,255,255,.7); background: transparent; color: #fff; border-radius: 6px; padding: 2px 9px; font-size: 12px; cursor: pointer; font-family: inherit; }
+.sb-item .sb-x { border-color: transparent; font-size: 16px; line-height: 1; padding: 0 6px; }
+.spin { width: 12px; height: 12px; border: 2px solid rgba(255,255,255,.4); border-top-color: #fff; border-radius: 50%; animation: sbspin .8s linear infinite; flex: none; }
+@keyframes sbspin { to { transform: rotate(360deg); } }
+body.savebar-on .toast { top: 56px; }
+.pending-note { font-size: 12px; color: var(--text-muted); font-style: italic; }
+.badge.dibatalkan { background: #EEEDE8; color: var(--text-muted); text-decoration: line-through; }
+.aksi-btn.edit { background: var(--bg); color: var(--text-muted); border: 1px solid var(--border, #ddd); }
+.hidden-hint { font-size: 12px; color: var(--text-muted); margin-right: 8px; }
+.danger-zone { margin-top: 14px; padding-top: 12px; border-top: 1px dashed var(--border, #ddd); display: flex; flex-direction: column; gap: 8px; }
+.btn-danger { border: none; background: var(--red-bg); color: var(--red); padding: 8px 12px; border-radius: 8px; font-weight: 600; cursor: pointer; font-family: inherit; font-size: 13px; align-self: flex-start; }
+.modal-box .estack { display: flex; flex-direction: column; gap: 14px; }
+.modal-box .estack.box { border: 1px dashed var(--border); border-radius: 8px; padding: 12px; }

@@ -157,7 +157,7 @@ function openStrategi() {
   openModal('m-strategi');
 }
 
-$('strategiForm').addEventListener('submit', async (e) => {
+$('strategiForm').addEventListener('submit', (e) => {
   e.preventDefault();
   setMsg($('s-msg'), '', '');
   clearErrors($('strategiForm'));
@@ -176,24 +176,22 @@ $('strategiForm').addEventListener('submit', async (e) => {
   if (!v.pic) bad('err-s-pic');
   if (!ok) return;
 
-  const btn = $('s-submit');
-  btn.disabled = true; btn.textContent = 'Menyimpan…';
-  try {
-    const j = await zApi.post({
-      action: 'add_strategi', nama: v.nama, pesan: v.pesan,
-      lane: Array.from(sSel.lane), channel: Array.from(sSel.channel),
-      mulai: v.mulai, selesai: v.selesai || null, pic: v.pic, status: v.status
-    });
-    if (!j.ok) throw new Error(j.error || 'Gagal');
-    $('strategiForm').reset(); sSel.lane.clear(); sSel.channel.clear();
-    closeModal('m-strategi');
-    toast('Strategi "' + v.nama + '" tersimpan. Lane/channel baru otomatis masuk daftar untuk semua orang.');
-    await load();
-  } catch (err) {
-    setMsg($('s-msg'), 'Gagal simpan: ' + err.message, 'bad');
-  } finally {
-    btn.disabled = false; btn.textContent = 'Simpan strategi';
-  }
+  const lane = Array.from(sSel.lane), channel = Array.from(sSel.channel);
+  const snap = snapshotForm($('strategiForm'));
+  enqueueSave({
+    label: 'Strategi: ' + v.nama,
+    payload: { action: 'add_strategi', nama: v.nama, pesan: v.pesan, lane: lane, channel: channel,
+      mulai: v.mulai, selesai: v.selesai || null, pic: v.pic, status: v.status },
+    okMsg: 'Strategi "' + v.nama + '" tersimpan. Lane/channel baru otomatis masuk daftar untuk semua orang.',
+    restore: () => {
+      openStrategi(); restoreForm(snap);
+      lane.forEach((x) => { if (sOpts.lane.indexOf(x) === -1) sOpts.lane.push(x); sSel.lane.add(x); });
+      channel.forEach((x) => { if (sOpts.channel.indexOf(x) === -1) sOpts.channel.push(x); sSel.channel.add(x); });
+      renderChips('lane'); renderChips('channel');
+    }
+  });
+  $('strategiForm').reset(); sSel.lane.clear(); sSel.channel.clear();
+  closeModal('m-strategi');
 });
 
 // ---------- popup: hasil event ----------
@@ -208,7 +206,7 @@ function openEvent() {
   openModal('m-event');
 }
 
-$('eventForm').addEventListener('submit', async (e) => {
+$('eventForm').addEventListener('submit', (e) => {
   e.preventDefault();
   setMsg($('e-msg'), '', '');
   clearErrors($('eventForm'));
@@ -221,24 +219,19 @@ $('eventForm').addEventListener('submit', async (e) => {
   if (!channel) bad('err-e-channel');
   if (!ok) return;
 
-  const btn = $('e-submit');
-  btn.disabled = true; btn.textContent = 'Menyimpan…';
-  try {
-    const j = await zApi.post({
-      action: 'add_hasil_event', nama: $('e-nama').value.trim(), tanggal: $('e-tanggal').value, channel: channel,
+  const namaEvent = $('e-nama').value.trim();
+  const snap = snapshotForm($('eventForm'));
+  enqueueSave({
+    label: 'Hasil event: ' + namaEvent,
+    payload: {
+      action: 'add_hasil_event', nama: namaEvent, tanggal: $('e-tanggal').value, channel: channel,
       komunitas: $('e-komunitas').value.trim(), kode: $('e-kode').value.trim(),
       hadir: $('e-hadir').value, coba: $('e-coba').value, tanya: $('e-tanya').value, order: $('e-order').value, ugc: $('e-ugc').value,
       strategi: $('e-strategi').value, pic: $('e-pic').value
-    });
-    if (!j.ok) throw new Error(j.error || 'Gagal');
-    const namaEvent = $('e-nama').value.trim();
-    $('eventForm').reset();
-    closeModal('m-event');
-    toast('Hasil event "' + namaEvent + '" tersimpan.');
-    await load();
-  } catch (err) {
-    setMsg($('e-msg'), 'Gagal simpan: ' + err.message, 'bad');
-  } finally {
-    btn.disabled = false; btn.textContent = 'Simpan hasil event';
-  }
+    },
+    okMsg: 'Hasil event "' + namaEvent + '" tersimpan.',
+    restore: () => { openEvent(); restoreForm(snap); }
+  });
+  $('eventForm').reset();
+  closeModal('m-event');
 });

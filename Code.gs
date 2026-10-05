@@ -40,7 +40,12 @@ var MIN_PIN_LENGTH = 4;
 var KATEGORI_LIST = ['Peralatan/Kulak', 'Packaging Tambahan', 'Ongkos Kirim/Logistik',
                       'Konten & Aktivasi Akar', 'Operasional Tim', 'Lain-lain'];
 var PIC_LIST = ['Lenno', 'Ricko', 'Yanuar', 'Christina'];
-var STATUS_LIST = ['Draft', 'Siap Ajukan', 'Diajukan', 'Approved', 'Ditolak', 'Revisi', 'Ditransfer', 'Selesai'];
+var STATUS_LIST = ['Draft', 'Siap Ajukan', 'Diajukan', 'Approved', 'Ditolak', 'Revisi', 'Ditransfer', 'Selesai', 'Dibatalkan'];
+// Status "Dibatalkan" = kegiatan yang dibatalkan/salah input (pengganti hapus). Tidak dihitung di
+// total, saldo dana, dan Perlu Ditransfer, tapi barisnya tetap ada dan bisa dipulihkan.
+var STATUS_BATAL = 'Dibatalkan';
+// Mengubah atau membatalkan kegiatan berstatus ini butuh PIN Lemon (uangnya sudah diputuskan/bergerak).
+var STATUS_BUTUH_PIN = ['Approved', 'Ditransfer', 'Selesai'];
 var TIPE_LIST = ['Capex', 'Opex'];
 
 // Posisi kolom di tab kegiatan (nomor kolom, mulai dari 1). Kalau nambah/geser
@@ -101,6 +106,16 @@ function extendTemplate_(ss, sheet) {
         plafon.getRange(r, 3).setFormula(plafonUsedFormula_(r)).setNumberFormat(CURR_FORMAT);
       }
     });
+  }
+
+  // dana: rumus "Terpakai" tiap dana diperbarui (mengabaikan kegiatan Dibatalkan)
+  var dana = ss.getSheetByName(DANA_TAB);
+  if (dana && dana.getLastRow() >= 2) {
+    for (var dr = 2; dr <= dana.getLastRow(); dr++) {
+      if (cleanText_(dana.getRange(dr, 1).getValue(), 80)) {
+        dana.getRange(dr, 6).setFormula(danaUsedFormula_(dr)).setNumberFormat(CURR_FORMAT);
+      }
+    }
   }
 }
 
@@ -438,6 +453,12 @@ function refreshDanaDropdown_() {
   setColumnDropdown_(sheet, COL.DANA, names);
 }
 
+// Rumus "Terpakai" di tab dana: total Actual kegiatan tertaut, tanpa yang Dibatalkan.
+function danaUsedFormula_(r) {
+  return '=SUMIFS(' + kegiatanRange_(COL.ACTUAL) + ',' + kegiatanRange_(COL.DANA) + ',A' + r + ',' +
+    kegiatanRange_(COL.STATUS) + ',"<>' + STATUS_BATAL + '")';
+}
+
 // Catat transfer bulk baru.
 function handleAddDana(data) {
   var nama = cleanText_(data.nama, 80);
@@ -464,9 +485,7 @@ function handleAddDana(data) {
     var r = sheet.getLastRow();
     sheet.getRange(r, 2).setNumberFormat(CURR_FORMAT);
     sheet.getRange(r, 3).setNumberFormat(DATE_FORMAT);
-    sheet.getRange(r, 6)
-      .setFormula('=SUMIFS(' + kegiatanRange_(COL.ACTUAL) + ',' + kegiatanRange_(COL.DANA) + ',A' + r + ')')
-      .setNumberFormat(CURR_FORMAT);
+    sheet.getRange(r, 6).setFormula(danaUsedFormula_(r)).setNumberFormat(CURR_FORMAT);
     sheet.getRange(r, 7).setFormula('=B' + r + '-F' + r).setNumberFormat(CURR_FORMAT);
     sheet.getRange(r, 8).setNumberFormat(DATE_FORMAT);
     refreshDanaDropdown_();
@@ -587,8 +606,9 @@ function buildRingkasanSheet(ss) {
   styleHeaderRow(sheet, r, 3);
   r++;
   // Actual dihitung hanya dari baris yang Nominal Transfer-nya terisi.
-  sheet.getRange(r, 1).setFormula('=SUMIF(' + transferRange + ',"<>",' + transferRange + ')').setNumberFormat(CURR_FORMAT);
-  sheet.getRange(r, 2).setFormula('=SUMIF(' + transferRange + ',"<>",' + actualRange + ')').setNumberFormat(CURR_FORMAT);
+  // Kegiatan Dibatalkan tidak dihitung.
+  sheet.getRange(r, 1).setFormula('=SUMIFS(' + transferRange + ',' + transferRange + ',"<>",' + statusRange + ',"<>' + STATUS_BATAL + '")').setNumberFormat(CURR_FORMAT);
+  sheet.getRange(r, 2).setFormula('=SUMIFS(' + actualRange + ',' + transferRange + ',"<>",' + statusRange + ',"<>' + STATUS_BATAL + '")').setNumberFormat(CURR_FORMAT);
   sheet.getRange(r, 3).setFormula('=A' + r + '-B' + r).setNumberFormat(CURR_FORMAT);
   r++;
 
@@ -605,15 +625,17 @@ function buildRingkasanSheet(ss) {
   ];
   modules.forEach(function (mod) {
     var name = mod[0], kats = mod[1];
+    // Aktif = status terisi, bukan Selesai, bukan Dibatalkan.
+    var aktif = statusRange + ',"<>Selesai",' + statusRange + ',"<>",' + statusRange + ',"<>' + STATUS_BATAL + '"';
     var countParts = kats.map(function (k) {
-      return 'COUNTIFS(' + katRange + ',"' + k + '",' + statusRange + ',"<>Selesai",' + statusRange + ',"<>")';
+      return 'COUNTIFS(' + katRange + ',"' + k + '",' + aktif + ')';
     }).join(' + ');
     var sumParts = kats.map(function (k) {
-      return 'SUMIFS(' + estRange + ',' + katRange + ',"' + k + '",' + statusRange + ',"<>Selesai",' + statusRange + ',"<>")';
+      return 'SUMIFS(' + estRange + ',' + katRange + ',"' + k + '",' + aktif + ')';
     }).join(' + ');
     var minParts = kats.map(function (k) {
-      return 'IF(COUNTIFS(' + katRange + ',"' + k + '",' + statusRange + ',"<>Selesai",' + statusRange + ',"<>")=0,99999,' +
-             'MINIFS(' + deadlineRange + ',' + katRange + ',"' + k + '",' + statusRange + ',"<>Selesai",' + statusRange + ',"<>"))';
+      return 'IF(COUNTIFS(' + katRange + ',"' + k + '",' + aktif + ')=0,99999,' +
+             'MINIFS(' + deadlineRange + ',' + katRange + ',"' + k + '",' + aktif + '))';
     }).join(',');
     sheet.getRange(r, 1).setValue(name);
     sheet.getRange(r, 2).setValue(kats.join(', '));
@@ -645,6 +667,7 @@ function doGet(e) {
   // jalan. Dashboard menganggap fitur itu belum tersedia kalau kuncinya tidak ada.
   try { payload.kategori = getKategoriList(); } catch (err) { payload.kategori_error = String(err.message); }
   try { payload.dana = getDanaData_(); } catch (err) { payload.dana_error = String(err.message); }
+  payload.edit = true;   // penanda: backend ini mengerti edit / batalkan / pulihkan / edit dana
   var m = mkt_getData();
   payload.strategi = m.strategi;
   payload.lane = m.lane;
@@ -689,6 +712,18 @@ function doPost(e) {
     }
     if (data.action === 'complete_batch') {
       return handleCompleteBatch(data);
+    }
+    if (data.action === 'edit_kegiatan') {
+      return handleEditKegiatan(data);
+    }
+    if (data.action === 'cancel_kegiatan') {
+      return handleCancelKegiatan(data);
+    }
+    if (data.action === 'restore_kegiatan') {
+      return handleRestoreKegiatan(data);
+    }
+    if (data.action === 'edit_dana') {
+      return handleEditDana(data);
     }
     return handleAddKegiatan(data);
   } catch (err) {
@@ -1018,6 +1053,259 @@ function handleCompleteBatch(data) {
       ok: completed.length > 0, completed: completed, skipped: skipped,
       error: completed.length ? undefined : (skipped.length ? skipped[0].alasan : 'Tidak ada yang selesai.')
     });
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+// ============================================================
+// EDIT / BATALKAN / PULIHKAN
+// Tidak ada hapus permanen: kegiatan yang salah dibatalkan (status "Dibatalkan") dan
+// bisa dipulihkan. Kegiatan berstatus Approved/Ditransfer/Selesai butuh PIN Lemon
+// untuk diubah atau dibatalkan, karena uangnya sudah diputuskan atau bergerak.
+// ============================================================
+
+// '' kalau PIN valid, selain itu pesan galat.
+function checkPin_(pin) {
+  var approvalPin = getApprovalPin();
+  if (!approvalPin) return 'PIN belum diset. Atur dulu lewat menu Zerodeo Tools -> Ganti PIN Lemon di Google Sheet.';
+  if (pin !== approvalPin) return 'PIN salah. Perubahan ini butuh PIN dari Lemon.';
+  return '';
+}
+
+function stampNow_() {
+  return Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'dd-MMM-yy');
+}
+
+function appendCatatan_(sheet, row, text) {
+  var cell = sheet.getRange(row, COL.CATATAN);
+  var old = cell.getValue();
+  cell.setValue(old ? (old + ' | ' + text) : text);
+}
+
+function fmtRp_(n) {
+  return 'Rp' + String(Math.round(Number(n) || 0)).replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+}
+
+function fmtCell_(v, kind) {
+  if (v === '' || v === null || v === undefined) return '(kosong)';
+  if (v instanceof Date) return Utilities.formatDate(v, Session.getScriptTimeZone(), 'dd-MMM-yy');
+  if (kind === 'rp') return fmtRp_(v);
+  return String(v);
+}
+
+function dateKey_(v) {
+  if (v instanceof Date) return Utilities.formatDate(v, Session.getScriptTimeZone(), 'yyyy-MM-dd');
+  return String(v || '');
+}
+
+// Cek baris kegiatan dan kunci PIN. Return {error} atau {sheet, status}.
+function loadEditableRow_(row) {
+  var sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('kegiatan');
+  if (!sheet) return { error: 'Tab kegiatan tidak ditemukan.' };
+  if (!row || row < HEADER_ROW + 1 || row > lastKegiatanRow_()) return { error: 'Baris tidak valid.' };
+  return { sheet: sheet, status: String(sheet.getRange(row, COL.STATUS).getValue() || '') };
+}
+
+function handleEditKegiatan(data) {
+  var row = Number(data.row);
+  var lock = LockService.getScriptLock();
+  if (!lock.tryLock(15000)) return jsonResponse({ ok: false, error: 'Server sedang sibuk, coba lagi sebentar.' });
+  try {
+    var ld = loadEditableRow_(row);
+    if (ld.error) return jsonResponse({ ok: false, error: ld.error });
+    var sheet = ld.sheet, status = ld.status;
+    if (status === STATUS_BATAL) return jsonResponse({ ok: false, error: 'Kegiatan ini sudah dibatalkan. Pulihkan dulu kalau mau diedit.' });
+    if (STATUS_BUTUH_PIN.indexOf(status) !== -1) {
+      var pe = checkPin_(data.pin);
+      if (pe) return jsonResponse({ ok: false, error: pe });
+    }
+    var danaLinked = String(sheet.getRange(row, COL.DANA).getValue() || '').trim() !== '';
+    var sudahTf = status === 'Ditransfer' || status === 'Selesai';
+    var has = function (k) { return Object.prototype.hasOwnProperty.call(data, k); };
+
+    // Validasi semua dulu, tulis belakangan (tolak = tidak ada yang berubah).
+    var writes = [];   // {col, value, fmt, label, kind, old}
+    var add = function (col, value, fmt, label, kind) {
+      var old = sheet.getRange(row, col).getValue();
+      var same = (value instanceof Date || old instanceof Date) ? dateKey_(value) === dateKey_(old)
+        : (typeof value === 'number' ? Number(old || 0) === value && old !== '' : String(old || '') === String(value));
+      if (!same) writes.push({ col: col, value: value, fmt: fmt, label: label, kind: kind, old: old });
+    };
+
+    if (has('item')) {
+      var item = cleanText_(data.item, 200);
+      if (!item) return jsonResponse({ ok: false, error: 'Item kegiatan wajib diisi.' });
+      add(COL.ITEM, safeText_(item), null, 'Item', 'txt');
+    }
+    if (has('kategori')) {
+      var kat = cleanKategori_(data.kategori);
+      if (!kat) return jsonResponse({ ok: false, error: 'Kategori wajib diisi.' });
+      add(COL.KATEGORI, resolveKategori_(kat), null, 'Kategori', 'txt');
+    }
+    if (has('tipe')) {
+      if (TIPE_LIST.indexOf(data.tipe) === -1) return jsonResponse({ ok: false, error: 'Tipe tidak dikenali.' });
+      add(COL.TIPE, data.tipe, null, 'Tipe', 'txt');
+    }
+    if (has('pic')) {
+      if (PIC_LIST.indexOf(data.pic) === -1) return jsonResponse({ ok: false, error: 'PIC tidak dikenali.' });
+      add(COL.PIC, data.pic, null, 'PIC', 'txt');
+    }
+    if (has('estimasi')) {
+      var est = Number(data.estimasi);
+      if (!est || est <= 0) return jsonResponse({ ok: false, error: 'Estimasi harus angka lebih dari 0.' });
+      add(COL.ESTIMASI, est, CURR_FORMAT, 'Estimasi', 'rp');
+    }
+    if (has('deadline')) {
+      if (data.deadline) {
+        var dl = new Date(data.deadline);
+        if (isNaN(dl.getTime())) return jsonResponse({ ok: false, error: 'Deadline tidak valid.' });
+        add(COL.DEADLINE, dl, DATE_FORMAT, 'Deadline', 'date');
+      } else {
+        add(COL.DEADLINE, '', null, 'Deadline', 'date');
+      }
+    }
+    if (has('nominalTransfer')) {
+      if (!sudahTf) return jsonResponse({ ok: false, error: 'Nominal transfer baru bisa diubah setelah status Ditransfer.' });
+      if (danaLinked) return jsonResponse({ ok: false, error: 'Baris ini dibayar dari dana, tidak punya nominal transfer sendiri.' });
+      var nt = Number(data.nominalTransfer);
+      if (!nt || nt <= 0) return jsonResponse({ ok: false, error: 'Nominal transfer harus angka lebih dari 0.' });
+      add(COL.NOMINAL_TRANSFER, nt, CURR_FORMAT, 'Nominal transfer', 'rp');
+    }
+    if (has('picTransaksi')) {
+      if (!sudahTf) return jsonResponse({ ok: false, error: 'PIC transaksi baru bisa diubah setelah status Ditransfer.' });
+      if (PIC_LIST.indexOf(data.picTransaksi) === -1) return jsonResponse({ ok: false, error: 'PIC Transaksi tidak dikenali.' });
+      add(COL.PIC_TRANSAKSI, data.picTransaksi, null, 'PIC transaksi', 'txt');
+    }
+    if (has('tglTransfer')) {
+      if (!sudahTf) return jsonResponse({ ok: false, error: 'Tanggal transfer baru bisa diubah setelah status Ditransfer.' });
+      var tt = new Date(data.tglTransfer);
+      if (!data.tglTransfer || isNaN(tt.getTime())) return jsonResponse({ ok: false, error: 'Tanggal transfer tidak valid.' });
+      add(COL.TGL_TRANSFER, tt, DATE_FORMAT, 'Tgl transfer', 'date');
+    }
+    if (has('actual')) {
+      if (status !== 'Selesai') return jsonResponse({ ok: false, error: 'Actual baru bisa diubah setelah status Selesai.' });
+      var ac = Number(data.actual);
+      if (!ac || ac <= 0) return jsonResponse({ ok: false, error: 'Actual harus angka lebih dari 0.' });
+      add(COL.ACTUAL, ac, CURR_FORMAT, 'Actual', 'rp');
+    }
+    if (has('nota')) {
+      if (status !== 'Selesai') return jsonResponse({ ok: false, error: 'Link nota baru bisa diubah setelah status Selesai.' });
+      var nota = String(data.nota || '').trim();
+      if (nota && !/^https?:\/\/\S+$/i.test(nota)) return jsonResponse({ ok: false, error: 'Link nota harus diawali http:// atau https://' });
+      add(COL.NOTA, nota, null, 'Nota', 'txt');
+    }
+
+    if (!writes.length) return jsonResponse({ ok: true, row: row, unchanged: true });
+
+    var parts = [];
+    writes.forEach(function (w) {
+      var cell = sheet.getRange(row, w.col);
+      cell.setValue(w.value);
+      if (w.fmt) cell.setNumberFormat(w.fmt);
+      parts.push(w.label + ' ' + fmtCell_(w.old, w.kind) + ' → ' + fmtCell_(w.value, w.kind));
+    });
+    appendCatatan_(sheet, row, 'Diedit ' + stampNow_() + ': ' + parts.join('; '));
+    return jsonResponse({ ok: true, row: row, changed: writes.length });
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+function handleCancelKegiatan(data) {
+  var row = Number(data.row);
+  var lock = LockService.getScriptLock();
+  if (!lock.tryLock(15000)) return jsonResponse({ ok: false, error: 'Server sedang sibuk, coba lagi sebentar.' });
+  try {
+    var ld = loadEditableRow_(row);
+    if (ld.error) return jsonResponse({ ok: false, error: ld.error });
+    if (ld.status === STATUS_BATAL) return jsonResponse({ ok: false, error: 'Kegiatan ini sudah dibatalkan.' });
+    if (STATUS_BUTUH_PIN.indexOf(ld.status) !== -1) {
+      var pe = checkPin_(data.pin);
+      if (pe) return jsonResponse({ ok: false, error: pe });
+    }
+    var alasan = cleanText_(data.alasan, 150).replace(/"/g, "'");
+    ld.sheet.getRange(row, COL.STATUS).setValue(STATUS_BATAL);
+    appendCatatan_(ld.sheet, row, 'Dibatalkan dari "' + (ld.status || 'Draft') + '" (' + stampNow_() + ')' + (alasan ? ': ' + alasan : ''));
+    return jsonResponse({ ok: true, row: row, status: STATUS_BATAL });
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+function handleRestoreKegiatan(data) {
+  var row = Number(data.row);
+  var lock = LockService.getScriptLock();
+  if (!lock.tryLock(15000)) return jsonResponse({ ok: false, error: 'Server sedang sibuk, coba lagi sebentar.' });
+  try {
+    var ld = loadEditableRow_(row);
+    if (ld.error) return jsonResponse({ ok: false, error: ld.error });
+    if (ld.status !== STATUS_BATAL) return jsonResponse({ ok: false, error: 'Kegiatan ini tidak sedang dibatalkan.' });
+    var catatan = String(ld.sheet.getRange(row, COL.CATATAN).getValue() || '');
+    var target = 'Draft', m, re = /Dibatalkan dari "([^"]+)"/g;
+    while ((m = re.exec(catatan)) !== null) {
+      if (STATUS_LIST.indexOf(m[1]) !== -1 && m[1] !== STATUS_BATAL) target = m[1];
+    }
+    if (STATUS_BUTUH_PIN.indexOf(target) !== -1) {
+      var pe = checkPin_(data.pin);
+      if (pe) return jsonResponse({ ok: false, error: pe });
+    }
+    ld.sheet.getRange(row, COL.STATUS).setValue(target);
+    appendCatatan_(ld.sheet, row, 'Dipulihkan ke "' + target + '" (' + stampNow_() + ')');
+    return jsonResponse({ ok: true, row: row, status: target });
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+// Edit dana: nama (unik; kegiatan tertaut ikut diganti namanya), nominal, tanggal, PIC, catatan.
+// Butuh PIN Lemon hanya kalau sudah ada kegiatan yang tertaut ke dana itu.
+function handleEditDana(data) {
+  var row = Number(data.row);
+  var lock = LockService.getScriptLock();
+  if (!lock.tryLock(15000)) return jsonResponse({ ok: false, error: 'Server sedang sibuk, coba lagi sebentar.' });
+  try {
+    ensureDanaColumn_();
+    var dsheet = ensureDanaTab_();
+    var cur = readDana_().filter(function (d) { return d._row === row; })[0];
+    if (!cur) return jsonResponse({ ok: false, error: 'Dana tidak ditemukan.' });
+    var oldName = cur['Nama Dana'];
+
+    var nama = cleanText_(data.nama, 80);
+    if (!nama) return jsonResponse({ ok: false, error: 'Nama dana wajib diisi.' });
+    var nominal = Number(data.nominal);
+    if (!nominal || nominal <= 0) return jsonResponse({ ok: false, error: 'Nominal dana harus angka lebih dari 0.' });
+    if (PIC_LIST.indexOf(data.picTransaksi) === -1) return jsonResponse({ ok: false, error: 'PIC Transaksi tidak dikenali.' });
+    var tgl = data.tglTransfer ? new Date(data.tglTransfer) : null;
+    if (!tgl || isNaN(tgl.getTime())) return jsonResponse({ ok: false, error: 'Tanggal transfer tidak valid.' });
+    var catatan = cleanText_(data.catatan, 200);
+
+    var other = findDana_(nama);
+    if (other && other._row !== row) return jsonResponse({ ok: false, error: 'Sudah ada dana dengan nama itu. Pakai nama lain.' });
+
+    var ksheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('kegiatan');
+    var linkedRows = [];
+    var last = ksheet ? lastKegiatanRow_() : 0;
+    if (last > HEADER_ROW) {
+      ksheet.getRange(HEADER_ROW + 1, COL.DANA, last - HEADER_ROW, 1).getValues().forEach(function (v, i) {
+        if (String(v[0] || '').trim().toLowerCase() === oldName.toLowerCase()) linkedRows.push(HEADER_ROW + 1 + i);
+      });
+    }
+    if (linkedRows.length) {
+      var pe = checkPin_(data.pin);
+      if (pe) return jsonResponse({ ok: false, error: pe });
+    }
+
+    dsheet.getRange(row, 1).setValue(safeText_(nama));
+    dsheet.getRange(row, 2).setValue(nominal).setNumberFormat(CURR_FORMAT);
+    dsheet.getRange(row, 3).setValue(tgl).setNumberFormat(DATE_FORMAT);
+    dsheet.getRange(row, 4).setValue(data.picTransaksi);
+    dsheet.getRange(row, 5).setValue(safeText_(catatan));
+    if (nama !== oldName) {
+      linkedRows.forEach(function (r) { ksheet.getRange(r, COL.DANA).setValue(nama); });
+    }
+    refreshDanaDropdown_();
+    return jsonResponse({ ok: true, row: row, nama: nama, linked: linkedRows.length });
   } finally {
     lock.releaseLock();
   }

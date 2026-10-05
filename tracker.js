@@ -1,10 +1,10 @@
 // Tab Tracker: kartu ringkas, tabel, approve/reject, tandai ditransfer,
 // popup input kegiatan, popup lengkapi (actual + foto nota).
 
-const STATUS_ORDER = ['Draft', 'Siap Ajukan', 'Diajukan', 'Approved', 'Ditolak', 'Revisi', 'Ditransfer', 'Selesai'];
+const STATUS_ORDER = ['Draft', 'Siap Ajukan', 'Diajukan', 'Approved', 'Ditolak', 'Revisi', 'Ditransfer', 'Selesai', 'Dibatalkan'];
 const STATUS_CLASS = {
   'Draft': 'draft', 'Siap Ajukan': 'siap', 'Diajukan': 'diajukan', 'Approved': 'approved',
-  'Ditolak': 'ditolak', 'Revisi': 'revisi', 'Ditransfer': 'ditransfer', 'Selesai': 'selesai'
+  'Ditolak': 'ditolak', 'Revisi': 'revisi', 'Ditransfer': 'ditransfer', 'Selesai': 'selesai', 'Dibatalkan': 'dibatalkan'
 };
 
 let kegiatanData = [];
@@ -24,26 +24,22 @@ let backendBaru = false;
 // Kebutuhan tertaut lewat kolom "Dana" dan tidak punya Nominal Transfer sendiri.
 let danaList = [];
 let backendDana = false;
+// Apps Script versi baru mengerti edit / batalkan / pulihkan / edit dana (doGet mengirim edit: true).
+let backendEdit = false;
+const PIN_STATUSES = ['Approved', 'Ditransfer', 'Selesai'];
 
 // ---------- approve / reject (PIN diverifikasi di Apps Script) ----------
-async function updateStatus(row, newStatus) {
+function updateStatus(row, newStatus) {
   let pin = cachedPin;
   if (!pin) {
     pin = prompt('PIN approve/reject dari Lemon:');
     if (!pin) return;
   }
-  try {
-    const json = await zApi.post({ action: 'update_status', row: row, status: newStatus, pin: pin });
-    if (json.ok) {
-      cachedPin = pin; // biar tidak nanya PIN tiap klik dalam sesi yang sama
-      load();
-    } else {
-      cachedPin = null;
-      alert('Gagal: ' + json.error);
-    }
-  } catch (err) {
-    alert('Gagal kirim: ' + err.message);
-  }
+  enqueueSave({
+    label: (newStatus === 'Approved' ? 'Approve' : 'Reject') + ': ' + (namaBaris(row) || 'baris ' + row),
+    payload: { action: 'update_status', row: row, status: newStatus, pin: pin },
+    rows: [row], restore: null
+  });
 }
 
 // ---------- render ----------
@@ -150,7 +146,7 @@ function renderCards() {
   // (Kebutuhan tertaut tidak punya Nominal Transfer sendiri, jadi tidak terhitung dua kali.)
   // Penjaga anti-dobel: baris yang dibayar dari dana diabaikan di sini (nominalnya, kalau ada,
   // dan Actual-nya sudah dihitung lewat dana).
-  const sudahCair = kegiatanData.filter((r) => !r['Dana'] && r['Nominal Transfer (Rp)'] !== null && r['Nominal Transfer (Rp)'] !== '' && r['Nominal Transfer (Rp)'] !== undefined);
+  const sudahCair = kegiatanData.filter((r) => r['Status'] !== 'Dibatalkan' && !r['Dana'] && r['Nominal Transfer (Rp)'] !== null && r['Nominal Transfer (Rp)'] !== '' && r['Nominal Transfer (Rp)'] !== undefined);
   let diterima = sudahCair.reduce((sum, r) => sum + (Number(r['Nominal Transfer (Rp)']) || 0), 0);
   let actualDariItu = sudahCair.reduce((sum, r) => sum + (Number(r['Actual (Rp)']) || 0), 0);
   if (backendDana) {
@@ -163,7 +159,7 @@ function renderCards() {
 
   // Deadline terdekat (belum Selesai, ada tanggal, urut terdekat, max 5)
   const upcoming = kegiatanData
-    .filter((r) => r['Status'] !== 'Selesai' && r['Deadline Kegiatan'])
+    .filter((r) => r['Status'] !== 'Selesai' && r['Status'] !== 'Dibatalkan' && r['Deadline Kegiatan'])
     .map((r) => ({ item: r['Item Kegiatan'], date: r['Deadline Kegiatan'], days: daysUntil(r['Deadline Kegiatan']) }))
     .sort((a, b) => new Date(a.date) - new Date(b.date))
     .slice(0, 5);
@@ -205,6 +201,7 @@ function renderTable() {
   const dana = $('filterDana').value;
   const search = $('searchBox').value.trim().toLowerCase();
 
+  let hidden = 0;
   const rows = kegiatanData.filter((r) => {
     if (kat && r['Kategori'] !== kat) return false;
     if (tipe && r['Tipe'] !== tipe) return false;
@@ -212,9 +209,12 @@ function renderTable() {
     if (status && r['Status'] !== status) return false;
     if (dana && r['Dana'] !== dana) return false;
     if (search && !(r['Item Kegiatan'] || '').toLowerCase().includes(search)) return false;
+    if (!status && r['Status'] === 'Dibatalkan') { hidden++; return false; } // disembunyikan kecuali disaring khusus
     return true;
   });
 
+  $('hiddenHint').textContent = hidden ? hidden + ' dibatalkan disembunyikan (saring Status: Dibatalkan)' : '';
+  const pend = pendingRows();
   $('rowCount').textContent = rows.length + ' kegiatan';
 
   const tbody = $('tableBody');
@@ -227,17 +227,21 @@ function renderTable() {
     const rowNo = Number(r['_row']);
     const statusClass = STATUS_CLASS[r['Status']] || 'draft';
     const days = daysUntil(r['Deadline Kegiatan']);
-    const deadlineSoon = r['Status'] !== 'Selesai' && days !== null && days <= 3;
+    const deadlineSoon = r['Status'] !== 'Selesai' && r['Status'] !== 'Dibatalkan' && days !== null && days <= 3;
     let aksi = '';
-    if (r['Status'] === 'Diajukan') {
+    const editBtn = backendEdit ? `<button class="aksi-btn edit" onclick="openEdit(${rowNo})">Edit</button>` : '';
+    if (pend.has(rowNo)) {
+      aksi = '<span class="pending-note">menyimpan…</span>';
+    } else if (r['Status'] === 'Diajukan') {
       aksi = `<button class="aksi-btn approve" onclick="updateStatus(${rowNo}, 'Approved')">Approve</button>
          <button class="aksi-btn reject" onclick="updateStatus(${rowNo}, 'Ditolak')">Reject</button>`;
     } else if (r['Status'] === 'Ditransfer') {
       aksi = `<button class="aksi-btn approve" onclick="openComplete(${rowNo})">Lengkapi</button>`;
-    } else if (r['Status'] !== 'Selesai' && !r['Dana'] && (r['Jalur'] === 'Fixed' || r['Status'] === 'Approved')) {
+    } else if (r['Status'] !== 'Selesai' && r['Status'] !== 'Dibatalkan' && !r['Dana'] && (r['Jalur'] === 'Fixed' || r['Status'] === 'Approved')) {
       aksi = `<button class="aksi-btn approve" onclick="openTransferModal(${rowNo})">Tandai Ditransfer</button>` +
         (r['Status'] !== 'Ditolak' ? bayarDanaBtn(rowNo) : '');
     }
+    if (!pend.has(rowNo)) aksi += editBtn;
     return `<tr>
       <td class="item">${zEsc(r['Item Kegiatan'] || '-')}${r['Dana'] ? `<div class="sub">Dana: ${zEsc(r['Dana'])}</div>` : ''}</td>
       <td>${zEsc(r['Kategori'] || '-')}</td>
@@ -273,7 +277,7 @@ function closeTransferModal() {
   transferRow = null;
 }
 
-async function submitTransfer() {
+function submitTransfer() {
   const pic = $('tf-pic').value;
   const nominal = $('tf-nominal').value;
   const tanggal = $('tf-tanggal').value;
@@ -285,35 +289,16 @@ async function submitTransfer() {
     errEl.classList.add('show');
     return;
   }
-
-  const submitBtn = $('tf-submit');
-  submitBtn.disabled = true;
-  submitBtn.textContent = 'Menyimpan…';
-
-  try {
-    const json = await zApi.post({
-      action: 'mark_transferred',
-      row: transferRow,
-      picTransaksi: pic,
-      nominalTransfer: Number(nominal),
-      tglTransfer: tanggal,
-    });
-    if (json.ok) {
-      const nama = namaBaris(transferRow) || 'Kegiatan';
-      closeTransferModal();
-      toast('Ditransfer: ' + nama + '. Sekarang tinggal Lengkapi dengan Actual.');
-      await load();
-    } else {
-      errEl.textContent = json.error || 'Gagal menyimpan.';
-      errEl.classList.add('show');
-    }
-  } catch (err) {
-    errEl.textContent = 'Gagal kirim: ' + err.message;
-    errEl.classList.add('show');
-  } finally {
-    submitBtn.disabled = false;
-    submitBtn.textContent = 'Simpan';
-  }
+  const row = transferRow;
+  const nama = namaBaris(row) || 'Kegiatan';
+  enqueueSave({
+    label: 'Ditransfer: ' + nama,
+    payload: { action: 'mark_transferred', row: row, picTransaksi: pic, nominalTransfer: Number(nominal), tglTransfer: tanggal },
+    rows: [row],
+    okMsg: 'Ditransfer: ' + nama + '. Sekarang tinggal Lengkapi dengan Actual.',
+    restore: () => { openTransferModal(row); $('tf-pic').value = pic; $('tf-nominal').value = nominal; $('tf-tanggal').value = tanggal; }
+  });
+  closeTransferModal();
 }
 
 // ---------- dana bulk ----------
@@ -327,7 +312,7 @@ function fmtDanaRp(n) {
 function danaStats() {
   return danaList.map((d) => {
     const nama = d['Nama Dana'];
-    const linked = kegiatanData.filter((r) => r['Dana'] === nama);
+    const linked = kegiatanData.filter((r) => r['Dana'] === nama && r['Status'] !== 'Dibatalkan');
     const terpakai = linked.reduce((s, r) => s + (Number(r['Actual (Rp)']) || 0), 0);
     const rencana = linked
       .filter((r) => !(Number(r['Actual (Rp)']) > 0) && r['Status'] !== 'Selesai')
@@ -361,7 +346,7 @@ function renderDana() {
       <div class="dana-bar"><div class="dana-fill ${minus ? 'over' : ''}" style="width:${pct}%"></div></div>
       <div class="dana-saldo ${minus ? 'minus' : ''}">${minus ? 'Kelebihan' : 'Saldo'} <b>${fmtDanaRp(Math.abs(d.saldo))}</b></div>
       ${d.rencana > 0 ? `<div class="dana-plan">Rencana belum jalan ${fmtDanaRp(d.rencana)} · sisa bebas ${fmtDanaRp(d.bebas)}</div>` : ''}
-      ${d.menunggu > 0 ? `<div class="dana-actions"><button class="aksi-btn dana" data-nama="${zEsc(d.nama)}" onclick="event.stopPropagation(); openSettle(this.dataset.nama)">Isi Actual sekaligus (${d.menunggu})</button></div>` : ''}
+      ${(d.menunggu > 0 || backendEdit) ? `<div class="dana-actions">${d.menunggu > 0 ? `<button class="aksi-btn dana" data-nama="${zEsc(d.nama)}" onclick="event.stopPropagation(); openSettle(this.dataset.nama)">Isi Actual sekaligus (${d.menunggu})</button>` : ''}${backendEdit ? `<button class="aksi-btn edit" data-nama="${zEsc(d.nama)}" onclick="event.stopPropagation(); openDanaEdit(this.dataset.nama)">Edit</button>` : ''}</div>` : ''}
     </div>`;
   }).join('');
 }
@@ -403,7 +388,7 @@ function openBayarDana(row) {
   openModal('m-bayardana');
 }
 
-async function submitBayarDana() {
+function submitBayarDana() {
   const dana = $('bd-dana').value;
   const errEl = $('bd-err');
   errEl.classList.remove('show');
@@ -412,28 +397,17 @@ async function submitBayarDana() {
     errEl.classList.add('show');
     return;
   }
-  const btn = $('bd-submit');
-  btn.disabled = true;
-  btn.textContent = 'Menyimpan…';
-  try {
-    const json = await zApi.post({ action: 'link_dana', row: bayarRow, dana: dana });
-    if (json.ok) {
-      const nama = namaBaris(bayarRow) || 'Kegiatan';
-      closeModal('m-bayardana');
-      bayarRow = null;
-      toast(nama + ' dibayar dari dana "' + dana + '". Tinggal Lengkapi dengan Actual.');
-      await load();
-    } else {
-      errEl.textContent = json.error || 'Gagal menyimpan.';
-      errEl.classList.add('show');
-    }
-  } catch (err) {
-    errEl.textContent = 'Gagal kirim: ' + err.message;
-    errEl.classList.add('show');
-  } finally {
-    btn.disabled = false;
-    btn.textContent = 'Simpan';
-  }
+  const row = bayarRow;
+  const nama = namaBaris(row) || 'Kegiatan';
+  enqueueSave({
+    label: 'Bayar dari dana: ' + nama,
+    payload: { action: 'link_dana', row: row, dana: dana },
+    rows: [row],
+    okMsg: nama + ' dibayar dari dana "' + dana + '". Tinggal Lengkapi dengan Actual.',
+    restore: () => { openBayarDana(row); $('bd-dana').value = dana; updateBayarHint(); }
+  });
+  closeModal('m-bayardana');
+  bayarRow = null;
 }
 
 // ---------- laporan hasil kiriman sekaligus (yang berhasil + yang dilewati beserta alasannya) ----------
@@ -627,16 +601,46 @@ function filterDanaBy(nama) {
   if ($('filterDana').value) $('tableKegiatan').scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
 
-// ---------- popup: dana baru ----------
+// ---------- popup: dana baru / edit dana ----------
+let danaEditRow = null;   // null = dana baru, angka = baris di tab dana yang sedang diedit
+
+function setDanaMode(edit) {
+  $('d-title').textContent = edit ? 'Edit dana' : 'Dana baru';
+  $('d-intro').style.display = edit ? 'none' : '';
+  $('d-submit').textContent = edit ? 'Simpan perubahan' : 'Simpan dana';
+}
+
 function openDana() {
+  danaEditRow = null;
   $('danaForm').reset();
   clearErrors($('danaForm'));
   setMsg($('d-msg'), '', '');
+  setDanaMode(false);
+  $('d-pin-wrap').style.display = 'none';
   $('d-tgl').value = todayStr();
   openModal('m-dana');
 }
 
-$('danaForm').addEventListener('submit', async (e) => {
+function openDanaEdit(nama) {
+  const d = danaList.find((x) => x['Nama Dana'] === nama);
+  if (!d) return;
+  danaEditRow = d['_row'];
+  $('danaForm').reset();
+  clearErrors($('danaForm'));
+  setMsg($('d-msg'), '', '');
+  setDanaMode(true);
+  $('d-nama').value = d['Nama Dana'] || '';
+  $('d-nominal').value = d['Nominal (Rp)'] || '';
+  $('d-tgl').value = String(d['Tgl Transfer'] || '').slice(0, 10);
+  $('d-pic').value = d['PIC Transaksi'] || '';
+  $('d-catatan').value = d['Catatan'] || '';
+  const terpakai = kegiatanData.some((r) => r['Dana'] === nama);   // PIN hanya kalau sudah dipakai
+  $('d-pin-wrap').style.display = terpakai ? '' : 'none';
+  $('d-pin').value = cachedPin || '';
+  openModal('m-dana');
+}
+
+$('danaForm').addEventListener('submit', (e) => {
   e.preventDefault();
   setMsg($('d-msg'), '', '');
   clearErrors($('danaForm'));
@@ -648,31 +652,29 @@ $('danaForm').addEventListener('submit', async (e) => {
   if (!nama) bad('err-d-nama');
   if (!nominal || Number(nominal) <= 0) bad('err-d-nominal');
   if (!pic) bad('err-d-pic');
+  const needPin = danaEditRow !== null && $('d-pin-wrap').style.display !== 'none';
+  if (needPin && !$('d-pin').value.trim()) { setMsg($('d-msg'), 'Isi PIN Lemon dulu.', 'err'); ok = false; }
   if (!ok) return;
 
-  const btn = $('d-submit');
-  btn.disabled = true;
-  btn.textContent = 'Menyimpan…';
-  try {
-    const json = await zApi.post({
-      action: 'add_dana', nama: nama, nominal: Number(nominal),
-      tglTransfer: $('d-tgl').value || null, picTransaksi: pic, catatan: $('d-catatan').value.trim() || null,
-    });
-    if (json.ok) {
-      $('danaForm').reset();
-      closeModal('m-dana');
-      toast('Dana "' + (json.nama || nama) + '" tersimpan. Sekarang bisa dipilih di form Kebutuhan baru.');
-      await load();
-      $('danaSection').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-    } else {
-      setMsg($('d-msg'), 'Gagal simpan: ' + (json.error || 'error tidak diketahui.'), 'err');
-    }
-  } catch (err) {
-    setMsg($('d-msg'), 'Gagal kirim: ' + err.message, 'err');
-  } finally {
-    btn.disabled = false;
-    btn.textContent = 'Simpan dana';
-  }
+  const snap = snapshotForm($('danaForm'));
+  delete snap['d-pin'];
+  const edit = danaEditRow !== null;
+  const row = danaEditRow;
+  const oldNama = edit ? (danaList.find((x) => x['_row'] === row) || {})['Nama Dana'] : null;
+  const payload = {
+    action: edit ? 'edit_dana' : 'add_dana', nama: nama, nominal: Number(nominal),
+    tglTransfer: $('d-tgl').value || null, picTransaksi: pic, catatan: $('d-catatan').value.trim() || null,
+  };
+  if (edit) payload.row = row;
+  if (needPin) payload.pin = $('d-pin').value.trim();
+  enqueueSave({
+    label: (edit ? 'Edit dana: ' : 'Dana: ') + nama,
+    payload: payload, rows: [],
+    okMsg: edit ? null : 'Dana "' + nama + '" tersimpan. Sekarang bisa dipilih di form Kebutuhan baru.',
+    restore: () => { if (edit) openDanaEdit(oldNama); else openDana(); restoreForm(snap); }
+  });
+  $('danaForm').reset();
+  closeModal('m-dana');
 });
 
 // ---------- popup: input kegiatan baru ----------
@@ -779,7 +781,7 @@ function clearForNext() {
   $('k-item').focus();
 }
 
-$('kegiatanForm').addEventListener('submit', async (e) => {
+$('kegiatanForm').addEventListener('submit', (e) => {
   e.preventDefault();
   setMsg($('k-msg'), '', '');
   if (!validateKegiatan()) return;
@@ -814,34 +816,19 @@ $('kegiatanForm').addEventListener('submit', async (e) => {
     if (arsip) payload.nominalTransfer = null; // uangnya sudah ada di dana
   }
 
-  const btn = keepOpen ? $('k-submit-more') : $('k-submit');
-  const btnLabel = btn.textContent;
-  $('k-submit').disabled = true;
-  $('k-submit-more').disabled = true;
-  btn.textContent = 'Menyimpan…';
-  try {
-    const json = await zApi.post(payload);
-    if (json.ok) {
-      const ringkas = 'Tersimpan: ' + payload.item + (arsip ? ' (data lama)' : '') + (dana ? ' — dari dana "' + dana + '"' : '');
-      toast(ringkas);
-      if (keepOpen) {
-        setMsg($('k-msg'), ringkas + '. Silakan isi yang berikutnya.', 'ok');
-        clearForNext();
-      } else {
-        $('kegiatanForm').reset();
-        syncKegiatanForm();
-        closeModal('m-kegiatan');
-      }
-      await load();
-    } else {
-      setMsg($('k-msg'), 'Gagal simpan: ' + (json.error || 'error tidak diketahui.'), 'err');
-    }
-  } catch (err) {
-    setMsg($('k-msg'), 'Gagal kirim: ' + err.message, 'err');
-  } finally {
-    btn.textContent = btnLabel;
-    $('k-submit').disabled = false;
-    $('k-submit-more').disabled = false;
+  const snap = snapshotForm($('kegiatanForm'));
+  enqueueSave({
+    label: payload.item + (arsip ? ' (data lama)' : '') + (dana ? ' — dari dana "' + dana + '"' : ''),
+    payload: payload, rows: [],
+    restore: () => { openKegiatan(); restoreForm(snap); syncKegiatanForm(); }
+  });
+  if (keepOpen) {
+    setMsg($('k-msg'), '"' + payload.item + '" masuk antrean simpan. Silakan isi yang berikutnya.', 'ok');
+    clearForNext();
+  } else {
+    $('kegiatanForm').reset();
+    syncKegiatanForm();
+    closeModal('m-kegiatan');
   }
 });
 
@@ -932,7 +919,7 @@ $('c-photo').addEventListener('change', async () => {
   }
 });
 
-$('completeForm').addEventListener('submit', async (e) => {
+$('completeForm').addEventListener('submit', (e) => {
   e.preventDefault();
   setMsg($('c-msg'), '', '');
   $('err-c-actual').classList.remove('show');
@@ -942,31 +929,194 @@ $('completeForm').addEventListener('submit', async (e) => {
     $('err-c-actual').classList.add('show');
     return;
   }
-
-  const btn = $('c-submit');
-  btn.disabled = true;
-  btn.textContent = 'Menyimpan…';
-  try {
-    const json = await zApi.post({
-      action: 'complete_kegiatan',
-      row: completeRow,
-      actual: Number(actual),
-      photoBase64: photoBase64,
-      photoMime: 'image/jpeg',
-    });
-    if (json.ok) {
-      const item = kegiatanData.find((r) => r['_row'] === completeRow);
-      closeModal('m-complete');
-      toast('Selesai: ' + ((item && item['Item Kegiatan']) || 'kegiatan') + (photoBase64 ? ' (nota terunggah)' : ''));
-      await load();
-    } else {
-      setMsg($('c-msg'), 'Gagal simpan: ' + (json.error || 'error tidak diketahui.'), 'err');
-      btn.disabled = false;
-      btn.textContent = 'Simpan & tandai selesai';
+  const row = completeRow;
+  const photo = photoBase64;
+  const dataUrl = photo ? $('c-previewImg').src : '';
+  const size = $('c-previewSize').textContent;
+  const nama = namaBaris(row) || 'kegiatan';
+  enqueueSave({
+    label: 'Selesai: ' + nama + (photo ? ' (+ foto nota)' : ''),
+    payload: { action: 'complete_kegiatan', row: row, actual: Number(actual), photoBase64: photo, photoMime: 'image/jpeg' },
+    rows: [row],
+    restore: () => {
+      openComplete(row);
+      $('c-actual').value = actual;
+      if (photo) {
+        photoBase64 = photo;
+        $('c-previewImg').src = dataUrl;
+        $('c-previewSize').textContent = size;
+        $('c-preview').style.display = 'block';
+      }
     }
-  } catch (err) {
-    setMsg($('c-msg'), 'Gagal kirim: ' + err.message, 'err');
-    btn.disabled = false;
-    btn.textContent = 'Simpan & tandai selesai';
-  }
+  });
+  closeModal('m-complete');
 });
+
+// ---------- popup: edit kegiatan (+ batalkan / pulihkan) ----------
+let editRow = null;
+let editOrig = null;
+let editCancelAsk = false;   // klik pertama "Batalkan" minta konfirmasi, klik kedua baru jalan
+
+// Status asal sebelum dibatalkan, dibaca dari jejak terakhir di Catatan (sama seperti di Apps Script).
+function priorStatusOf(r) {
+  const re = /Dibatalkan dari "([^"]+)"/g;
+  let m, last = 'Draft';
+  while ((m = re.exec(String(r['Catatan'] || ''))) !== null) {
+    if (STATUS_ORDER.indexOf(m[1]) !== -1 && m[1] !== 'Dibatalkan') last = m[1];
+  }
+  return last;
+}
+
+function openEdit(row) {
+  const r = kegiatanData.find((x) => x['_row'] === row);
+  if (!r || !backendEdit) return;
+  if (pendingRows().has(row)) { toast('Masih menyimpan perubahan untuk kegiatan ini.', 'err'); return; }
+  editRow = row;
+  editCancelAsk = false;
+  const status = r['Status'] || 'Draft';
+  const batal = status === 'Dibatalkan';
+
+  const kats = kategoriList.slice();
+  if (r['Kategori'] && kats.indexOf(r['Kategori']) === -1) kats.push(r['Kategori']);
+  $('ed-kategori').innerHTML = kats.map((k) => `<option value="${zEsc(k)}">${zEsc(k)}</option>`).join('');
+
+  editOrig = {
+    item: r['Item Kegiatan'] || '', kategori: r['Kategori'] || '', tipe: r['Tipe'] || 'Opex', pic: r['PIC'] || '',
+    estimasi: String(r['Estimasi (Rp)'] === null || r['Estimasi (Rp)'] === undefined ? '' : r['Estimasi (Rp)']),
+    deadline: String(r['Deadline Kegiatan'] || '').slice(0, 10),
+    nominal: String(r['Nominal Transfer (Rp)'] === null || r['Nominal Transfer (Rp)'] === undefined ? '' : r['Nominal Transfer (Rp)']),
+    pictrans: r['PIC Transaksi'] || '', tgltf: String(r['Tgl Transfer'] || '').slice(0, 10),
+    actual: String(r['Actual (Rp)'] === null || r['Actual (Rp)'] === undefined ? '' : r['Actual (Rp)']),
+    nota: r['Nota/Bukti'] || ''
+  };
+  $('editForm').reset();
+  clearErrors($('editForm'));
+  setMsg($('ed-msg'), '', '');
+  $('ed-item').value = editOrig.item;
+  $('ed-kategori').value = editOrig.kategori;
+  $('ed-kategoriNew').value = '';
+  $('ed-tipe').value = editOrig.tipe;
+  $('ed-pic').value = editOrig.pic;
+  $('ed-estimasi').value = editOrig.estimasi;
+  $('ed-deadline').value = editOrig.deadline;
+  $('ed-nominal').value = editOrig.nominal;
+  $('ed-pictrans').value = editOrig.pictrans;
+  $('ed-tgltf').value = editOrig.tgltf;
+  $('ed-actual').value = editOrig.actual;
+  $('ed-nota').value = editOrig.nota;
+
+  const sudahTf = status === 'Ditransfer' || status === 'Selesai';
+  $('ed-sub').textContent = (r['Item Kegiatan'] || '-') + ' · status ' + status + (r['Dana'] ? ' · dari dana "' + r['Dana'] + '"' : '');
+  $('ed-fields').style.display = batal ? 'none' : '';
+  $('ed-submit').style.display = batal ? 'none' : '';
+  $('ed-tf-box').style.display = sudahTf && (!r['Dana'] || r['PIC Transaksi'] || r['Tgl Transfer']) ? '' : 'none';
+  $('ed-nominal-wrap').style.display = r['Dana'] ? 'none' : '';
+  $('ed-sel-box').style.display = status === 'Selesai' ? '' : 'none';
+  const needPin = PIN_STATUSES.indexOf(batal ? priorStatusOf(r) : status) !== -1;
+  $('ed-pin-wrap').style.display = needPin ? '' : 'none';
+  $('ed-pin').value = cachedPin || '';
+  $('ed-alasan').style.display = 'none';
+  $('ed-alasan').value = '';
+  $('ed-cancel-btn').style.display = batal ? 'none' : '';
+  $('ed-cancel-btn').textContent = 'Batalkan kegiatan';
+  $('ed-restore-btn').style.display = batal ? '' : 'none';
+  openModal('m-edit');
+}
+
+// PIN dari popup edit; null (dan pesan galat) kalau dibutuhkan tapi kosong.
+function editPin() {
+  if ($('ed-pin-wrap').style.display === 'none') return '';
+  const pin = $('ed-pin').value.trim();
+  if (!pin) { setMsg($('ed-msg'), 'Isi PIN Lemon dulu.', 'err'); return null; }
+  return pin;
+}
+
+$('editForm').addEventListener('submit', (e) => {
+  e.preventDefault();
+  setMsg($('ed-msg'), '', '');
+  clearErrors($('editForm'));
+  const row = editRow;
+  const o = editOrig;
+  const kat = $('ed-kategoriNew').value.trim() || $('ed-kategori').value;
+  const cur = {
+    item: $('ed-item').value.trim(), kategori: kat, tipe: $('ed-tipe').value, pic: $('ed-pic').value,
+    estimasi: $('ed-estimasi').value.trim(), deadline: $('ed-deadline').value
+  };
+  const sel = $('ed-sel-box').style.display !== 'none';
+  const tf = $('ed-tf-box').style.display !== 'none';
+  const hasNominal = tf && $('ed-nominal-wrap').style.display !== 'none';
+  if (hasNominal) cur.nominal = $('ed-nominal').value.trim();
+  if (tf) { cur.pictrans = $('ed-pictrans').value; cur.tgltf = $('ed-tgltf').value; }
+  if (sel) { cur.actual = $('ed-actual').value.trim(); cur.nota = $('ed-nota').value.trim(); }
+
+  let ok = true;
+  const bad = (id) => { $(id).classList.add('show'); ok = false; };
+  if (!cur.item) bad('err-ed-item');
+  if (!(Number(cur.estimasi) > 0)) bad('err-ed-estimasi');
+  if (hasNominal && !(Number(cur.nominal) > 0)) bad('err-ed-nominal');
+  if (tf && o.tgltf && !cur.tgltf) bad('err-ed-tgltf');
+  if (tf && o.pictrans && !cur.pictrans) { setMsg($('ed-msg'), 'PIC Transaksi tidak boleh dikosongkan.', 'err'); ok = false; }
+  if (sel && !(Number(cur.actual) > 0)) bad('err-ed-actual');
+  if (sel && cur.nota && !/^https?:\/\/\S+$/i.test(cur.nota)) bad('err-ed-nota');
+  if (!ok) return;
+
+  const map = { item: 'item', kategori: 'kategori', tipe: 'tipe', pic: 'pic', estimasi: 'estimasi', deadline: 'deadline',
+    nominal: 'nominalTransfer', pictrans: 'picTransaksi', tgltf: 'tglTransfer', actual: 'actual', nota: 'nota' };
+  const num = { estimasi: 1, nominal: 1, actual: 1 };
+  const payload = { action: 'edit_kegiatan', row: row };
+  let changed = 0;
+  Object.keys(cur).forEach((k) => {
+    if (String(cur[k]) === String(o[k])) return;
+    payload[map[k]] = num[k] ? Number(cur[k]) : cur[k];
+    changed++;
+  });
+  if (!changed) { closeModal('m-edit'); toast('Tidak ada perubahan.'); return; }
+  const pin = editPin();
+  if (pin === null) return;
+  if (pin) payload.pin = pin;
+
+  const snap = snapshotForm($('editForm'));
+  delete snap['ed-pin'];
+  enqueueSave({
+    label: 'Edit: ' + (o.item || 'kegiatan'), payload: payload, rows: [row],
+    restore: () => { openEdit(row); restoreForm(snap); }
+  });
+  closeModal('m-edit');
+});
+
+function cancelEditRow() {
+  if (!editCancelAsk) {
+    editCancelAsk = true;
+    $('ed-alasan').style.display = '';
+    $('ed-cancel-btn').textContent = 'Yakin batalkan? Klik lagi';
+    $('ed-alasan').focus();
+    return;
+  }
+  const pin = editPin();
+  if (pin === null) return;
+  const row = editRow;
+  const nama = editOrig.item || 'kegiatan';
+  const payload = { action: 'cancel_kegiatan', row: row, alasan: $('ed-alasan').value.trim() || null };
+  if (pin) payload.pin = pin;
+  enqueueSave({
+    label: 'Batalkan: ' + nama, payload: payload, rows: [row],
+    okMsg: 'Dibatalkan: ' + nama + '. Bisa dipulihkan lewat Edit.',
+    restore: () => openEdit(row)
+  });
+  closeModal('m-edit');
+}
+
+function restoreEditRow() {
+  const pin = editPin();
+  if (pin === null) return;
+  const row = editRow;
+  const nama = editOrig.item || 'kegiatan';
+  const payload = { action: 'restore_kegiatan', row: row };
+  if (pin) payload.pin = pin;
+  enqueueSave({
+    label: 'Pulihkan: ' + nama, payload: payload, rows: [row],
+    okMsg: 'Dipulihkan: ' + nama,
+    restore: () => openEdit(row)
+  });
+  closeModal('m-edit');
+}

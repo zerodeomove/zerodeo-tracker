@@ -22,19 +22,48 @@ dan budgeting launch, plus proses approve/reject oleh Lemon. Ada juga modul mark
   Approved yang belum ditransfer. Kartu menyala kuning kalau ada isinya; diklik, muncul
   daftarnya (urut deadline) dengan tombol Tandai Ditransfer di tiap baris.
 
-## Setelah menyimpan
+## Setelah menyimpan (simpan di background)
 
-Setelah simpan di popup mana pun (Kebutuhan, Dana, Lengkapi, Strategi, Hasil Event, Tandai
-Ditransfer, Bayar dari dana), popup **menutup**, muncul notifikasi kecil di atas layar, dan
-data **dimuat ulang otomatis**, jadi tidak perlu refresh manual. Kalau simpan gagal, popup
-tetap terbuka dengan pesan galat dan isianmu tidak hilang. Pengecualian: popup yang
-melaporkan hasil per baris (Isi Actual sekaligus, Bayar semua) tetap terbuka kalau ada baris
-yang dilewati, supaya alasannya terbaca.
+Simpan di popup mana pun (Kebutuhan, Dana, Lengkapi, Tandai Ditransfer, Bayar dari dana,
+Edit, Approve/Reject, Strategi, Hasil Event) **tidak menunggu**: popup langsung menutup dan
+simpan jalan di belakang layar lewat antrean, berurutan, sehingga formulir berikutnya bisa
+langsung diisi. Statusnya tampil di bar tipis di paling atas layar:
 
-Di popup **Kebutuhan baru** ada tombol **Simpan & tambah lagi** untuk memasukkan banyak data
-berurutan (misalnya data lama dari Excel). Popup tetap terbuka; item, jumlah, dan nota
-dikosongkan, sedangkan isian yang biasanya sama (Data lama, dana, kategori, tipe, PIC,
-tanggal) dipertahankan.
+- **Menyimpan…** (berputar) atau **Antre**, lalu **✓ Tersimpan**. Setelah antrean habis, data
+  dimuat ulang **satu kali** otomatis.
+- Baris tabel yang sedang disimpan menampilkan *menyimpan…* sebagai ganti tombol aksi.
+- Kalau gagal, bar berwarna merah dengan **Coba lagi** (kirim ulang isi yang sama) dan
+  **Ubah** (membuka lagi popup dengan semua isian semula). Kalau penyebabnya PIN salah,
+  hanya **Ubah** yang ada.
+- Menutup/me-refresh halaman saat masih ada simpan yang belum selesai memunculkan peringatan.
+- Pengecualian: popup yang melaporkan hasil per baris (**Isi Actual sekaligus**, **Bayar semua
+  dari dana**) tetap menunggu di depan layar supaya alasan baris yang dilewati terbaca.
+
+Di popup **Kebutuhan baru** ada tombol **Simpan & tambah lagi**: yang tadi masuk antrean,
+formulir dikosongkan (item, jumlah, nota; isian yang biasanya sama dipertahankan) untuk
+data berikutnya.
+
+## Edit, Batalkan, Pulihkan
+
+Tombol **Edit** ada di setiap baris tabel dan di setiap kartu dana. Tidak ada hapus
+permanen; yang salah **dibatalkan** dan bisa **dipulihkan**.
+
+- **Edit kegiatan:** item, kategori, tipe, PIC, estimasi, deadline selalu bisa diubah.
+  Nominal transfer, PIC transaksi, dan tgl transfer bisa diubah kalau statusnya Ditransfer/
+  Selesai (nominal tidak untuk yang dibayar dari dana); Actual dan link nota kalau Selesai.
+  Status Draft/Siap Ajukan/Diajukan/Revisi/Ditolak bebas diubah; status
+  **Approved/Ditransfer/Selesai butuh PIN Lemon** (kolom PIN terisi otomatis dari PIN yang
+  baru dipakai). Tiap perubahan dicatat di kolom Catatan, mis.
+  `Diedit 05-Okt-26: Estimasi Rp1.000.000 → Rp1.200.000`.
+- **Batalkan:** di popup Edit, dua klik (alasan opsional). Status jadi **Dibatalkan** (butuh
+  PIN kalau sebelumnya Approved/Ditransfer/Selesai). Kegiatan yang dibatalkan **tidak
+  dihitung** di kartu, saldo dana, `ringkasan`, dan Perlu Ditransfer; di tabel disembunyikan
+  kecuali filter Status = Dibatalkan (ada petunjuk jumlahnya).
+- **Pulihkan:** buka Edit pada baris Dibatalkan, klik Pulihkan. Status kembali ke status
+  sebelum dibatalkan (dibaca dari Catatan; kalau tak ada jejaknya, Draft). PIN kalau status
+  asalnya Approved/Ditransfer/Selesai.
+- **Edit dana:** nama (harus unik; kegiatan yang tertaut ikut diganti namanya), nominal,
+  tanggal, PIC, catatan. PIN Lemon hanya diminta kalau dana sudah dipakai kegiatan.
 
 ## Dana (transfer bulk)
 
@@ -234,6 +263,11 @@ jadi URL lama tidak berguna tanpa secret. Jangan menunda langkah 6 terlalu lama.
    dashboard tetap menerima kegiatan di atas baris 60; yang belum ikut hanya rumus di
    `ringkasan` dan `plafon_fixed` (masih sampai baris 60) serta rumus No/Selisih untuk baris
    yang diketik manual (Selisih di dashboard dihitung sendiri kalau kosong).
+
+9. Versi dengan Edit / Batalkan / Pulihkan / Edit dana: paste Code.gs terbaru lalu Deploy -> New
+   version, lalu jalankan **sekali** menu **Zerodeo Tools -> Perluas Tabel** supaya rumus
+   `ringkasan` dan kolom Terpakai di tab `dana` mengabaikan kegiatan Dibatalkan. Tombol Edit di
+   dashboard baru muncul kalau Apps Script sudah versi ini.
 
 ## Deploy target
 

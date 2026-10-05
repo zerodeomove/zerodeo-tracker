@@ -58,6 +58,146 @@ function toast(msg, kind) {
   toastTimer = setTimeout(() => { el.className = 'toast'; }, kind === 'err' ? 6000 : 4000);
 }
 
+
+// ---------- antrean simpan di background ----------
+// Semua simpan (kecuali popup sekaligus/batch) masuk antrean: popup langsung menutup, simpan jalan
+// berurutan di belakang, dan statusnya tampil di bar tipis di atas layar. Kalau gagal, bar
+// menawarkan "Coba lagi" (kirim ulang isi yang sama) atau "Ubah" (buka lagi popup dengan isian semula).
+// job = { label, payload, rows: [nomor baris yang sedang disimpan], restore: fn|null, okMsg: string|null }
+const saveJobs = [];
+let saveSeq = 0;
+let saveRunning = false;
+
+function enqueueSave(job) {
+  job.id = ++saveSeq;
+  job.state = 'queued';
+  job.error = '';
+  job.reloaded = false;
+  job.rows = job.rows || [];
+  saveJobs.push(job);
+  renderSaveBar();
+  runSaveQueue();
+}
+
+function failSave(job, msg) {
+  job.state = 'err';
+  job.error = msg;
+  job.noRetry = /PIN/i.test(msg);          // PIN salah: kirim ulang percuma, harus diubah
+  if (job.payload.pin) cachedPin = null;
+}
+
+async function runSaveQueue() {
+  if (saveRunning) return;
+  saveRunning = true;
+  try {
+    let job;
+    while ((job = saveJobs.find((j) => j.state === 'queued'))) {
+      job.state = 'running';
+      renderSaveBar();
+      try {
+        const json = await zApi.post(job.payload);
+        if (json.ok) {
+          job.state = 'ok';
+          if (job.payload.pin) cachedPin = job.payload.pin;
+          if (job.okMsg) toast(job.okMsg);
+        } else {
+          failSave(job, json.error || 'Gagal menyimpan.');
+        }
+      } catch (err) {
+        failSave(job, 'Gagal kirim: ' + err.message);
+      }
+      renderSaveBar();
+    }
+  } finally {
+    saveRunning = false;
+  }
+  // satu kali muat ulang setelah antrean habis
+  const done = saveJobs.filter((j) => j.state === 'ok' && !j.reloaded);
+  if (done.length) {
+    await load();
+    done.forEach((j) => { j.reloaded = true; });
+    renderSaveBar();
+    if (typeof renderTracker === 'function' && dataLoaded) renderTracker();
+    setTimeout(() => {
+      done.forEach((j) => { const i = saveJobs.indexOf(j); if (i !== -1) saveJobs.splice(i, 1); });
+      renderSaveBar();
+    }, 2500);
+  }
+}
+
+function retrySave(id) {
+  const job = saveJobs.find((j) => j.id === id);
+  if (!job || job.state !== 'err') return;
+  job.state = 'queued';
+  job.error = '';
+  renderSaveBar();
+  runSaveQueue();
+}
+
+function editFailedSave(id) {
+  const i = saveJobs.findIndex((j) => j.id === id);
+  if (i === -1 || !saveJobs[i].restore) return;
+  if (document.querySelector('.modal-overlay.show')) { toast('Tutup popup yang sedang terbuka dulu, lalu klik Ubah.', 'err'); return; }
+  const job = saveJobs.splice(i, 1)[0];
+  renderSaveBar();
+  renderTracker();
+  job.restore();
+}
+
+function dismissSave(id) {
+  const i = saveJobs.findIndex((j) => j.id === id);
+  if (i !== -1) saveJobs.splice(i, 1);
+  renderSaveBar();
+  renderTracker();
+}
+
+// Nomor baris yang sedang disimpan (atau sudah tersimpan tapi data belum dimuat ulang).
+function pendingRows() {
+  const s = new Set();
+  saveJobs.forEach((j) => {
+    if (j.state === 'queued' || j.state === 'running' || (j.state === 'ok' && !j.reloaded)) j.rows.forEach((r) => s.add(Number(r)));
+  });
+  return s;
+}
+
+function renderSaveBar() {
+  if (dataLoaded && typeof renderTable === 'function') renderTable();   // baris yang sedang disimpan tampil "menyimpan…"
+  const bar = $('saveBar');
+  document.body.classList.toggle('savebar-on', saveJobs.length > 0);
+  bar.innerHTML = saveJobs.map((j) => {
+    const l = zEsc(j.label);
+    if (j.state === 'running') return `<div class="sb-item run"><span class="spin"></span>Menyimpan: ${l}…</div>`;
+    if (j.state === 'queued') return `<div class="sb-item wait">Antre: ${l}</div>`;
+    if (j.state === 'ok') return `<div class="sb-item ok">✓ Tersimpan: ${l}</div>`;
+    return `<div class="sb-item err"><span class="sb-text">Gagal: ${l} — ${zEsc(j.error)}</span>` +
+      (j.noRetry ? '' : `<button onclick="retrySave(${j.id})">Coba lagi</button>`) +
+      (j.restore ? `<button onclick="editFailedSave(${j.id})">Ubah</button>` : '') +
+      `<button class="sb-x" title="Buang" onclick="dismissSave(${j.id})">×</button></div>`;
+  }).join('');
+}
+
+window.addEventListener('beforeunload', (e) => {
+  if (saveJobs.some((j) => j.state !== 'ok')) { e.preventDefault(); e.returnValue = ''; }
+});
+
+// Salin semua isian form (by id) supaya bisa dipulihkan lewat "Ubah" saat simpan gagal.
+function snapshotForm(form) {
+  const snap = {};
+  form.querySelectorAll('input, select, textarea').forEach((el) => {
+    if (!el.id || el.type === 'file') return;
+    snap[el.id] = el.type === 'checkbox' ? el.checked : el.value;
+  });
+  return snap;
+}
+
+function restoreForm(snap) {
+  Object.keys(snap).forEach((id) => {
+    const el = $(id);
+    if (!el) return;
+    if (el.type === 'checkbox') el.checked = snap[id]; else el.value = snap[id];
+  });
+}
+
 // ---------- popup ----------
 function openModal(id) {
   $(id).classList.add('show');
@@ -129,6 +269,7 @@ async function load() {
     plafonData = json.plafon_fixed || [];
     backendBaru = Array.isArray(json.kategori);
     backendDana = Array.isArray(json.dana);
+    backendEdit = json.edit === true;
     danaList = backendDana ? json.dana : [];
     kategoriList = (json.kategori && json.kategori.length) ? json.kategori : KATEGORI_DEFAULT.slice();
     M = {
