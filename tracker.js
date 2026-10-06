@@ -347,7 +347,8 @@ function renderDana() {
       <div class="dana-meta">${zEsc(fmtDate(d.tgl))} · ${zEsc(d.pic || '-')} · ${d.jumlah} kebutuhan</div>
       <div class="dana-nums"><span>Dana ${fmtDanaRp(d.nominal)}</span><span>Terpakai ${fmtDanaRp(d.terpakai)}</span></div>
       <div class="dana-bar"><div class="dana-fill ${minus ? 'over' : ''}" style="width:${pct}%"></div></div>
-      <div class="dana-saldo ${minus ? 'minus' : ''}">${minus ? 'Kelebihan' : 'Saldo'} <b>${fmtDanaRp(Math.abs(d.saldo))}</b></div>
+      <div class="dana-saldo ${minus ? 'minus' : ''}">${minus ? 'Perlu reimburse' : 'Saldo'} <b>${fmtDanaRp(Math.abs(d.saldo))}</b></div>
+      ${minus ? '<div class="dana-plan">Pengeluaran melebihi dana, selisihnya ditalangi dulu.</div>' : ''}
       ${d.rencana > 0 ? `<div class="dana-plan">Rencana belum jalan ${fmtDanaRp(d.rencana)} · sisa bebas ${fmtDanaRp(d.bebas)}</div>` : ''}
       ${(d.menunggu > 0 || backendEdit) ? `<div class="dana-actions">${d.menunggu > 0 ? `<button class="aksi-btn dana" data-nama="${zEsc(d.nama)}" onclick="event.stopPropagation(); openSettle(this.dataset.nama)">Isi Actual sekaligus (${d.menunggu})</button>` : ''}${backendEdit ? `<button class="aksi-btn edit" data-nama="${zEsc(d.nama)}" onclick="event.stopPropagation(); openDanaEdit(this.dataset.nama)">Edit</button>` : ''}</div>` : ''}
     </div>`;

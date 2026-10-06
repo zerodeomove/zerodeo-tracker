@@ -81,7 +81,7 @@ rencana):
 3. Kartu dana menampilkan: dana, **terpakai** (total Actual kebutuhan tertaut), **saldo**
    (dana dikurangi terpakai), serta **rencana belum jalan** (estimasi kebutuhan yang belum
    selesai) dan **sisa bebas** (saldo dikurangi rencana). Pengeluaran yang lebih mahal atau
-   tak terduga otomatis mengurangi saldo; kalau melebihi dana, tampil **Kelebihan** merah.
+   tak terduga otomatis mengurangi saldo; kalau melebihi dana, tampil **Perlu reimburse** merah (selisih yang ditalangi dulu).
    Klik kartu dana untuk menyaring tabel ke kebutuhan dari dana itu.
 4. Kartu **Sudah Cair, Belum Ada Nota** ikut menghitung saldo dana.
 5. **Pengajuan yang sudah ada** (sudah Approved, lalu uangnya ternyata datang sebagai
