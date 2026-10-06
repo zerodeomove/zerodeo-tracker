@@ -26,7 +26,7 @@
 // Penanda versi kode. Ubah setiap kali Code.gs diedit; tampil di dashboard (baris "Terakhir ambil data")
 // supaya kelihatan versi mana yang sebenarnya melayani dashboard (beda dengan isi editor kalau
 // belum Deploy -> New version).
-var KODE_VERSI = '2026-10-06 foto-nota';
+var KODE_VERSI = '2026-10-06 folder-id';
 
 var HEADER_ROW = 4;
 // BUKAN batas jumlah kegiatan. Ini hanya sampai baris mana template di Sheet disiapkan
@@ -68,6 +68,9 @@ var NOTA_FOLDER_NAME = 'Zerodeo - Nota Bukti';
 // ID = bagian terakhir alamat folder: drive.google.com/drive/folders/<ID>.
 // Kalau kosong, folder NOTA_FOLDER_NAME dicari/dibuat otomatis.
 var NOTA_FOLDER_ID_KEY = 'NOTA_FOLDER_ID';
+// ID folder nota (folder 'Nota Zerodeo' di Drive). Ditulis langsung di kode, seperti Makshot.
+// Folder Drive itu privat; ID saja tidak memberi akses ke siapa pun.
+var NOTA_FOLDER_ID = '1fYR1VrVhL9GN9qpLv1uTC70zF2kMvLgT';
 
 // ============================================================
 // MENU
@@ -866,12 +869,12 @@ function handleUpdateStatus(data) {
 // siapa pun yang punya link. Return URL file.
 function saveNotaPhoto_(itemName, base64, mime) {
   var folder;
-  var folderId = String(PropertiesService.getScriptProperties().getProperty(NOTA_FOLDER_ID_KEY) || '').trim();
+  var folderId = String(PropertiesService.getScriptProperties().getProperty(NOTA_FOLDER_ID_KEY) || NOTA_FOLDER_ID || '').trim();
   if (folderId) {
     try {
       folder = DriveApp.getFolderById(folderId);
     } catch (err) {
-      throw new Error('Folder nota tidak bisa dibuka. Cek NOTA_FOLDER_ID di Script Properties (harus ID folder Drive yang bisa diakses akun ini).');
+      throw new Error('Folder nota tidak bisa dibuka. Cek NOTA_FOLDER_ID di Code.gs (harus ID folder Drive yang bisa diakses akun ini).');
     }
   } else {
     var folders = DriveApp.getFoldersByName(NOTA_FOLDER_NAME);

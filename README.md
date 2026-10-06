@@ -47,7 +47,7 @@ Tabel kegiatan diurutkan dari yang **terbaru** di atas, dan di bawah nama item t
 
 **Foto atau PDF nota:** di popup Lengkapi, Data lama, dan Edit (baris Selesai) cukup pilih foto atau PDF (foto otomatis dikecilkan; PDF maksimal 3 MB) dan disimpan ke folder Drive "Zerodeo - Nota Bukti", lalu linknya terisi sendiri di kolom Nota. Link manual tetap boleh; kalau keduanya diisi, foto yang dipakai. Fitur foto di Data lama/Edit baru muncul setelah Apps Script versi terbaru di-deploy.
 
-**Folder nota buatan sendiri (opsional):** buat folder di Drive, salin ID-nya (bagian akhir alamat folder), lalu isi Script Property `NOTA_FOLDER_ID` di Apps Script. Kalau kosong, folder "Zerodeo - Nota Bukti" dibuat otomatis. Nota yang sudah ada tampil sebagai ikon 📎 di tabel, dan bar simpan memberi tautan "Buka nota". Kalau server menjawab sukses tapi file tidak terunggah, bar menampilkan galat.
+**Folder nota buatan sendiri (opsional):** buat folder di Drive, salin ID-nya (bagian akhir alamat folder), lalu tulis di `Code.gs` pada konstanta `NOTA_FOLDER_ID` (sudah berisi folder "Nota Zerodeo"; Script Property `NOTA_FOLDER_ID` masih boleh dipakai untuk menimpanya). Kalau kosong, folder "Zerodeo - Nota Bukti" dibuat otomatis. Nota yang sudah ada tampil sebagai ikon 📎 di tabel, dan bar simpan memberi tautan "Buka nota". Kalau server menjawab sukses tapi file tidak terunggah, bar menampilkan galat.
 
 ## Edit, Batalkan, Pulihkan
 
