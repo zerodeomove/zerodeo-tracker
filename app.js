@@ -4,6 +4,8 @@
 const $ = (id) => document.getElementById(id);
 const PIC_LIST = ['Lenno', 'Ricko', 'Yanuar', 'Christina'];
 const TIPE_LIST = ['Capex', 'Opex'];
+// Harus sama dengan KODE_VERSI di Code.gs. Kalau Apps Script yang melayani berbeda, muncul peringatan.
+const EXPECTED_VERSI = '2026-10-06 folder-id';
 
 function fmtRupiah(n) {
   if (n === null || n === undefined || n === '' || isNaN(n)) return '-';
@@ -279,6 +281,13 @@ async function load() {
     backendEdit = json.edit === true;
     backendFoto = json.fotoNota === true;
     backendVersi = json.versi || 'lama';
+    const vb = $('versiBanner');
+    if (backendVersi !== EXPECTED_VERSI) {
+      vb.style.display = '';
+      vb.textContent = 'Apps Script yang melayani dashboard ini versi "' + backendVersi + '", seharusnya "' + EXPECTED_VERSI + '". Fitur baru (misalnya upload nota) belum jalan. Di Apps Script: Deploy → Manage deployments → ikon pensil → di Version pilih "New version" (bukan Version yang lama) → Deploy.';
+    } else {
+      vb.style.display = 'none';
+    }
     danaList = backendDana ? json.dana : [];
     kategoriList = (json.kategori && json.kategori.length) ? json.kategori : KATEGORI_DEFAULT.slice();
     M = {

@@ -297,6 +297,7 @@ h2.sec:first-child { margin-top: 0; }
 .sb-item .sb-x { border-color: transparent; font-size: 16px; line-height: 1; padding: 0 6px; }
 .spin { width: 12px; height: 12px; border: 2px solid rgba(255,255,255,.4); border-top-color: #fff; border-radius: 50%; animation: sbspin .8s linear infinite; flex: none; }
 @keyframes sbspin { to { transform: rotate(360deg); } }
+.versi-banner { background: var(--amber-bg); color: var(--amber); padding: 10px 14px; border-radius: 8px; font-size: 13px; margin: 0 0 12px; border: 1px solid var(--amber); }
 body.savebar-on .toast { top: 56px; }
 .nota-link { text-decoration: none; margin-left: 4px; }
 .nota-open { font-size: 13px; color: var(--accent); }
