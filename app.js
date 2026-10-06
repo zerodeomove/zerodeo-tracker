@@ -270,6 +270,7 @@ async function load() {
     backendBaru = Array.isArray(json.kategori);
     backendDana = Array.isArray(json.dana);
     backendEdit = json.edit === true;
+    backendFoto = json.fotoNota === true;
     danaList = backendDana ? json.dana : [];
     kategoriList = (json.kategori && json.kategori.length) ? json.kategori : KATEGORI_DEFAULT.slice();
     M = {

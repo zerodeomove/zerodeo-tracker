@@ -26,6 +26,7 @@ let danaList = [];
 let backendDana = false;
 // Apps Script versi baru mengerti edit / batalkan / pulihkan / edit dana (doGet mengirim edit: true).
 let backendEdit = false;
+let backendFoto = false;   // upload foto nota di Data lama / Edit (butuh Apps Script terbaru)
 const PIN_STATUSES = ['Approved', 'Ditransfer', 'Selesai'];
 
 // ---------- approve / reject (PIN diverifikasi di Apps Script) ----------
@@ -740,6 +741,9 @@ function openKegiatan() {
   fillKategori();
   fillDana();
   $('k-arsip').closest('label').style.display = backendBaru ? '' : 'none';
+  photos.k = null;
+  showPhoto('k');
+  $('k-photo').closest('label').style.display = backendFoto ? '' : 'none';
   syncKegiatanForm();
   openModal('m-kegiatan');
 }
@@ -780,6 +784,8 @@ $('k-submit-more').addEventListener('click', () => { keepOpenAfterSave = true; }
 // memasukkan banyak data berurutan cepat.
 function clearForNext() {
   ['k-item', 'k-estimasi', 'k-deadline', 'k-actual', 'k-nominal', 'k-nota', 'k-kategoriNew'].forEach((id) => { $(id).value = ''; });
+  photos.k = null;
+  showPhoto('k');
   clearErrors($('kegiatanForm'));
   syncKegiatanForm();
   $('k-item').focus();
@@ -813,6 +819,7 @@ $('kegiatanForm').addEventListener('submit', (e) => {
       tglTransfer: $('k-tgltf').value || null,
       nota: $('k-nota').value.trim() || null,
     });
+    if (photos.k) Object.assign(payload, { photoBase64: photos.k.base64, photoMime: 'image/jpeg' });
   }
   const dana = chosenDana();
   if (dana) {
@@ -821,19 +828,54 @@ $('kegiatanForm').addEventListener('submit', (e) => {
   }
 
   const snap = snapshotForm($('kegiatanForm'));
+  const photoK = arsip ? photos.k : null;
   enqueueSave({
-    label: payload.item + (arsip ? ' (data lama)' : '') + (dana ? ' — dari dana "' + dana + '"' : ''),
+    label: payload.item + (arsip ? ' (data lama)' : '') + (photoK ? ' (+ foto nota)' : '') + (dana ? ' — dari dana "' + dana + '"' : ''),
     payload: payload, rows: [],
-    restore: () => { openKegiatan(); restoreForm(snap); syncKegiatanForm(); }
+    restore: () => { openKegiatan(); restoreForm(snap); photos.k = photoK; showPhoto('k'); syncKegiatanForm(); }
   });
   if (keepOpen) {
     setMsg($('k-msg'), '"' + payload.item + '" masuk antrean simpan. Silakan isi yang berikutnya.', 'ok');
     clearForNext();
   } else {
     $('kegiatanForm').reset();
+    photos.k = null;
+    showPhoto('k');
     syncKegiatanForm();
     closeModal('m-kegiatan');
   }
+});
+
+// ---------- foto nota di popup Data lama (k) dan Edit (ed) ----------
+// Foto dikecilkan di browser (compressImage), dikirim sebagai base64, dan Apps Script
+// menyimpannya ke folder Drive "Zerodeo - Nota Bukti" lalu mengisi link notanya sendiri.
+const photos = { k: null, ed: null };
+
+function showPhoto(p) {
+  const v = photos[p];
+  $(p + '-photo-prev').style.display = v ? 'block' : 'none';
+  if (v) {
+    $(p + '-photo-img').src = v.dataUrl;
+    $(p + '-photo-size').textContent = 'Ukuran setelah dikecilkan: ± ' + v.kb + ' KB';
+  } else {
+    $(p + '-photo').value = '';
+  }
+}
+
+['k', 'ed'].forEach((p) => {
+  $(p + '-photo').addEventListener('change', async () => {
+    const file = $(p + '-photo').files[0];
+    photos[p] = null;
+    showPhoto(p);
+    if (!file) return;
+    try {
+      photos[p] = await compressImage(file);
+      showPhoto(p);
+    } catch (err) {
+      $(p + '-photo').value = '';
+      setMsg($(p === 'k' ? 'k-msg' : 'ed-msg'), err.message, 'err');
+    }
+  });
 });
 
 // ---------- popup: lengkapi (actual + foto nota) ----------
@@ -1008,6 +1050,9 @@ function openEdit(row) {
   $('ed-tgltf').value = editOrig.tgltf;
   $('ed-actual').value = editOrig.actual;
   $('ed-nota').value = editOrig.nota;
+  photos.ed = null;
+  showPhoto('ed');
+  $('ed-photo').closest('label').style.display = backendFoto ? '' : 'none';
 
   const sudahTf = status === 'Ditransfer' || status === 'Selesai';
   $('ed-sub').textContent = (r['Item Kegiatan'] || '-') + ' · status ' + status + (r['Dana'] ? ' · dari dana "' + r['Dana'] + '"' : '');
@@ -1074,6 +1119,13 @@ $('editForm').addEventListener('submit', (e) => {
     payload[map[k]] = num[k] ? Number(cur[k]) : cur[k];
     changed++;
   });
+  const photoEd = sel ? photos.ed : null;
+  if (photoEd) {
+    delete payload.nota;   // foto menggantikan link
+    payload.photoBase64 = photoEd.base64;
+    payload.photoMime = 'image/jpeg';
+    changed++;
+  }
   if (!changed) { closeModal('m-edit'); toast('Tidak ada perubahan.'); return; }
   const pin = editPin();
   if (pin === null) return;
@@ -1082,8 +1134,8 @@ $('editForm').addEventListener('submit', (e) => {
   const snap = snapshotForm($('editForm'));
   delete snap['ed-pin'];
   enqueueSave({
-    label: 'Edit: ' + (o.item || 'kegiatan'), payload: payload, rows: [row],
-    restore: () => { openEdit(row); restoreForm(snap); }
+    label: 'Edit: ' + (o.item || 'kegiatan') + (photoEd ? ' (+ foto nota)' : ''), payload: payload, rows: [row],
+    restore: () => { openEdit(row); restoreForm(snap); photos.ed = photoEd; showPhoto('ed'); }
   });
   closeModal('m-edit');
 });

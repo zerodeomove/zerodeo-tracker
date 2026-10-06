@@ -667,6 +667,7 @@ function doGet(e) {
   // jalan. Dashboard menganggap fitur itu belum tersedia kalau kuncinya tidak ada.
   try { payload.kategori = getKategoriList(); } catch (err) { payload.kategori_error = String(err.message); }
   try { payload.dana = getDanaData_(); } catch (err) { payload.dana_error = String(err.message); }
+  payload.fotoNota = true;   // penanda: backend ini menerima photoBase64 di data lama dan edit
   payload.edit = true;   // penanda: backend ini mengerti edit / batalkan / pulihkan / edit dana
   var m = mkt_getData();
   payload.strategi = m.strategi;
@@ -776,6 +777,9 @@ function handleAddKegiatan(data) {
       danaName = dn['Nama Dana'];
     }
 
+    // Foto nota (data lama): diunggah ke Drive, linknya jadi nota. Setelah semua validasi lolos.
+    if (arsip && data.photoBase64) nota = saveNotaPhoto_(data.item, data.photoBase64, data.photoMime);
+
     // Tidak ada batas jumlah kegiatan: kalau semua baris template terisi, baris baru
     // (beserta rumusnya) dibuat otomatis.
     var targetRow = nextKegiatanRow_(sheet);
@@ -848,6 +852,19 @@ function handleUpdateStatus(data) {
   return jsonResponse({ ok: true, row: row, status: data.status });
 }
 
+// Simpan foto nota (base64) ke folder Drive NOTA_FOLDER_NAME (dibuat otomatis), bisa dilihat
+// siapa pun yang punya link. Return URL file.
+function saveNotaPhoto_(itemName, base64, mime) {
+  var folders = DriveApp.getFoldersByName(NOTA_FOLDER_NAME);
+  var folder = folders.hasNext() ? folders.next() : DriveApp.createFolder(NOTA_FOLDER_NAME);
+  var safeName = String(itemName || 'kegiatan').replace(/[\\\/:*?"<>|]/g, '-');
+  var stamp = Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'yyyyMMdd-HHmmss');
+  var blob = Utilities.newBlob(Utilities.base64Decode(base64), mime || 'image/jpeg', 'Nota - ' + safeName + ' - ' + stamp + '.jpg');
+  var file = folder.createFile(blob);
+  file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
+  return file.getUrl();
+}
+
 // Lengkapi kegiatan yang sudah Ditransfer: isi Actual + foto nota, status -> Selesai.
 // Tidak pakai PIN (ini kelanjutan kerja tim, bukan keputusan Lemon).
 // Foto opsional; kalau ada, disimpan ke folder Drive NOTA_FOLDER_NAME.
@@ -870,15 +887,7 @@ function handleCompleteKegiatan(data) {
 
   var fileUrl = '';
   if (data.photoBase64) {
-    var folders = DriveApp.getFoldersByName(NOTA_FOLDER_NAME);
-    var folder = folders.hasNext() ? folders.next() : DriveApp.createFolder(NOTA_FOLDER_NAME);
-    var mime = data.photoMime || 'image/jpeg';
-    var itemName = String(sheet.getRange(row, COL.ITEM).getValue() || 'kegiatan').replace(/[\\\/:*?"<>|]/g, '-');
-    var stamp = Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'yyyyMMdd-HHmmss');
-    var blob = Utilities.newBlob(Utilities.base64Decode(data.photoBase64), mime, 'Nota - ' + itemName + ' - ' + stamp + '.jpg');
-    var file = folder.createFile(blob);
-    file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
-    fileUrl = file.getUrl();
+    fileUrl = saveNotaPhoto_(sheet.getRange(row, COL.ITEM).getValue(), data.photoBase64, data.photoMime);
   }
 
   sheet.getRange(row, COL.ACTUAL).setValue(actual).setNumberFormat(CURR_FORMAT);
@@ -1194,6 +1203,14 @@ function handleEditKegiatan(data) {
       var nota = String(data.nota || '').trim();
       if (nota && !/^https?:\/\/\S+$/i.test(nota)) return jsonResponse({ ok: false, error: 'Link nota harus diawali http:// atau https://' });
       add(COL.NOTA, nota, null, 'Nota', 'txt');
+    }
+
+    // Foto nota baru: diunggah ke Drive setelah semua validasi lolos; linknya menggantikan nota.
+    if (data.photoBase64) {
+      if (status !== 'Selesai') return jsonResponse({ ok: false, error: 'Foto nota baru bisa diunggah setelah status Selesai.' });
+      writes = writes.filter(function (w) { return w.col !== COL.NOTA; });
+      var url = saveNotaPhoto_(sheet.getRange(row, COL.ITEM).getValue(), data.photoBase64, data.photoMime);
+      writes.push({ col: COL.NOTA, value: url, fmt: null, label: 'Nota', kind: 'txt', old: sheet.getRange(row, COL.NOTA).getValue() });
     }
 
     if (!writes.length) return jsonResponse({ ok: true, row: row, unchanged: true });

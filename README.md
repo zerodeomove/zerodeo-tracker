@@ -45,6 +45,8 @@ data berikutnya.
 
 Tabel kegiatan diurutkan dari yang **terbaru** di atas, dan di bawah nama item tertulis *dicatat <tanggal>* (dari kolom Tanggal Dicatat di Sheet).
 
+**Foto nota:** di popup Lengkapi, Data lama, dan Edit (baris Selesai) cukup pilih foto; otomatis dikecilkan dan disimpan ke folder Drive "Zerodeo - Nota Bukti", lalu linknya terisi sendiri di kolom Nota. Link manual tetap boleh; kalau keduanya diisi, foto yang dipakai. Fitur foto di Data lama/Edit baru muncul setelah Apps Script versi terbaru di-deploy.
+
 ## Edit, Batalkan, Pulihkan
 
 Tombol **Edit** ada di setiap baris tabel dan di setiap kartu dana. Tidak ada hapus
