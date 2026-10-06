@@ -43,6 +43,8 @@ Di popup **Kebutuhan baru** ada tombol **Simpan & tambah lagi**: yang tadi masuk
 formulir dikosongkan (item, jumlah, nota; isian yang biasanya sama dipertahankan) untuk
 data berikutnya.
 
+Tabel kegiatan diurutkan dari yang **terbaru** di atas, dan di bawah nama item tertulis *dicatat <tanggal>* (dari kolom Tanggal Dicatat di Sheet).
+
 ## Edit, Batalkan, Pulihkan
 
 Tombol **Edit** ada di setiap baris tabel dan di setiap kartu dana. Tidak ada hapus

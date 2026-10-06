@@ -213,6 +213,9 @@ function renderTable() {
     return true;
   });
 
+  // terbaru di atas (Tanggal Dicatat, lalu nomor baris)
+  rows.sort((a, b) => String(b['Tanggal Dicatat'] || '').localeCompare(String(a['Tanggal Dicatat'] || '')) || Number(b['_row']) - Number(a['_row']));
+
   $('hiddenHint').textContent = hidden ? hidden + ' dibatalkan disembunyikan (saring Status: Dibatalkan)' : '';
   const pend = pendingRows();
   $('rowCount').textContent = rows.length + ' kegiatan';
@@ -243,7 +246,7 @@ function renderTable() {
     }
     if (!pend.has(rowNo)) aksi += editBtn;
     return `<tr>
-      <td class="item">${zEsc(r['Item Kegiatan'] || '-')}${r['Dana'] ? `<div class="sub">Dana: ${zEsc(r['Dana'])}</div>` : ''}</td>
+      <td class="item">${zEsc(r['Item Kegiatan'] || '-')}<div class="sub">${r['Tanggal Dicatat'] ? 'dicatat ' + zEsc(fmtDate(r['Tanggal Dicatat'])) : ''}${r['Tanggal Dicatat'] && r['Dana'] ? ' · ' : ''}${r['Dana'] ? 'Dana: ' + zEsc(r['Dana']) : ''}</div></td>
       <td>${zEsc(r['Kategori'] || '-')}</td>
       <td>${zEsc(r['Tipe'] || '-')}</td>
       <td>${zEsc(r['PIC'] || '-')}</td>
