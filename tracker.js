@@ -247,7 +247,7 @@ function renderTable() {
     }
     if (!pend.has(rowNo)) aksi += editBtn;
     return `<tr>
-      <td class="item">${zEsc(r['Item Kegiatan'] || '-')}<div class="sub">${r['Tanggal Dicatat'] ? 'dicatat ' + zEsc(fmtDate(r['Tanggal Dicatat'])) : ''}${r['Tanggal Dicatat'] && r['Dana'] ? ' · ' : ''}${r['Dana'] ? 'Dana: ' + zEsc(r['Dana']) : ''}</div></td>
+      <td class="item">${zEsc(r['Item Kegiatan'] || '-')}${/^https?:\/\//i.test(r['Nota/Bukti'] || '') ? ` <a class="nota-link" href="${zEsc(r['Nota/Bukti'])}" target="_blank" rel="noopener noreferrer" title="Buka nota">📎</a>` : ''}<div class="sub">${r['Tanggal Dicatat'] ? 'dicatat ' + zEsc(fmtDate(r['Tanggal Dicatat'])) : ''}${r['Tanggal Dicatat'] && r['Dana'] ? ' · ' : ''}${r['Dana'] ? 'Dana: ' + zEsc(r['Dana']) : ''}</div></td>
       <td>${zEsc(r['Kategori'] || '-')}</td>
       <td>${zEsc(r['Tipe'] || '-')}</td>
       <td>${zEsc(r['PIC'] || '-')}</td>
@@ -831,7 +831,7 @@ $('kegiatanForm').addEventListener('submit', (e) => {
   const photoK = arsip ? photos.k : null;
   enqueueSave({
     label: payload.item + (arsip ? ' (data lama)' : '') + (photoK ? ' (+ foto nota)' : '') + (dana ? ' — dari dana "' + dana + '"' : ''),
-    payload: payload, rows: [],
+    payload: payload, rows: [], expectNota: !!photoK,
     restore: () => { openKegiatan(); restoreForm(snap); photos.k = photoK; showPhoto('k'); syncKegiatanForm(); }
   });
   if (keepOpen) {
@@ -1069,6 +1069,9 @@ function openEdit(row) {
   $('ed-tgltf').value = editOrig.tgltf;
   $('ed-actual').value = editOrig.actual;
   $('ed-nota').value = editOrig.nota;
+  const notaOpen = $('ed-nota-open');
+  notaOpen.style.display = /^https?:\/\//i.test(editOrig.nota) ? '' : 'none';
+  if (notaOpen.style.display === '') notaOpen.href = editOrig.nota;
   photos.ed = null;
   showPhoto('ed');
   $('ed-photo').closest('label').style.display = backendFoto ? '' : 'none';
@@ -1153,7 +1156,7 @@ $('editForm').addEventListener('submit', (e) => {
   const snap = snapshotForm($('editForm'));
   delete snap['ed-pin'];
   enqueueSave({
-    label: 'Edit: ' + (o.item || 'kegiatan') + (photoEd ? ' (+ foto nota)' : ''), payload: payload, rows: [row],
+    label: 'Edit: ' + (o.item || 'kegiatan') + (photoEd ? ' (+ foto nota)' : ''), payload: payload, rows: [row], expectNota: !!photoEd,
     restore: () => { openEdit(row); restoreForm(snap); photos.ed = photoEd; showPhoto('ed'); }
   });
   closeModal('m-edit');

@@ -99,6 +99,13 @@ async function runSaveQueue() {
         if (json.ok) {
           job.state = 'ok';
           if (job.payload.pin) cachedPin = job.payload.pin;
+          if (job.expectNota && !json.nota) {
+            // Server menjawab sukses tapi tidak mengunggah file: Apps Script kemungkinan belum versi terbaru.
+            failSave(job, 'Server menjawab sukses tapi file nota tidak terunggah. Pastikan Apps Script sudah versi terbaru (Deploy → New version).');
+            renderSaveBar();
+            continue;
+          }
+          if (/^https:\/\/(drive|docs)\.google\.com\//.test(json.nota || '')) job.notaUrl = json.nota;
           if (job.okMsg) toast(job.okMsg);
         } else {
           failSave(job, json.error || 'Gagal menyimpan.');
@@ -168,7 +175,7 @@ function renderSaveBar() {
     const l = zEsc(j.label);
     if (j.state === 'running') return `<div class="sb-item run"><span class="spin"></span>Menyimpan: ${l}…</div>`;
     if (j.state === 'queued') return `<div class="sb-item wait">Antre: ${l}</div>`;
-    if (j.state === 'ok') return `<div class="sb-item ok">✓ Tersimpan: ${l}</div>`;
+    if (j.state === 'ok') return `<div class="sb-item ok">✓ Tersimpan: ${l}` + (j.notaUrl ? ` <a class="sb-link" href="${zEsc(j.notaUrl)}" target="_blank" rel="noopener noreferrer">Buka nota</a>` : '') + '</div>';
     return `<div class="sb-item err"><span class="sb-text">Gagal: ${l} — ${zEsc(j.error)}</span>` +
       (j.noRetry ? '' : `<button onclick="retrySave(${j.id})">Coba lagi</button>`) +
       (j.restore ? `<button onclick="editFailedSave(${j.id})">Ubah</button>` : '') +

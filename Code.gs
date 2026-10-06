@@ -59,6 +59,10 @@ var COL = {
 };
 
 var NOTA_FOLDER_NAME = 'Zerodeo - Nota Bukti';
+// Opsional: ID folder Drive buatan sendiri, diisi di Script Properties (NOTA_FOLDER_ID).
+// ID = bagian terakhir alamat folder: drive.google.com/drive/folders/<ID>.
+// Kalau kosong, folder NOTA_FOLDER_NAME dicari/dibuat otomatis.
+var NOTA_FOLDER_ID_KEY = 'NOTA_FOLDER_ID';
 
 // ============================================================
 // MENU
@@ -810,7 +814,7 @@ function handleAddKegiatan(data) {
       sheet.getRange(targetRow, COL.CATATAN).setValue('Data lama, dicatat dari dashboard ' + stamp);
     }
 
-    return jsonResponse({ ok: true, row: targetRow });
+    return jsonResponse({ ok: true, row: targetRow, nota: (arsip && data.photoBase64) ? nota : undefined });
   } finally {
     lock.releaseLock();
   }
@@ -855,8 +859,18 @@ function handleUpdateStatus(data) {
 // Simpan foto nota (base64) ke folder Drive NOTA_FOLDER_NAME (dibuat otomatis), bisa dilihat
 // siapa pun yang punya link. Return URL file.
 function saveNotaPhoto_(itemName, base64, mime) {
-  var folders = DriveApp.getFoldersByName(NOTA_FOLDER_NAME);
-  var folder = folders.hasNext() ? folders.next() : DriveApp.createFolder(NOTA_FOLDER_NAME);
+  var folder;
+  var folderId = String(PropertiesService.getScriptProperties().getProperty(NOTA_FOLDER_ID_KEY) || '').trim();
+  if (folderId) {
+    try {
+      folder = DriveApp.getFolderById(folderId);
+    } catch (err) {
+      throw new Error('Folder nota tidak bisa dibuka. Cek NOTA_FOLDER_ID di Script Properties (harus ID folder Drive yang bisa diakses akun ini).');
+    }
+  } else {
+    var folders = DriveApp.getFoldersByName(NOTA_FOLDER_NAME);
+    folder = folders.hasNext() ? folders.next() : DriveApp.createFolder(NOTA_FOLDER_NAME);
+  }
   var isPdf = mime === 'application/pdf';
   mime = isPdf ? 'application/pdf' : 'image/jpeg';   // hanya foto (JPEG) atau PDF
   var safeName = String(itemName || 'kegiatan').replace(/[\\\/:*?"<>|]/g, '-');
@@ -896,7 +910,7 @@ function handleCompleteKegiatan(data) {
   if (fileUrl) sheet.getRange(row, COL.NOTA).setValue(fileUrl);
   sheet.getRange(row, COL.STATUS).setValue('Selesai');
 
-  return jsonResponse({ ok: true, row: row });
+  return jsonResponse({ ok: true, row: row, nota: fileUrl || undefined });
 }
 
 // Tandai Ditransfer: isi PIC Transaksi + Nominal Transfer + Tgl Transfer,
@@ -1225,7 +1239,7 @@ function handleEditKegiatan(data) {
       parts.push(w.label + ' ' + fmtCell_(w.old, w.kind) + ' → ' + fmtCell_(w.value, w.kind));
     });
     appendCatatan_(sheet, row, 'Diedit ' + stampNow_() + ': ' + parts.join('; '));
-    return jsonResponse({ ok: true, row: row, changed: writes.length });
+    return jsonResponse({ ok: true, row: row, changed: writes.length, nota: data.photoBase64 ? url : undefined });
   } finally {
     lock.releaseLock();
   }
