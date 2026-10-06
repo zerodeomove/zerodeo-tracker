@@ -299,6 +299,7 @@ h2.sec:first-child { margin-top: 0; }
 @keyframes sbspin { to { transform: rotate(360deg); } }
 .versi-banner { background: var(--amber-bg); color: var(--amber); padding: 10px 14px; border-radius: 8px; font-size: 13px; margin: 0 0 12px; border: 1px solid var(--amber); }
 body.savebar-on .toast { top: 56px; }
+#nota-img { max-width: 100%; max-height: 70vh; border-radius: 8px; border: 1px solid var(--border); display: block; margin: 0 auto 8px; cursor: zoom-in; }
 .nota-link { text-decoration: none; margin-left: 4px; }
 .nota-open { font-size: 13px; color: var(--accent); }
 .sb-link { color: #fff; text-decoration: underline; margin-left: 4px; }

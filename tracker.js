@@ -248,7 +248,7 @@ function renderTable() {
     }
     if (!pend.has(rowNo)) aksi += editBtn;
     return `<tr>
-      <td class="item">${zEsc(r['Item Kegiatan'] || '-')}${/^https?:\/\//i.test(r['Nota/Bukti'] || '') ? ` <a class="nota-link" href="${zEsc(r['Nota/Bukti'])}" target="_blank" rel="noopener noreferrer" title="Buka nota">📎</a>` : ''}<div class="sub">${r['Tanggal Dicatat'] ? 'dicatat ' + zEsc(fmtDate(r['Tanggal Dicatat'])) : ''}${r['Tanggal Dicatat'] && r['Dana'] ? ' · ' : ''}${r['Dana'] ? 'Dana: ' + zEsc(r['Dana']) : ''}</div></td>
+      <td class="item">${zEsc(r['Item Kegiatan'] || '-')}${/^https?:\/\//i.test(r['Nota/Bukti'] || '') ? ` <a class="nota-link" href="${zEsc(r['Nota/Bukti'])}" data-item="${zEsc(r['Item Kegiatan'] || '')}" onclick="return openNota(this)" target="_blank" rel="noopener noreferrer" title="Lihat nota">📎</a>` : ''}<div class="sub">${r['Tanggal Dicatat'] ? 'dicatat ' + zEsc(fmtDate(r['Tanggal Dicatat'])) : ''}${r['Tanggal Dicatat'] && r['Dana'] ? ' · ' : ''}${r['Dana'] ? 'Dana: ' + zEsc(r['Dana']) : ''}</div></td>
       <td>${zEsc(r['Kategori'] || '-')}</td>
       <td>${zEsc(r['Tipe'] || '-')}</td>
       <td>${zEsc(r['PIC'] || '-')}</td>
@@ -1017,6 +1017,24 @@ $('completeForm').addEventListener('submit', (e) => {
   });
   closeModal('m-complete');
 });
+
+// ---------- pratinjau nota: klik 📎 = pratinjau, klik gambar = buka file penuh ----------
+// Link Drive (/d/<id>) ditampilkan sebagai gambar kecil (thumbnail, PDF = halaman pertama).
+// Link lain (bukan Drive) langsung dibuka di tab baru. return false = jangan ikuti href.
+function openNota(a) {
+  const url = a.href;
+  const m = /drive\.google\.com\/file\/d\/([\w-]+)/.exec(url);
+  if (!m) return true;
+  const img = $('nota-img');
+  $('nota-title').textContent = a.dataset.item || 'Nota';
+  $('nota-open').href = url;
+  $('nota-fallback').style.display = 'none';
+  img.style.display = '';
+  img.onerror = () => { img.style.display = 'none'; $('nota-fallback').style.display = ''; };
+  img.src = 'https://drive.google.com/thumbnail?id=' + m[1] + '&sz=w1000';
+  openModal('m-nota');
+  return false;
+}
 
 // ---------- popup: edit kegiatan (+ batalkan / pulihkan) ----------
 let editRow = null;
