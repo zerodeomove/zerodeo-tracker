@@ -23,6 +23,11 @@
  * sebagai file terpisah, lalu Deploy -> New version.
  */
 
+// Penanda versi kode. Ubah setiap kali Code.gs diedit; tampil di dashboard (baris "Terakhir ambil data")
+// supaya kelihatan versi mana yang sebenarnya melayani dashboard (beda dengan isi editor kalau
+// belum Deploy -> New version).
+var KODE_VERSI = '2026-10-06 foto-nota';
+
 var HEADER_ROW = 4;
 // BUKAN batas jumlah kegiatan. Ini hanya sampai baris mana template di Sheet disiapkan
 // (rumus No/Selisih, format, dropdown). Lewat dari itu, dashboard membuat baris dan
@@ -671,6 +676,7 @@ function doGet(e) {
   // jalan. Dashboard menganggap fitur itu belum tersedia kalau kuncinya tidak ada.
   try { payload.kategori = getKategoriList(); } catch (err) { payload.kategori_error = String(err.message); }
   try { payload.dana = getDanaData_(); } catch (err) { payload.dana_error = String(err.message); }
+  payload.versi = KODE_VERSI;
   payload.fotoNota = true;   // penanda: backend ini menerima photoBase64 di data lama dan edit
   payload.edit = true;   // penanda: backend ini mengerti edit / batalkan / pulihkan / edit dana
   var m = mkt_getData();

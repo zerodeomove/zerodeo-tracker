@@ -278,6 +278,7 @@ async function load() {
     backendDana = Array.isArray(json.dana);
     backendEdit = json.edit === true;
     backendFoto = json.fotoNota === true;
+    backendVersi = json.versi || 'lama';
     danaList = backendDana ? json.dana : [];
     kategoriList = (json.kategori && json.kategori.length) ? json.kategori : KATEGORI_DEFAULT.slice();
     M = {
@@ -285,7 +286,7 @@ async function load() {
       strategi: json.strategi || [], lane: json.lane || [],
       channel: json.channel || [], hasil_event: json.hasil_event || []
     };
-    setSync('Terakhir ambil data: ' + new Date().toLocaleString('id-ID'), false);
+    setSync('Terakhir ambil data: ' + new Date().toLocaleString('id-ID') + ' · Apps Script: ' + backendVersi, false);
     renderTracker();
     renderMarketing();
   } catch (err) {

@@ -26,6 +26,7 @@ let danaList = [];
 let backendDana = false;
 // Apps Script versi baru mengerti edit / batalkan / pulihkan / edit dana (doGet mengirim edit: true).
 let backendEdit = false;
+let backendVersi = '';   // penanda versi Apps Script yang sedang melayani (doGet.versi)
 let backendFoto = false;   // upload foto nota di Data lama / Edit (butuh Apps Script terbaru)
 const PIN_STATUSES = ['Approved', 'Ditransfer', 'Selesai'];
 
