@@ -45,7 +45,7 @@ data berikutnya.
 
 Tabel kegiatan diurutkan dari yang **terbaru** di atas, dan di bawah nama item tertulis *dicatat <tanggal>* (dari kolom Tanggal Dicatat di Sheet).
 
-**Foto nota:** di popup Lengkapi, Data lama, dan Edit (baris Selesai) cukup pilih foto; otomatis dikecilkan dan disimpan ke folder Drive "Zerodeo - Nota Bukti", lalu linknya terisi sendiri di kolom Nota. Link manual tetap boleh; kalau keduanya diisi, foto yang dipakai. Fitur foto di Data lama/Edit baru muncul setelah Apps Script versi terbaru di-deploy.
+**Foto atau PDF nota:** di popup Lengkapi, Data lama, dan Edit (baris Selesai) cukup pilih foto atau PDF (foto otomatis dikecilkan; PDF maksimal 3 MB) dan disimpan ke folder Drive "Zerodeo - Nota Bukti", lalu linknya terisi sendiri di kolom Nota. Link manual tetap boleh; kalau keduanya diisi, foto yang dipakai. Fitur foto di Data lama/Edit baru muncul setelah Apps Script versi terbaru di-deploy.
 
 ## Edit, Batalkan, Pulihkan
 

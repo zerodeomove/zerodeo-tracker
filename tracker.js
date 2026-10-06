@@ -819,7 +819,7 @@ $('kegiatanForm').addEventListener('submit', (e) => {
       tglTransfer: $('k-tgltf').value || null,
       nota: $('k-nota').value.trim() || null,
     });
-    if (photos.k) Object.assign(payload, { photoBase64: photos.k.base64, photoMime: 'image/jpeg' });
+    if (photos.k) Object.assign(payload, { photoBase64: photos.k.base64, photoMime: photos.k.mime });
   }
   const dana = chosenDana();
   if (dana) {
@@ -851,15 +851,20 @@ $('kegiatanForm').addEventListener('submit', (e) => {
 // menyimpannya ke folder Drive "Zerodeo - Nota Bukti" lalu mengisi link notanya sendiri.
 const photos = { k: null, ed: null };
 
+// Isi kotak preview: gambar untuk foto, nama file untuk PDF.
+function paintPreview(wrapEl, imgEl, sizeEl, v) {
+  wrapEl.style.display = v ? 'block' : 'none';
+  if (!v) return;
+  const pdf = v.mime === 'application/pdf';
+  imgEl.style.display = pdf ? 'none' : '';
+  if (!pdf) imgEl.src = v.dataUrl;
+  sizeEl.textContent = pdf ? 'PDF: ' + v.name + ' · ' + v.kb + ' KB' : 'Ukuran setelah dikecilkan: ± ' + v.kb + ' KB';
+}
+
 function showPhoto(p) {
   const v = photos[p];
-  $(p + '-photo-prev').style.display = v ? 'block' : 'none';
-  if (v) {
-    $(p + '-photo-img').src = v.dataUrl;
-    $(p + '-photo-size').textContent = 'Ukuran setelah dikecilkan: ± ' + v.kb + ' KB';
-  } else {
-    $(p + '-photo').value = '';
-  }
+  paintPreview($(p + '-photo-prev'), $(p + '-photo-img'), $(p + '-photo-size'), v);
+  if (!v) $(p + '-photo').value = '';
 }
 
 ['k', 'ed'].forEach((p) => {
@@ -883,10 +888,12 @@ const MAX_DIM = 1600;
 const JPEG_QUALITY = 0.7;
 let completeRow = null;
 let photoBase64 = null; // hasil kompresi, tanpa prefix data:...;base64,
+let photoInfo = null;   // { mime, name, kb, dataUrl } untuk preview dan jenis file
 
 function openComplete(row) {
   completeRow = row;
   photoBase64 = null;
+  photoInfo = null;
   $('completeForm').reset();
   clearErrors($('completeForm'));
   $('c-preview').style.display = 'none';
@@ -922,8 +929,23 @@ function openComplete(row) {
   openModal('m-complete');
 }
 
-// Kecilkan foto: max sisi 1600px, JPEG kualitas 0.7. Return { base64, dataUrl, kb }.
+// Nota: foto dikecilkan (max sisi 1600px, JPEG kualitas 0.7); PDF dikirim apa adanya (maks
+// PDF_MAX_KB, karena Vercel membatasi ukuran kiriman). Return { base64, dataUrl, kb, mime, name }.
+const PDF_MAX_KB = 3000;
 function compressImage(file) {
+  if (file.type === 'application/pdf' || /\.pdf$/i.test(file.name || '')) {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onerror = () => reject(new Error('Gagal membaca file PDF.'));
+      reader.onload = () => {
+        const base64 = String(reader.result).split(',')[1] || '';
+        const kb = Math.round(base64.length * 3 / 4 / 1024);
+        if (kb > PDF_MAX_KB) { reject(new Error('PDF terlalu besar (' + kb + ' KB, maks 3 MB). Kecilkan dulu, atau pakai link Drive.')); return; }
+        resolve({ base64, dataUrl: '', kb, mime: 'application/pdf', name: file.name || 'nota.pdf' });
+      };
+      reader.readAsDataURL(file);
+    });
+  }
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
     reader.onerror = () => reject(new Error('Gagal membaca file foto.'));
@@ -940,7 +962,7 @@ function compressImage(file) {
         canvas.getContext('2d').drawImage(img, 0, 0, w, h);
         const dataUrl = canvas.toDataURL('image/jpeg', JPEG_QUALITY);
         const base64 = dataUrl.split(',')[1];
-        resolve({ base64, dataUrl, kb: Math.round(base64.length * 3 / 4 / 1024) });
+        resolve({ base64, dataUrl, kb: Math.round(base64.length * 3 / 4 / 1024), mime: 'image/jpeg', name: file.name || 'foto.jpg' });
       };
       img.src = reader.result;
     };
@@ -956,9 +978,8 @@ $('c-photo').addEventListener('change', async () => {
   try {
     const out = await compressImage(file);
     photoBase64 = out.base64;
-    $('c-previewImg').src = out.dataUrl;
-    $('c-previewSize').textContent = 'Ukuran setelah dikecilkan: ± ' + out.kb + ' KB';
-    $('c-preview').style.display = 'block';
+    photoInfo = out;
+    paintPreview($('c-preview'), $('c-previewImg'), $('c-previewSize'), out);
   } catch (err) {
     $('c-photo').value = '';
     setMsg($('c-msg'), err.message, 'err');
@@ -977,21 +998,19 @@ $('completeForm').addEventListener('submit', (e) => {
   }
   const row = completeRow;
   const photo = photoBase64;
-  const dataUrl = photo ? $('c-previewImg').src : '';
-  const size = $('c-previewSize').textContent;
+  const info = photo ? photoInfo : null;
   const nama = namaBaris(row) || 'kegiatan';
   enqueueSave({
     label: 'Selesai: ' + nama + (photo ? ' (+ foto nota)' : ''),
-    payload: { action: 'complete_kegiatan', row: row, actual: Number(actual), photoBase64: photo, photoMime: 'image/jpeg' },
+    payload: { action: 'complete_kegiatan', row: row, actual: Number(actual), photoBase64: photo, photoMime: info ? info.mime : 'image/jpeg' },
     rows: [row],
     restore: () => {
       openComplete(row);
       $('c-actual').value = actual;
       if (photo) {
         photoBase64 = photo;
-        $('c-previewImg').src = dataUrl;
-        $('c-previewSize').textContent = size;
-        $('c-preview').style.display = 'block';
+        photoInfo = info;
+        paintPreview($('c-preview'), $('c-previewImg'), $('c-previewSize'), info);
       }
     }
   });
@@ -1123,7 +1142,7 @@ $('editForm').addEventListener('submit', (e) => {
   if (photoEd) {
     delete payload.nota;   // foto menggantikan link
     payload.photoBase64 = photoEd.base64;
-    payload.photoMime = 'image/jpeg';
+    payload.photoMime = photoEd.mime;
     changed++;
   }
   if (!changed) { closeModal('m-edit'); toast('Tidak ada perubahan.'); return; }

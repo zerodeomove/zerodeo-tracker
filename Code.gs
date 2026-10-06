@@ -857,9 +857,11 @@ function handleUpdateStatus(data) {
 function saveNotaPhoto_(itemName, base64, mime) {
   var folders = DriveApp.getFoldersByName(NOTA_FOLDER_NAME);
   var folder = folders.hasNext() ? folders.next() : DriveApp.createFolder(NOTA_FOLDER_NAME);
+  var isPdf = mime === 'application/pdf';
+  mime = isPdf ? 'application/pdf' : 'image/jpeg';   // hanya foto (JPEG) atau PDF
   var safeName = String(itemName || 'kegiatan').replace(/[\\\/:*?"<>|]/g, '-');
   var stamp = Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'yyyyMMdd-HHmmss');
-  var blob = Utilities.newBlob(Utilities.base64Decode(base64), mime || 'image/jpeg', 'Nota - ' + safeName + ' - ' + stamp + '.jpg');
+  var blob = Utilities.newBlob(Utilities.base64Decode(base64), mime, 'Nota - ' + safeName + ' - ' + stamp + (isPdf ? '.pdf' : '.jpg'));
   var file = folder.createFile(blob);
   file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
   return file.getUrl();
