@@ -101,7 +101,7 @@ async function runSaveQueue() {
           if (job.payload.pin) cachedPin = job.payload.pin;
           if (job.expectNota && !json.nota) {
             // Server menjawab sukses tapi tidak mengunggah file: Apps Script kemungkinan belum versi terbaru.
-            failSave(job, 'Server menjawab sukses tapi file nota tidak terunggah. Pastikan Apps Script sudah versi terbaru (Deploy → New version).');
+            failSave(job, 'Server menjawab sukses tapi file nota tidak terunggah. Pastikan Apps Script sudah versi terbaru (Deploy → New version). Info server: ' + (json.foto || 'tidak ada (kemungkinan Apps Script versi lama)'));
             renderSaveBar();
             continue;
           }

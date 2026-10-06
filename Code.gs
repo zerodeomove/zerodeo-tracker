@@ -1229,7 +1229,7 @@ function handleEditKegiatan(data) {
       writes.push({ col: COL.NOTA, value: url, fmt: null, label: 'Nota', kind: 'txt', old: sheet.getRange(row, COL.NOTA).getValue() });
     }
 
-    if (!writes.length) return jsonResponse({ ok: true, row: row, unchanged: true });
+    if (!writes.length) return jsonResponse({ ok: true, row: row, unchanged: true, foto: data.photoBase64 ? 'diterima tapi tidak diproses' : undefined });
 
     var parts = [];
     writes.forEach(function (w) {
@@ -1239,7 +1239,8 @@ function handleEditKegiatan(data) {
       parts.push(w.label + ' ' + fmtCell_(w.old, w.kind) + ' → ' + fmtCell_(w.value, w.kind));
     });
     appendCatatan_(sheet, row, 'Diedit ' + stampNow_() + ': ' + parts.join('; '));
-    return jsonResponse({ ok: true, row: row, changed: writes.length, nota: data.photoBase64 ? url : undefined });
+    return jsonResponse({ ok: true, row: row, changed: writes.length, nota: data.photoBase64 ? url : undefined,
+      foto: data.photoBase64 ? ('diterima ' + Math.round(String(data.photoBase64).length / 1024) + ' KB, ' + (url ? 'tersimpan' : 'TIDAK tersimpan')) : undefined });
   } finally {
     lock.releaseLock();
   }
