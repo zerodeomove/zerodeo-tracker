@@ -9,7 +9,7 @@
     return null;
   }
 
-  async function call(method, body, attempt) {
+  async function call(method, body, attempt, query) {
     attempt = attempt || 0;
     const code = localStorage.getItem(KEY) || askCode(attempt > 0 ? 'Kode salah. Masukkan lagi:' : null);
     if (!code) throw new Error('Kode akses dibutuhkan.');
@@ -18,10 +18,10 @@
       opts.headers['Content-Type'] = 'application/json';
       opts.body = JSON.stringify(body);
     }
-    const res = await fetch(API, opts);
+    const res = await fetch(API + (query || ''), opts);
     if (res.status === 401) {
       localStorage.removeItem(KEY);
-      if (attempt < 2) return call(method, body, attempt + 1);
+      if (attempt < 2) return call(method, body, attempt + 1, query);
       throw new Error('Kode akses salah.');
     }
     let json;
@@ -30,7 +30,8 @@
   }
 
   window.zApi = {
-    get: function () { return call('GET'); },
+    // fresh = true: lewati cache data di Apps Script (dipakai tombol Refresh)
+    get: function (fresh) { return call('GET', null, 0, fresh ? '?fresh=1' : ''); },
     post: function (b) { return call('POST', b); }
   };
 

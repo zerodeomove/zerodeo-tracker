@@ -26,7 +26,7 @@
 // Penanda versi kode. Ubah setiap kali Code.gs diedit; tampil di dashboard (baris "Terakhir ambil data")
 // supaya kelihatan versi mana yang sebenarnya melayani dashboard (beda dengan isi editor kalau
 // belum Deploy -> New version).
-var KODE_VERSI = '2026-10-06 folder-id';
+var KODE_VERSI = '2026-10-08 rekap-reimburse';
 
 var HEADER_ROW = 4;
 // BUKAN batas jumlah kegiatan. Ini hanya sampai baris mana template di Sheet disiapkan
@@ -122,10 +122,12 @@ function extendTemplate_(ss, sheet) {
 
   // dana: rumus "Terpakai" tiap dana diperbarui (mengabaikan kegiatan Dibatalkan)
   var dana = ss.getSheetByName(DANA_TAB);
+  if (dana) ensureDanaReimburseCol_(dana);
   if (dana && dana.getLastRow() >= 2) {
     for (var dr = 2; dr <= dana.getLastRow(); dr++) {
       if (cleanText_(dana.getRange(dr, 1).getValue(), 80)) {
         dana.getRange(dr, 6).setFormula(danaUsedFormula_(dr)).setNumberFormat(CURR_FORMAT);
+        dana.getRange(dr, 7).setFormula(danaSaldoFormula_(dr)).setNumberFormat(CURR_FORMAT);
       }
     }
   }
@@ -266,7 +268,8 @@ function resolveKategori_(raw) {
 // Setup / Reset Tracker TIDAK menghapus tab "dana".
 // ============================================================
 var DANA_TAB = 'dana';
-var DANA_HEADERS = ['Nama Dana', 'Nominal (Rp)', 'Tgl Transfer', 'PIC Transaksi', 'Catatan', 'Terpakai (Rp)', 'Saldo (Rp)', 'Dicatat Pada'];
+var DANA_HEADERS = ['Nama Dana', 'Nominal (Rp)', 'Tgl Transfer', 'PIC Transaksi', 'Catatan', 'Terpakai (Rp)', 'Saldo (Rp)', 'Dicatat Pada', 'Reimburse (Rp)'];
+var DANA_COL_REIMBURSE = 9;   // total uang talangan yang sudah diganti (menambah saldo)
 var JALUR_DANA = 'Dana';
 
 function colLetter_(n) {
@@ -400,7 +403,7 @@ function ensureDanaTab_() {
   sheet.getRange(1, 1, 1, DANA_HEADERS.length).setValues([DANA_HEADERS])
     .setFontWeight('bold').setFontColor('#FFFFFF').setBackground('#1F4E5F');
   sheet.setFrozenRows(1);
-  [220, 130, 100, 110, 220, 130, 130, 110].forEach(function (w, i) { sheet.setColumnWidth(i + 1, w); });
+  [220, 130, 100, 110, 220, 130, 130, 110, 130].forEach(function (w, i) { sheet.setColumnWidth(i + 1, w); });
   return sheet;
 }
 
@@ -465,6 +468,19 @@ function refreshDanaDropdown_() {
   setColumnDropdown_(sheet, COL.DANA, names);
 }
 
+// Header kolom Reimburse (I) untuk tab dana yang dibuat sebelum fitur ini.
+function ensureDanaReimburseCol_(sheet) {
+  var cell = sheet.getRange(1, DANA_COL_REIMBURSE);
+  if (String(cell.getValue() || '').trim() !== '') return;
+  cell.setValue('Reimburse (Rp)').setFontWeight('bold').setFontColor('#FFFFFF').setBackground('#1F4E5F');
+  sheet.setColumnWidth(DANA_COL_REIMBURSE, 130);
+}
+
+// Saldo = Nominal + Reimburse - Terpakai.
+function danaSaldoFormula_(r) {
+  return '=B' + r + '+N(I' + r + ')-F' + r;
+}
+
 // Rumus "Terpakai" di tab dana: total Actual kegiatan tertaut, tanpa yang Dibatalkan.
 function danaUsedFormula_(r) {
   return '=SUMIFS(' + kegiatanRange_(COL.ACTUAL) + ',' + kegiatanRange_(COL.DANA) + ',A' + r + ',' +
@@ -498,10 +514,43 @@ function handleAddDana(data) {
     sheet.getRange(r, 2).setNumberFormat(CURR_FORMAT);
     sheet.getRange(r, 3).setNumberFormat(DATE_FORMAT);
     sheet.getRange(r, 6).setFormula(danaUsedFormula_(r)).setNumberFormat(CURR_FORMAT);
-    sheet.getRange(r, 7).setFormula('=B' + r + '-F' + r).setNumberFormat(CURR_FORMAT);
+    sheet.getRange(r, 7).setFormula(danaSaldoFormula_(r)).setNumberFormat(CURR_FORMAT);
     sheet.getRange(r, 8).setNumberFormat(DATE_FORMAT);
     refreshDanaDropdown_();
     return jsonResponse({ ok: true, row: r, nama: nama });
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+// Catat reimburse: uang talangan (pengeluaran yang melebihi dana) sudah diganti.
+// Menambah kolom Reimburse dana itu, jadi saldo naik; riwayatnya dicatat di Catatan. Tanpa PIN
+// (uang masuk, sama seperti mencatat dana baru).
+function handleReimburseDana(data) {
+  var row = Number(data.row);
+  var nominal = Number(data.nominal);
+  if (!nominal || nominal <= 0) return jsonResponse({ ok: false, error: 'Nominal reimburse harus angka lebih dari 0.' });
+  if (data.pic && PIC_LIST.indexOf(data.pic) === -1) return jsonResponse({ ok: false, error: 'PIC tidak dikenali.' });
+  var tgl = data.tgl ? new Date(data.tgl) : new Date();
+  if (isNaN(tgl.getTime())) return jsonResponse({ ok: false, error: 'Tanggal tidak valid.' });
+  var catatan = cleanText_(data.catatan, 150);
+
+  var lock = LockService.getScriptLock();
+  if (!lock.tryLock(15000)) return jsonResponse({ ok: false, error: 'Server sedang sibuk, coba lagi sebentar.' });
+  try {
+    var sheet = ensureDanaTab_();
+    var cur = readDana_().filter(function (d) { return d._row === row; })[0];
+    if (!cur) return jsonResponse({ ok: false, error: 'Dana tidak ditemukan.' });
+    ensureDanaReimburseCol_(sheet);
+    var total = (Number(cur['Reimburse (Rp)']) || 0) + nominal;
+    sheet.getRange(row, DANA_COL_REIMBURSE).setValue(total).setNumberFormat(CURR_FORMAT);
+    sheet.getRange(row, 7).setFormula(danaSaldoFormula_(row)).setNumberFormat(CURR_FORMAT);
+    var stamp = 'Reimburse ' + fmtRp_(nominal) + ' (' + Utilities.formatDate(tgl, Session.getScriptTimeZone(), 'dd-MMM-yy') +
+      (data.pic ? ', ' + data.pic : '') + ')' + (catatan ? ': ' + catatan : '');
+    var noteCell = sheet.getRange(row, 5);
+    var old = noteCell.getValue();
+    noteCell.setValue(safeText_(old ? old + ' | ' + stamp : stamp));
+    return jsonResponse({ ok: true, row: row, nama: cur['Nama Dana'], reimburse: total });
   } finally {
     lock.releaseLock();
   }
@@ -664,11 +713,74 @@ function buildRingkasanSheet(ss) {
 // ============================================================
 // API — expose data as JSON (dipakai dashboard nanti)
 // ============================================================
+// ============================================================
+// CACHE data dashboard
+// Hasil doGet disimpan sebentar (CACHE_TTL detik) supaya buka/refresh dashboard cepat. Cache
+// dihapus setiap ada simpan dari dashboard (doPost) dan setiap ada ketikan langsung di Sheet
+// (onEdit), jadi data tidak basi. Tombol Refresh selalu mengambil langsung (fresh=1).
+// Nilai cache dibatasi ~100 KB per kunci, jadi isinya dipotong-potong.
+// ============================================================
+var CACHE_KEY = 'dash_v1';
+var CACHE_TTL = 300;
+var CACHE_PART = 45000;
+
+function cacheGet_() {
+  try {
+    var c = CacheService.getScriptCache();
+    var n = Number(c.get(CACHE_KEY + '_n') || 0);
+    if (!n) return null;
+    var keys = [];
+    for (var i = 0; i < n; i++) keys.push(CACHE_KEY + '_' + i);
+    var parts = c.getAll(keys);
+    var out = '';
+    for (var j = 0; j < n; j++) {
+      if (parts[keys[j]] === undefined || parts[keys[j]] === null) return null;
+      out += parts[keys[j]];
+    }
+    return out;
+  } catch (err) {
+    return null;
+  }
+}
+
+function cachePut_(text) {
+  try {
+    var obj = {};
+    var n = Math.ceil(text.length / CACHE_PART);
+    for (var i = 0; i < n; i++) obj[CACHE_KEY + '_' + i] = text.substr(i * CACHE_PART, CACHE_PART);
+    obj[CACHE_KEY + '_n'] = String(n);
+    CacheService.getScriptCache().putAll(obj, CACHE_TTL);
+  } catch (err) { /* cache hanya percepatan; gagal = ambil langsung */ }
+}
+
+function cacheClear_() {
+  try { CacheService.getScriptCache().remove(CACHE_KEY + '_n'); } catch (err) { /* abaikan */ }
+}
+
+// Ketikan langsung di Sheet: hapus cache supaya dashboard langsung melihat perubahannya.
+function onEdit(e) {
+  cacheClear_();
+}
+
 function doGet(e) {
   // isAuthorized_ ada di Marketing.gs (file terpisah di project Apps Script ini).
   if (!isAuthorized_(e && e.parameter && e.parameter.secret)) {
     return jsonResponse({ ok: false, error: 'unauthorized' });
   }
+  var fresh = e && e.parameter && e.parameter.fresh === '1';
+  if (!fresh) {
+    var cached = cacheGet_();
+    if (cached) {
+      return ContentService.createTextOutput(cached).setMimeType(ContentService.MimeType.JSON);
+    }
+  }
+  var text = JSON.stringify(buildPayload_());
+  cachePut_(text);
+  return ContentService.createTextOutput(text).setMimeType(ContentService.MimeType.JSON);
+}
+
+function buildPayload_() {
+  var t0 = Date.now();
   var ss = SpreadsheetApp.getActiveSpreadsheet();
   var payload = {
     generated_at: new Date().toISOString(),
@@ -680,6 +792,8 @@ function doGet(e) {
   try { payload.kategori = getKategoriList(); } catch (err) { payload.kategori_error = String(err.message); }
   try { payload.dana = getDanaData_(); } catch (err) { payload.dana_error = String(err.message); }
   payload.versi = KODE_VERSI;
+  payload.reimburse = true;   // penanda: backend ini mengerti reimburse_dana
+  payload.fotoBatch = true;   // penanda: Isi Actual sekaligus menerima foto/PDF per baris
   payload.fotoNota = true;   // penanda: backend ini menerima photoBase64 di data lama dan edit
   payload.edit = true;   // penanda: backend ini mengerti edit / batalkan / pulihkan / edit dana
   var m = mkt_getData();
@@ -687,7 +801,8 @@ function doGet(e) {
   payload.lane = m.lane;
   payload.channel = m.channel;
   payload.hasil_event = m.hasil_event;
-  return jsonResponse(payload);
+  payload.dibuat_ms = Date.now() - t0;   // lama menyusun data (ms), untuk memantau kecepatan
+  return payload;
 }
 
 // ============================================================
@@ -702,6 +817,18 @@ function doPost(e) {
     if (!isAuthorized_(data.secret)) {
       return jsonResponse({ ok: false, error: 'unauthorized' });
     }
+    try {
+      return routePost_(data);
+    } finally {
+      cacheClear_();   // data berubah: dashboard berikutnya mengambil langsung dari Sheet
+    }
+  } catch (err) {
+    return jsonResponse({ ok: false, error: err.message });
+  }
+}
+
+function routePost_(data) {
+  {
     // Aksi modul marketing (Marketing.gs). Return null = bukan aksi marketing.
     var mres = mkt_handlePost(data);
     if (mres) return jsonResponse(mres);
@@ -739,9 +866,10 @@ function doPost(e) {
     if (data.action === 'edit_dana') {
       return handleEditDana(data);
     }
+    if (data.action === 'reimburse_dana') {
+      return handleReimburseDana(data);
+    }
     return handleAddKegiatan(data);
-  } catch (err) {
-    return jsonResponse({ ok: false, error: err.message });
   }
 }
 
@@ -798,30 +926,37 @@ function handleAddKegiatan(data) {
     var targetRow = nextKegiatanRow_(sheet);
     prepareKegiatanRow_(sheet, targetRow);
 
-    // Data lama: kalau tanggalnya diisi, itu dipakai sebagai Tanggal Dicatat.
-    sheet.getRange(targetRow, COL.TGL_DICATAT).setValue(arsip && tglTf ? tglTf : new Date()).setNumberFormat(DATE_FORMAT);
-    if (data.deadline) {
-      sheet.getRange(targetRow, COL.DEADLINE).setValue(new Date(data.deadline)).setNumberFormat(DATE_FORMAT);
-    }
-    sheet.getRange(targetRow, COL.PROJECT).setValue('Zerodeo');
-    sheet.getRange(targetRow, COL.ITEM).setValue(data.item || '');
-    sheet.getRange(targetRow, COL.KATEGORI).setValue(resolveKategori_(data.kategori));
-    sheet.getRange(targetRow, COL.TIPE).setValue(data.tipe || '');
-    sheet.getRange(targetRow, COL.JALUR).setValue(danaName ? JALUR_DANA : (data.jalur || ''));
-    sheet.getRange(targetRow, COL.PIC).setValue(data.pic || '');
-    sheet.getRange(targetRow, COL.ESTIMASI).setValue(Number(data.estimasi) || actual || 0).setNumberFormat(CURR_FORMAT);
-    sheet.getRange(targetRow, COL.STATUS).setValue(arsip ? 'Selesai' : (danaName ? 'Ditransfer' : (data.status || 'Draft')));
-    if (danaName) sheet.getRange(targetRow, COL.DANA).setValue(danaName);
-
-    if (arsip) {
-      if (picTrans) sheet.getRange(targetRow, COL.PIC_TRANSAKSI).setValue(picTrans);
-      if (!danaName) sheet.getRange(targetRow, COL.NOMINAL_TRANSFER).setValue(nominal).setNumberFormat(CURR_FORMAT);
-      if (tglTf) sheet.getRange(targetRow, COL.TGL_TRANSFER).setValue(tglTf).setNumberFormat(DATE_FORMAT);
-      sheet.getRange(targetRow, COL.ACTUAL).setValue(actual).setNumberFormat(CURR_FORMAT);
-      if (nota) sheet.getRange(targetRow, COL.NOTA).setValue(nota);
-      var stamp = Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'dd-MMM-yy');
-      sheet.getRange(targetRow, COL.CATATAN).setValue('Data lama, dicatat dari dashboard ' + stamp);
-    }
+    // Ditulis sekaligus (2 blok: B..O dan Q..S), bukan per sel: lebih cepat dan tidak ada baris
+    // setengah jadi kalau terputus. Kolom A (No) dan P (Selisih) berisi rumus, tidak disentuh.
+    var kat = resolveKategori_(data.kategori);
+    var vals = {};
+    vals[COL.TGL_DICATAT] = arsip && tglTf ? tglTf : new Date();   // data lama: tanggal bayar
+    vals[COL.DEADLINE] = data.deadline ? new Date(data.deadline) : '';
+    vals[COL.PROJECT] = 'Zerodeo';
+    vals[COL.ITEM] = safeText_(cleanText_(data.item, 200));
+    vals[COL.KATEGORI] = kat;
+    vals[COL.TIPE] = data.tipe || '';
+    vals[COL.JALUR] = danaName ? JALUR_DANA : (data.jalur || '');
+    vals[COL.PIC] = data.pic || '';
+    vals[COL.ESTIMASI] = Number(data.estimasi) || actual || 0;
+    vals[COL.STATUS] = arsip ? 'Selesai' : (danaName ? 'Ditransfer' : (data.status || 'Draft'));
+    vals[COL.PIC_TRANSAKSI] = arsip ? picTrans : '';
+    vals[COL.NOMINAL_TRANSFER] = arsip && !danaName ? nominal : '';
+    vals[COL.TGL_TRANSFER] = arsip && tglTf ? tglTf : '';
+    vals[COL.ACTUAL] = arsip ? actual : '';
+    vals[COL.NOTA] = arsip ? nota : '';
+    vals[COL.CATATAN] = arsip ? 'Data lama, dicatat dari dashboard ' + Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'dd-MMM-yy') : '';
+    vals[COL.DANA] = danaName;
+    var fmt = {};
+    fmt[COL.TGL_DICATAT] = DATE_FORMAT; fmt[COL.DEADLINE] = DATE_FORMAT; fmt[COL.TGL_TRANSFER] = DATE_FORMAT;
+    fmt[COL.ESTIMASI] = CURR_FORMAT; fmt[COL.NOMINAL_TRANSFER] = CURR_FORMAT; fmt[COL.ACTUAL] = CURR_FORMAT;
+    var block = function (from, to) {
+      var v = [], f = [];
+      for (var c = from; c <= to; c++) { v.push(vals[c] === undefined ? '' : vals[c]); f.push(fmt[c] || 'General'); }
+      sheet.getRange(targetRow, from, 1, v.length).setValues([v]).setNumberFormats([f]);
+    };
+    block(COL.TGL_DICATAT, COL.ACTUAL);   // B..O
+    block(COL.NOTA, COL.DANA);            // Q..S
 
     return jsonResponse({ ok: true, row: targetRow, nota: (arsip && data.photoBase64) ? nota : undefined });
   } finally {
@@ -1058,6 +1193,10 @@ function handleLinkDanaBatch(data) {
 function handleCompleteBatch(data) {
   var items = Array.isArray(data.items) ? data.items : [];
   if (!items.length) return jsonResponse({ ok: false, error: 'Tidak ada yang diisi.' });
+  var MAX_FOTO_BATCH = 10;
+  if (items.filter(function (it) { return it && it.photoBase64; }).length > MAX_FOTO_BATCH) {
+    return jsonResponse({ ok: false, error: 'Foto/PDF nota maksimal ' + MAX_FOTO_BATCH + ' sekali kirim. Sisanya kirim berikutnya.' });
+  }
   if (items.length > MAX_BATCH) return jsonResponse({ ok: false, error: 'Terlalu banyak sekaligus (maksimal ' + MAX_BATCH + ' baris).' });
 
   var lock = LockService.getScriptLock();
@@ -1078,6 +1217,15 @@ function handleCompleteBatch(data) {
         if (status !== 'Ditransfer') err = 'Statusnya "' + status + '", bukan "Ditransfer".';
       }
       if (err) { skipped.push({ row: row || null, alasan: err }); return; }
+      if (it.photoBase64) {
+        // Foto/PDF baris ini diunggah ke Drive; gagal unggah = baris dilewati (yang lain tetap jalan).
+        try {
+          nota = saveNotaPhoto_(sheet.getRange(row, COL.ITEM).getValue(), it.photoBase64, it.photoMime);
+        } catch (e) {
+          skipped.push({ row: row, alasan: 'Upload nota gagal: ' + e.message });
+          return;
+        }
+      }
       sheet.getRange(row, COL.ACTUAL).setValue(actual).setNumberFormat(CURR_FORMAT);
       if (nota) sheet.getRange(row, COL.NOTA).setValue(nota);
       sheet.getRange(row, COL.STATUS).setValue('Selesai');

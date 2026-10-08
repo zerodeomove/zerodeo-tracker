@@ -15,7 +15,7 @@
       <h1><img class="logo" src="logo.svg" alt="Zerodeo"></h1>
       <div class="sub" id="lastSync">Memuat data…</div>
     </div>
-    <button class="btn dark" onclick="load()">Refresh</button>
+    <button class="btn dark" onclick="load(true)">Refresh</button>
   </header>
   <div class="versi-banner" id="versiBanner" style="display:none"></div>
 
@@ -54,19 +54,22 @@
     </div>
 
     <div class="toolbar">
+      <select id="filterPeriode" onchange="renderTable()" title="Bulan (menurut tanggal dicatat)"><option value="">Semua waktu</option></select>
       <select id="filterKategori" onchange="renderTable()"><option value="">Semua Kategori</option></select>
       <select id="filterTipe" onchange="renderTable()"><option value="">Semua Tipe</option></select>
       <select id="filterPic" onchange="renderTable()"><option value="">Semua PIC</option></select>
       <select id="filterStatus" onchange="renderTable()"><option value="">Semua Status</option></select>
       <select id="filterDana" onchange="renderTable()" style="display:none"><option value="">Semua Dana</option></select>
       <input type="text" id="searchBox" placeholder="Cari item kegiatan…" oninput="renderTable()">
+      <button type="button" class="chip" id="noNotaChip" style="display:none" onclick="setNoNota(false)" title="Lepas saringan">Selesai tanpa nota ×</button>
       <span class="push">
         <span class="hidden-hint" id="hiddenHint"></span><span class="count" id="rowCount"></span>
+        <button class="btn ghost" onclick="openRekap()">Rekap</button>
         <button class="btn green" onclick="openKegiatan()">+ Kebutuhan</button>
       </span>
     </div>
 
-    <div class="scroll">
+    <div class="scroll" id="kegiatanScroll">
       <table id="tableKegiatan">
         <thead>
           <tr>
@@ -296,6 +299,58 @@
   </div>
 </div>
 
+<!-- ================= POPUP: Catat reimburse ================= -->
+<div class="modal-overlay" id="m-reimburse">
+  <div class="modal-box">
+    <h3>Catat reimburse</h3>
+    <div class="hint" id="rb-sub"></div>
+    <form id="reimburseForm" novalidate>
+      <label>Nominal yang diganti (Rp)
+        <input type="number" id="rb-nominal" min="0" step="1" inputmode="numeric">
+        <span class="field-error" id="err-rb-nominal">Isi angka lebih dari 0.</span></label>
+      <div class="row2">
+        <label>Tanggal<input type="date" id="rb-tgl"></label>
+        <label>Diterima oleh <span class="opt">(opsional)</span>
+          <select id="rb-pic"><option value="">-</option>
+            <option>Lenno</option><option>Ricko</option><option>Yanuar</option><option>Christina</option></select></label>
+      </div>
+      <label>Catatan <span class="opt">(opsional)</span>
+        <input type="text" id="rb-catatan" placeholder="Contoh: diganti dari kas Lemon"></label>
+      <div class="msg" id="rb-msg"></div>
+      <div class="modal-actions">
+        <button type="button" class="btn-cancel" onclick="closeModal('m-reimburse')">Tutup</button>
+        <button type="submit" class="btn-submit">Simpan</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- ================= POPUP: Rekap ================= -->
+<div class="modal-overlay" id="m-rekap">
+  <div class="modal-box wide">
+    <h3>Rekap</h3>
+    <label>Periode
+      <select id="rk-periode" onchange="renderRekap()"></select></label>
+    <div class="rekap-total" id="rk-total"></div>
+    <div class="rekap-grid">
+      <div>
+        <div class="rekap-title">Per kategori</div>
+        <div class="scroll"><table><thead><tr><th>Kategori</th><th>Kegiatan</th><th>Estimasi</th><th>Actual</th></tr></thead><tbody id="rk-kategori"></tbody></table></div>
+      </div>
+      <div>
+        <div class="rekap-title">Per dana</div>
+        <div class="scroll"><table><thead><tr><th>Dana</th><th>Kegiatan</th><th>Estimasi</th><th>Actual</th></tr></thead><tbody id="rk-dana"></tbody></table></div>
+      </div>
+    </div>
+    <div class="hint">Kegiatan Dibatalkan tidak dihitung. Periode menurut tanggal dicatat (data lama = tanggal bayar). File Excel berisi lembar Ringkasan, Per Bulan, Per Kategori, Per Dana, dan Detail (dengan link nota).</div>
+    <div class="msg" id="rk-msg"></div>
+    <div class="modal-actions">
+      <button type="button" class="btn-cancel" onclick="closeModal('m-rekap')">Tutup</button>
+      <button type="button" class="btn-submit" id="rk-download" onclick="downloadRekap()">Unduh Excel</button>
+    </div>
+  </div>
+</div>
+
 <!-- ================= POPUP: Pratinjau nota ================= -->
 <div class="modal-overlay" id="m-nota">
   <div class="modal-box">
@@ -453,7 +508,7 @@
     <div class="hint" id="st-sub"></div>
     <div class="scroll">
       <table>
-        <thead><tr><th>Item Kegiatan</th><th>Estimasi</th><th>Actual (Rp)</th><th>Link nota <span class="opt">(opsional)</span></th></tr></thead>
+        <thead><tr><th>Item Kegiatan</th><th>Estimasi</th><th>Actual (Rp)</th><th>Link nota <span class="opt">(opsional)</span></th><th class="settle-photo-cell" id="st-photo-th">Foto / PDF <span class="opt">(opsional, maks 10)</span></th></tr></thead>
         <tbody id="settleBody"></tbody>
       </table>
     </div>

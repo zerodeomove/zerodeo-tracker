@@ -5,7 +5,7 @@ const $ = (id) => document.getElementById(id);
 const PIC_LIST = ['Lenno', 'Ricko', 'Yanuar', 'Christina'];
 const TIPE_LIST = ['Capex', 'Opex'];
 // Harus sama dengan KODE_VERSI di Code.gs. Kalau Apps Script yang melayani berbeda, muncul peringatan.
-const EXPECTED_VERSI = '2026-10-06 folder-id';
+const EXPECTED_VERSI = '2026-10-08 rekap-reimburse';
 
 function fmtRupiah(n) {
   if (n === null || n === undefined || n === '' || isNaN(n)) return '-';
@@ -269,10 +269,24 @@ function route() {
 window.addEventListener('hashchange', route);
 
 // ---------- muat data (sekali untuk tracker + marketing) ----------
-async function load() {
+// Muat ulang otomatis saat kembali ke tab dashboard (data dari orang lain ikut terlihat),
+// kalau terakhir dimuat lebih dari 30 detik lalu dan tidak sedang mengisi popup / menyimpan.
+let lastLoadAt = 0;
+let loadingNow = false;
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState !== 'visible' || !dataLoaded || loadingNow) return;
+  if (Date.now() - lastLoadAt < 30000) return;
+  if (document.querySelector('.modal-overlay.show')) return;
+  if (saveJobs.some((j) => j.state === 'queued' || j.state === 'running')) return;
+  load();
+});
+
+// fresh = true: ambil langsung dari Sheet, lewati cache Apps Script (tombol Refresh).
+async function load(fresh) {
+  loadingNow = true;
   setSync('Memuat…', false);
   try {
-    const json = await zApi.get();
+    const json = await zApi.get(fresh === true);
     if (json.ok === false) throw new Error(json.error || 'Gagal');
     kegiatanData = json.kegiatan || [];
     plafonData = json.plafon_fixed || [];
@@ -280,6 +294,9 @@ async function load() {
     backendDana = Array.isArray(json.dana);
     backendEdit = json.edit === true;
     backendFoto = json.fotoNota === true;
+    backendReimburse = json.reimburse === true;
+    backendFotoBatch = json.fotoBatch === true;
+    lastLoadAt = Date.now();
     backendVersi = json.versi || 'lama';
     const vb = $('versiBanner');
     if (backendVersi !== EXPECTED_VERSI) {
@@ -304,6 +321,7 @@ async function load() {
     showLoadError();
   } finally {
     dataLoaded = true;
+    loadingNow = false;
     runPending();
   }
 }

@@ -35,6 +35,9 @@ module.exports = async (req, res) => {
     if (req.method === 'GET') {
       const url = new URL(APPS_SCRIPT_URL);
       if (SHARED_SECRET) url.searchParams.set('secret', SHARED_SECRET);
+      // Hanya "fresh=1" (lewati cache Apps Script) yang diteruskan dari browser.
+      const q = req.query || Object.fromEntries(new URL(req.url, 'http://x').searchParams);
+      if (q && q.fresh === '1') url.searchParams.set('fresh', '1');
       upstream = await fetch(url.toString(), { redirect: 'follow' });
     } else if (req.method === 'POST') {
       let body = req.body;

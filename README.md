@@ -49,6 +49,18 @@ Tabel kegiatan diurutkan dari yang **terbaru** di atas, dan di bawah nama item t
 
 **Folder nota buatan sendiri (opsional):** buat folder di Drive, salin ID-nya (bagian akhir alamat folder), lalu tulis di `Code.gs` pada konstanta `NOTA_FOLDER_ID` (sudah berisi folder "Nota Zerodeo"; Script Property `NOTA_FOLDER_ID` masih boleh dipakai untuk menimpanya). Kalau kosong, folder "Zerodeo - Nota Bukti" dibuat otomatis. Nota yang sudah ada tampil sebagai ikon 📎 di tabel, dan bar simpan memberi tautan "Buka nota". Kalau server menjawab sukses tapi file tidak terunggah, bar menampilkan galat.
 
+**Isi Actual sekaligus** juga menerima foto/PDF per baris (maksimal 10 dan total ±3,4 MB sekali kirim, karena batas kiriman Vercel). Baris yang foto-nya gagal diunggah dilewati dengan alasan; baris lain tetap tersimpan.
+
+## Rekap, filter, dan kenyamanan
+
+- **Rekap** (tombol di sebelah + Kebutuhan): ringkasan per periode (bulan) per kategori dan per dana, plus **Unduh Excel** dengan lembar Ringkasan, Per Bulan, Per Kategori, Per Dana, dan Detail (link nota bisa diklik). Kegiatan Dibatalkan tidak dihitung; periode menurut Tanggal Dicatat (data lama = tanggal bayar). Pembuat Excel (SheetJS dari cdnjs) baru dimuat saat tombol ditekan.
+- **Filter periode** (bulan) di toolbar. Pilihan filter tidak lagi kembali ke "Semua" setelah data dimuat ulang.
+- **Selesai tanpa nota:** kartu "Sudah Cair, Belum Ada Nota" menampilkan jumlah kegiatan Selesai yang belum punya nota; klik untuk menyaring tabel (lepas lewat tanda × di toolbar).
+- **Catat reimburse:** kartu dana yang minus ("Perlu reimburse") punya tombol **Catat reimburse**. Nominalnya masuk ke kolom **Reimburse (Rp)** (I) di tab `dana`, saldo = Nominal + Reimburse − Terpakai, dan riwayatnya dicatat di Catatan dana.
+- **HP:** di layar sempit, tabel kegiatan tampil sebagai kartu per kegiatan.
+- **Cepat dan selalu baru:** Apps Script menyimpan data dashboard di cache (maks 5 menit). Cache dihapus setiap ada simpan dari dashboard dan setiap ada ketikan langsung di Sheet (`onEdit`), jadi data tidak basi. Tombol **Refresh** selalu mengambil langsung. Dashboard juga memuat ulang sendiri saat tab dibuka lagi (kalau terakhir dimuat lebih dari 30 detik lalu dan tidak sedang mengisi popup).
+- **Versi Apps Script:** baris "Terakhir ambil data" menampilkan versi Apps Script yang sedang melayani; kalau tidak sama dengan yang diharapkan dashboard, muncul banner kuning. Setiap kali `Code.gs` diubah, naikkan `KODE_VERSI` (Code.gs) dan `EXPECTED_VERSI` (app.js) bersamaan, lalu Deploy → Manage deployments → pensil → **New version**.
+
 ## Edit, Batalkan, Pulihkan
 
 Tombol **Edit** ada di setiap baris tabel dan di setiap kartu dana. Tidak ada hapus

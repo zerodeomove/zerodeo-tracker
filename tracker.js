@@ -27,7 +27,10 @@ let backendDana = false;
 // Apps Script versi baru mengerti edit / batalkan / pulihkan / edit dana (doGet mengirim edit: true).
 let backendEdit = false;
 let backendVersi = '';   // penanda versi Apps Script yang sedang melayani (doGet.versi)
-let backendFoto = false;   // upload foto nota di Data lama / Edit (butuh Apps Script terbaru)
+let backendFoto = false;
+let backendReimburse = false;   // Catat reimburse di kartu dana (butuh Apps Script terbaru)
+let backendFotoBatch = false;   // foto/PDF per baris di Isi Actual sekaligus
+let noNotaOnly = false;         // saringan "Selesai tapi belum ada nota" (dari kartu)   // upload foto nota di Data lama / Edit (butuh Apps Script terbaru)
 const PIN_STATUSES = ['Approved', 'Ditransfer', 'Selesai'];
 
 // ---------- approve / reject (PIN diverifikasi di Apps Script) ----------
@@ -56,7 +59,39 @@ function renderTracker() {
   if ($('m-settle').classList.contains('show')) renderSettle();
 }
 
+// Pilihan filter dibangun ulang setiap data dimuat; pilihan yang sedang aktif dipertahankan
+// (sebelumnya kembali ke "Semua" setiap selesai simpan).
 function populateFilters() {
+  const ids = ['filterKategori', 'filterTipe', 'filterPic', 'filterStatus', 'filterDana', 'filterPeriode'];
+  const keep = {};
+  ids.forEach((id) => { keep[id] = $(id).value; });
+  buildFilterOptions();
+  ids.forEach((id) => {
+    const el = $(id);
+    if (keep[id] && [...el.options].some((o) => o.value === keep[id])) el.value = keep[id];
+  });
+}
+
+// Bulan (yyyy-mm) dari Tanggal Dicatat; data lama memakai tanggal bayarnya.
+const BULAN = ['Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des'];
+function monthKey(r) {
+  const t = String(r['Tanggal Dicatat'] || '');
+  return /^\d{4}-\d{2}/.test(t) ? t.slice(0, 7) : '';
+}
+function monthLabel(k) {
+  return k ? BULAN[Number(k.slice(5, 7)) - 1] + ' ' + k.slice(0, 4) : 'Tanpa tanggal';
+}
+function monthOptions() {
+  return [...new Set(kegiatanData.map(monthKey).filter(Boolean))].sort().reverse();
+}
+
+function hasNota(r) {
+  return /^https?:\/\//i.test(r['Nota/Bukti'] || '');
+}
+
+function buildFilterOptions() {
+  $('filterPeriode').innerHTML = '<option value="">Semua waktu</option>' +
+    monthOptions().map((k) => `<option value="${k}">${monthLabel(k)}</option>`).join('');
   const kategoris = [...new Set(kegiatanData.map((r) => r['Kategori']).filter(Boolean))].sort();
   $('filterKategori').innerHTML = '<option value="">Semua Kategori</option>' +
     kategoris.map((k) => `<option value="${zEsc(k)}">${zEsc(k)}</option>`).join('');
@@ -152,12 +187,15 @@ function renderCards() {
   let diterima = sudahCair.reduce((sum, r) => sum + (Number(r['Nominal Transfer (Rp)']) || 0), 0);
   let actualDariItu = sudahCair.reduce((sum, r) => sum + (Number(r['Actual (Rp)']) || 0), 0);
   if (backendDana) {
-    danaStats().forEach((d) => { diterima += d.nominal; actualDariItu += d.terpakai; });
+    danaStats().forEach((d) => { diterima += d.nominal + d.reimburse; actualDariItu += d.terpakai; });
   }
   const belumNota = diterima - actualDariItu;
+  // Kegiatan Selesai yang kolom notanya masih kosong: bisa diklik untuk menyaring tabel.
+  const tanpaNota = kegiatanData.filter((r) => r['Status'] === 'Selesai' && !hasNota(r)).length;
   $('belumNotaCard').innerHTML =
     `<div class="card-big ${belumNota === 0 ? 'zero' : ''}">${fmtRupiah(belumNota)}</div>
-     <div class="card-sub">Diterima ${fmtRupiah(diterima)} − actual ${fmtRupiah(actualDariItu)}</div>`;
+     <div class="card-sub">Diterima ${fmtRupiah(diterima)} − actual ${fmtRupiah(actualDariItu)}</div>` +
+    (tanpaNota ? `<div class="card-sub"><a href="#" class="card-link" onclick="setNoNota(true); return false;">${tanpaNota} kegiatan Selesai belum ada nota →</a></div>` : '');
 
   // Deadline terdekat (belum Selesai, ada tanggal, urut terdekat, max 5)
   const upcoming = kegiatanData
@@ -201,10 +239,14 @@ function renderTable() {
   const pic = $('filterPic').value;
   const status = $('filterStatus').value;
   const dana = $('filterDana').value;
+  const periode = $('filterPeriode').value;
   const search = $('searchBox').value.trim().toLowerCase();
+  $('noNotaChip').style.display = noNotaOnly ? '' : 'none';
 
   let hidden = 0;
   const rows = kegiatanData.filter((r) => {
+    if (periode && monthKey(r) !== periode) return false;
+    if (noNotaOnly && !(r['Status'] === 'Selesai' && !hasNota(r))) return false;
     if (kat && r['Kategori'] !== kat) return false;
     if (tipe && r['Tipe'] !== tipe) return false;
     if (pic && r['PIC'] !== pic) return false;
@@ -249,15 +291,15 @@ function renderTable() {
     if (!pend.has(rowNo)) aksi += editBtn;
     return `<tr>
       <td class="item">${zEsc(r['Item Kegiatan'] || '-')}${/^https?:\/\//i.test(r['Nota/Bukti'] || '') ? ` <a class="nota-link" href="${zEsc(r['Nota/Bukti'])}" data-item="${zEsc(r['Item Kegiatan'] || '')}" onclick="return openNota(this)" target="_blank" rel="noopener noreferrer" title="Lihat nota">📎</a>` : ''}<div class="sub">${r['Tanggal Dicatat'] ? 'dicatat ' + zEsc(fmtDate(r['Tanggal Dicatat'])) : ''}${r['Tanggal Dicatat'] && r['Dana'] ? ' · ' : ''}${r['Dana'] ? 'Dana: ' + zEsc(r['Dana']) : ''}</div></td>
-      <td>${zEsc(r['Kategori'] || '-')}</td>
-      <td>${zEsc(r['Tipe'] || '-')}</td>
-      <td>${zEsc(r['PIC'] || '-')}</td>
-      <td><span class="badge ${statusClass}">${zEsc(r['Status'] || 'Draft')}</span></td>
-      <td class="${deadlineSoon ? 'deadline-soon' : ''}">${zEsc(fmtDate(r['Deadline Kegiatan']))}</td>
-      <td class="num">${fmtRupiah(r['Estimasi (Rp)'])}</td>
-      <td class="num">${fmtRupiah(r['Actual (Rp)'])}</td>
-      <td class="num">${fmtRupiah(selisihOf(r))}</td>
-      <td>${aksi}</td>
+      <td data-label="Kategori">${zEsc(r['Kategori'] || '-')}</td>
+      <td data-label="Tipe">${zEsc(r['Tipe'] || '-')}</td>
+      <td data-label="PIC">${zEsc(r['PIC'] || '-')}</td>
+      <td data-label="Status"><span class="badge ${statusClass}">${zEsc(r['Status'] || 'Draft')}</span></td>
+      <td data-label="Deadline" class="${deadlineSoon ? 'deadline-soon' : ''}">${zEsc(fmtDate(r['Deadline Kegiatan']))}</td>
+      <td data-label="Estimasi" class="num">${fmtRupiah(r['Estimasi (Rp)'])}</td>
+      <td data-label="Actual" class="num">${fmtRupiah(r['Actual (Rp)'])}</td>
+      <td data-label="Selisih" class="num">${fmtRupiah(selisihOf(r))}</td>
+      <td class="aksi">${aksi}</td>
     </tr>`;
   }).join('');
 }
@@ -323,9 +365,10 @@ function danaStats() {
       .filter((r) => !(Number(r['Actual (Rp)']) > 0) && r['Status'] !== 'Selesai')
       .reduce((s, r) => s + (Number(r['Estimasi (Rp)']) || 0), 0);
     const nominal = Number(d['Nominal (Rp)']) || 0;
-    const saldo = nominal - terpakai;
+    const reimburse = Number(d['Reimburse (Rp)']) || 0;   // talangan yang sudah diganti
+    const saldo = nominal + reimburse - terpakai;
     return {
-      nama: nama, nominal: nominal, tgl: d['Tgl Transfer'], pic: d['PIC Transaksi'], catatan: d['Catatan'],
+      nama: nama, row: d['_row'], nominal: nominal, reimburse: reimburse, tgl: d['Tgl Transfer'], pic: d['PIC Transaksi'], catatan: d['Catatan'],
       terpakai: terpakai, rencana: rencana, saldo: saldo, bebas: saldo - rencana, jumlah: linked.length,
       menunggu: linked.filter((r) => r['Status'] === 'Ditransfer').length // menunggu Actual
     };
@@ -342,17 +385,24 @@ function renderDana() {
   }
   const aktif = $('filterDana').value;
   $('danaList').innerHTML = stats.map((d) => {
-    const pct = d.nominal > 0 ? Math.min(100, Math.max(0, d.terpakai / d.nominal * 100)) : 0;
+    const masuk = d.nominal + d.reimburse;
+    const pct = masuk > 0 ? Math.min(100, Math.max(0, d.terpakai / masuk * 100)) : 0;
     const minus = d.saldo < 0;
+    const btnReimburse = minus && backendReimburse
+      ? `<button class="aksi-btn dana" data-nama="${zEsc(d.nama)}" onclick="event.stopPropagation(); openReimburse(this.dataset.nama)">Catat reimburse</button>` : '';
+    const btnSettle = d.menunggu > 0
+      ? `<button class="aksi-btn dana" data-nama="${zEsc(d.nama)}" onclick="event.stopPropagation(); openSettle(this.dataset.nama)">Isi Actual sekaligus (${d.menunggu})</button>` : '';
+    const btnEdit = backendEdit
+      ? `<button class="aksi-btn edit" data-nama="${zEsc(d.nama)}" onclick="event.stopPropagation(); openDanaEdit(this.dataset.nama)">Edit</button>` : '';
     return `<div class="dana-card ${aktif === d.nama ? 'on' : ''}" data-nama="${zEsc(d.nama)}" onclick="filterDanaBy(this.dataset.nama)" title="Klik untuk lihat kebutuhan dari dana ini">
       <div class="dana-name">${zEsc(d.nama)}</div>
       <div class="dana-meta">${zEsc(fmtDate(d.tgl))} · ${zEsc(d.pic || '-')} · ${d.jumlah} kebutuhan</div>
-      <div class="dana-nums"><span>Dana ${fmtDanaRp(d.nominal)}</span><span>Terpakai ${fmtDanaRp(d.terpakai)}</span></div>
+      <div class="dana-nums"><span>Dana ${fmtDanaRp(d.nominal)}${d.reimburse ? ` + reimburse ${fmtDanaRp(d.reimburse)}` : ''}</span><span>Terpakai ${fmtDanaRp(d.terpakai)}</span></div>
       <div class="dana-bar"><div class="dana-fill ${minus ? 'over' : ''}" style="width:${pct}%"></div></div>
       <div class="dana-saldo ${minus ? 'minus' : ''}">${minus ? 'Perlu reimburse' : 'Saldo'} <b>${fmtDanaRp(Math.abs(d.saldo))}</b></div>
       ${minus ? '<div class="dana-plan">Pengeluaran melebihi dana, selisihnya ditalangi dulu.</div>' : ''}
       ${d.rencana > 0 ? `<div class="dana-plan">Rencana belum jalan ${fmtDanaRp(d.rencana)} · sisa bebas ${fmtDanaRp(d.bebas)}</div>` : ''}
-      ${(d.menunggu > 0 || backendEdit) ? `<div class="dana-actions">${d.menunggu > 0 ? `<button class="aksi-btn dana" data-nama="${zEsc(d.nama)}" onclick="event.stopPropagation(); openSettle(this.dataset.nama)">Isi Actual sekaligus (${d.menunggu})</button>` : ''}${backendEdit ? `<button class="aksi-btn edit" data-nama="${zEsc(d.nama)}" onclick="event.stopPropagation(); openDanaEdit(this.dataset.nama)">Edit</button>` : ''}</div>` : ''}
+      ${(btnReimburse || btnSettle || btnEdit) ? `<div class="dana-actions">${btnReimburse}${btnSettle}${btnEdit}</div>` : ''}
     </div>`;
   }).join('');
 }
@@ -494,8 +544,44 @@ function settleItems() {
   return kegiatanData.filter((r) => r['Dana'] === settleDana && r['Status'] === 'Ditransfer');
 }
 
+// Foto/PDF nota per baris di Isi Actual sekaligus: { nomorBaris: hasil compressImage }.
+// Disimpan di sini (bukan di input file) supaya tidak hilang saat tabel dibangun ulang.
+let settlePhotos = {};
+const SETTLE_MAX_FOTO = 10;
+const SETTLE_MAX_KB = 3400;   // total foto per kirim (batas kiriman Vercel ±4,5 MB setelah base64)
+
+function settlePhotoLabel(rowNo) {
+  const p = settlePhotos[rowNo];
+  if (!p) return '';
+  return '<span class="settle-photo-ok">' + (p.mime === 'application/pdf' ? '📄 ' : '🖼 ') + zEsc(p.name) + ' · ' + p.kb + ' KB ' +
+    '<button type="button" class="link-btn" onclick="clearSettlePhoto(' + rowNo + ')">hapus</button></span>';
+}
+
+async function pickSettlePhoto(input) {
+  const rowNo = Number(input.closest('tr').dataset.row);
+  const file = input.files[0];
+  input.value = '';
+  if (!file) return;
+  try {
+    settlePhotos[rowNo] = await compressImage(file);
+  } catch (err) {
+    setMsg($('st-msg'), err.message, 'err');
+    return;
+  }
+  input.closest('td').querySelector('.settle-photo-info').innerHTML = settlePhotoLabel(rowNo);
+  updateSettleSum();
+}
+
+function clearSettlePhoto(rowNo) {
+  delete settlePhotos[rowNo];
+  const tr = document.querySelector('#settleBody tr[data-row="' + rowNo + '"]');
+  if (tr) tr.querySelector('.settle-photo-info').innerHTML = '';
+  updateSettleSum();
+}
+
 function openSettle(nama) {
   settleDana = nama;
+  settlePhotos = {};
   setMsg($('st-msg'), '', '');
   $('st-err').classList.remove('show');
   $('settleBody').innerHTML = '';
@@ -512,7 +598,7 @@ function renderSettle() {
   const items = settleItems();
   $('st-sub').textContent = 'Dana: ' + settleDana + ' · ' + items.length + ' kebutuhan menunggu Actual. Kosongkan baris yang belum dibelanjakan, atau yang mau di-Lengkapi sendiri dengan foto nota.';
   if (!items.length) {
-    $('settleBody').innerHTML = '<tr><td colspan="4" class="empty">Semua kebutuhan dari dana ini sudah selesai.</td></tr>';
+    $('settleBody').innerHTML = '<tr><td colspan="5" class="empty">Semua kebutuhan dari dana ini sudah selesai.</td></tr>';
   } else {
     $('settleBody').innerHTML = items.map((r) => {
       const rowNo = Number(r['_row']);
@@ -522,10 +608,14 @@ function renderSettle() {
         <td class="num">${fmtRupiah(r['Estimasi (Rp)'])}</td>
         <td><input type="number" class="settle-in" min="0" step="1" inputmode="numeric" placeholder="0" value="${zEsc(k.a)}" oninput="updateSettleSum()"></td>
         <td><input type="text" class="settle-nota" placeholder="https://…" value="${zEsc(k.n)}"></td>
+        <td class="settle-photo-cell" ${backendFotoBatch ? '' : 'style="display:none"'}>
+          <input type="file" class="settle-photo" accept="image/*,application/pdf" onchange="pickSettlePhoto(this)">
+          <div class="settle-photo-info">${settlePhotoLabel(rowNo)}</div></td>
       </tr>`;
     }).join('');
   }
   $('st-submit').disabled = !items.length;
+  $('st-photo-th').style.display = backendFotoBatch ? '' : 'none';
   updateSettleSum();
 }
 
@@ -567,11 +657,18 @@ async function submitSettle() {
     tr.classList.remove('settle-row-err');
     const a = tr.querySelector('.settle-in').value.trim();
     const n = tr.querySelector('.settle-nota').value.trim();
-    if (a === '' && n === '') return; // dibiarkan: tetap Ditransfer
+    const p = backendFotoBatch ? settlePhotos[Number(tr.dataset.row)] : null;
+    if (a === '' && n === '' && !p) return; // dibiarkan: tetap Ditransfer
     if (!(Number(a) > 0)) { bad = 'Actual harus angka lebih dari 0 (atau kosongkan barisnya).'; tr.classList.add('settle-row-err'); return; }
     if (n && !/^https?:\/\/\S+$/i.test(n)) { bad = 'Link nota harus diawali http:// atau https://'; tr.classList.add('settle-row-err'); return; }
-    items.push({ row: Number(tr.dataset.row), actual: Number(a), nota: n || null });
+    const item = { row: Number(tr.dataset.row), actual: Number(a), nota: n || null };
+    if (p) { item.photoBase64 = p.base64; item.photoMime = p.mime; }
+    items.push(item);
   });
+  const fotos = items.filter((i) => i.photoBase64);
+  const fotoKb = fotos.reduce((s, i) => s + Math.round(i.photoBase64.length * 3 / 4 / 1024), 0);
+  if (!bad && fotos.length > SETTLE_MAX_FOTO) bad = 'Foto/PDF maksimal ' + SETTLE_MAX_FOTO + ' sekali kirim. Hapus sebagian foto, kirim, lalu sisanya berikutnya.';
+  if (!bad && fotoKb > SETTLE_MAX_KB) bad = 'Total foto/PDF terlalu besar untuk sekali kirim (' + fotoKb + ' KB, maks ±3,4 MB). Kirim sebagian dulu.';
   if (bad || !items.length) {
     errEl.textContent = bad || 'Isi Actual minimal satu kebutuhan.';
     errEl.classList.add('show');
@@ -582,6 +679,7 @@ async function submitSettle() {
   btn.textContent = 'Menyimpan…';
   try {
     const json = await zApi.post({ action: 'complete_batch', items: items });
+    (json.completed || []).forEach((r) => { delete settlePhotos[r]; });
     if (json.ok && !(json.skipped || []).length) {
       // semua beres: tutup dan kembali ke dashboard. Kalau ada yang dilewati, popup tetap
       // terbuka supaya alasannya terbaca.
@@ -1216,4 +1314,216 @@ function restoreEditRow() {
     restore: () => openEdit(row)
   });
   closeModal('m-edit');
+}
+
+// ---------- saringan "Selesai tapi belum ada nota" (dari kartu Sudah Cair) ----------
+function setNoNota(on) {
+  noNotaOnly = !!on;
+  if (noNotaOnly) $('filterStatus').value = '';
+  renderTable();
+  if (noNotaOnly) $('tableKegiatan').scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+// ---------- popup: catat reimburse (talangan yang melebihi dana sudah diganti) ----------
+let reimburseDana = null;   // { nama, row }
+
+function openReimburse(nama) {
+  const d = danaStats().find((x) => x.nama === nama);
+  if (!d) return;
+  reimburseDana = { nama: d.nama, row: d.row };
+  $('reimburseForm').reset();
+  clearErrors($('reimburseForm'));
+  setMsg($('rb-msg'), '', '');
+  $('rb-sub').textContent = 'Dana "' + d.nama + '" · ' + (d.saldo < 0 ? 'kurang ' + fmtDanaRp(-d.saldo) : 'saldo ' + fmtDanaRp(d.saldo)) +
+    '. Isi berapa yang sudah diganti; saldo dana bertambah sebesar itu.';
+  $('rb-nominal').value = d.saldo < 0 ? -d.saldo : '';
+  $('rb-tgl').value = todayStr();
+  openModal('m-reimburse');
+}
+
+$('reimburseForm').addEventListener('submit', (e) => {
+  e.preventDefault();
+  clearErrors($('reimburseForm'));
+  const nominal = Number($('rb-nominal').value);
+  if (!(nominal > 0)) { $('err-rb-nominal').classList.add('show'); return; }
+  const snap = snapshotForm($('reimburseForm'));
+  const target = reimburseDana;
+  enqueueSave({
+    label: 'Reimburse ' + fmtDanaRp(nominal) + ': ' + target.nama,
+    payload: { action: 'reimburse_dana', row: target.row, nominal: nominal, tgl: $('rb-tgl').value || null,
+      pic: $('rb-pic').value || null, catatan: $('rb-catatan').value.trim() || null },
+    rows: [],
+    okMsg: 'Reimburse ' + fmtDanaRp(nominal) + ' dicatat untuk dana "' + target.nama + '".',
+    restore: () => { openReimburse(target.nama); restoreForm(snap); }
+  });
+  closeModal('m-reimburse');
+});
+
+// ---------- rekap: ringkasan per periode + unduh Excel ----------
+// Kegiatan Dibatalkan tidak dihitung. Tanggal = Tanggal Dicatat (data lama = tanggal bayar).
+function rekapRows(periode) {
+  return kegiatanData.filter((r) => r['Status'] !== 'Dibatalkan' && (!periode || monthKey(r) === periode));
+}
+
+function rekapSum(rows) {
+  const o = { n: rows.length, est: 0, act: 0, sel: 0, tanpaNota: 0, nAct: 0 };
+  rows.forEach((r) => {
+    const est = Number(r['Estimasi (Rp)']) || 0;
+    const act = Number(r['Actual (Rp)']) || 0;
+    o.est += est;
+    if (act > 0) { o.act += act; o.sel += act - est; o.nAct++; }
+    if (r['Status'] === 'Selesai' && !hasNota(r)) o.tanpaNota++;
+  });
+  return o;
+}
+
+function rekapGroup(rows, keyFn) {
+  const map = new Map();
+  rows.forEach((r) => {
+    const k = keyFn(r);
+    if (!map.has(k)) map.set(k, []);
+    map.get(k).push(r);
+  });
+  return [...map.entries()].map(([k, list]) => Object.assign({ key: k }, rekapSum(list)));
+}
+
+function openRekap() {
+  $('rk-periode').innerHTML = '<option value="">Semua waktu</option>' +
+    monthOptions().map((k) => `<option value="${k}">${monthLabel(k)}</option>`).join('');
+  $('rk-periode').value = $('filterPeriode').value;
+  setMsg($('rk-msg'), '', '');
+  renderRekap();
+  openModal('m-rekap');
+}
+
+function renderRekap() {
+  const periode = $('rk-periode').value;
+  const rows = rekapRows(periode);
+  const t = rekapSum(rows);
+  $('rk-total').innerHTML =
+    `<div><span>Kegiatan</span><b>${t.n}</b></div>
+     <div><span>Total estimasi</span><b>${fmtDanaRp(t.est)}</b></div>
+     <div><span>Total actual</span><b>${fmtDanaRp(t.act)}</b></div>
+     <div><span>Selisih</span><b class="${t.sel > 0 ? 'minus' : ''}">${fmtDanaRp(t.sel)}</b></div>
+     <div><span>Selesai tanpa nota</span><b>${t.tanpaNota}</b></div>`;
+  const tbl = (groups, label) => groups.length
+    ? groups.sort((a, b) => b.act - a.act || b.est - a.est).map((g) =>
+      `<tr><td>${zEsc(g.key || label)}</td><td class="num">${g.n}</td><td class="num">${fmtDanaRp(g.est)}</td><td class="num">${fmtDanaRp(g.act)}</td></tr>`).join('')
+    : '<tr><td colspan="4" class="empty">Tidak ada data.</td></tr>';
+  $('rk-kategori').innerHTML = tbl(rekapGroup(rows, (r) => r['Kategori'] || ''), '(tanpa kategori)');
+  $('rk-dana').innerHTML = tbl(rekapGroup(rows, (r) => r['Dana'] || ''), 'Transfer langsung (bukan dari dana)');
+}
+
+// SheetJS dimuat saat dibutuhkan saja (tidak memperlambat halaman).
+function loadXlsx() {
+  if (window.XLSX) return Promise.resolve();
+  return new Promise((resolve, reject) => {
+    const s = document.createElement('script');
+    s.src = 'https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js';
+    s.onload = () => resolve();
+    s.onerror = () => reject(new Error('Gagal memuat pembuat Excel. Cek koneksi internet lalu coba lagi.'));
+    document.head.appendChild(s);
+  });
+}
+
+function xlDate(v) {
+  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(v || ''));
+  return m ? new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3])) : '';
+}
+
+// Lembar dari array 2D; kolom uang diberi format Rupiah, lebar kolom diatur.
+function xlSheet(aoa, moneyCols, widths) {
+  const ws = XLSX.utils.aoa_to_sheet(aoa, { cellDates: true, dateNF: 'dd-mmm-yy' });
+  const range = XLSX.utils.decode_range(ws['!ref']);
+  for (let r = range.s.r; r <= range.e.r; r++) {
+    moneyCols.forEach((c) => {
+      const cell = ws[XLSX.utils.encode_cell({ r: r, c: c })];
+      if (cell && cell.t === 'n') cell.z = '"Rp"#,##0;-"Rp"#,##0';
+    });
+  }
+  ws['!cols'] = widths.map((w) => ({ wch: w }));
+  return ws;
+}
+
+async function downloadRekap() {
+  const btn = $('rk-download');
+  btn.disabled = true;
+  btn.textContent = 'Menyiapkan…';
+  setMsg($('rk-msg'), '', '');
+  try {
+    await loadXlsx();
+    const periode = $('rk-periode').value;
+    const label = periode ? monthLabel(periode) : 'Semua waktu';
+    const rows = rekapRows(periode).slice().sort((a, b) =>
+      String(a['Tanggal Dicatat'] || '').localeCompare(String(b['Tanggal Dicatat'] || '')) || a['_row'] - b['_row']);
+    const t = rekapSum(rows);
+    const wb = XLSX.utils.book_new();
+
+    XLSX.utils.book_append_sheet(wb, xlSheet([
+      ['Rekap Zerodeo — Budgeting'],
+      ['Periode', label],
+      ['Dibuat', new Date().toLocaleString('id-ID')],
+      [],
+      ['Jumlah kegiatan', t.n],
+      ['Total estimasi', t.est],
+      ['Total actual', t.act],
+      ['Selisih (actual − estimasi, kegiatan yang sudah ada actual)', t.sel],
+      ['Selesai tanpa nota', t.tanpaNota],
+      [],
+      ['Catatan: kegiatan Dibatalkan tidak dihitung. Tanggal = Tanggal Dicatat (data lama = tanggal bayar).']
+    ], [1], [48, 22]), 'Ringkasan');
+
+    const bulan = rekapGroup(rows, monthKey).sort((a, b) => a.key.localeCompare(b.key));
+    XLSX.utils.book_append_sheet(wb, xlSheet(
+      [['Bulan', 'Jumlah kegiatan', 'Estimasi', 'Actual', 'Selisih', 'Selesai tanpa nota']]
+        .concat(bulan.map((g) => [monthLabel(g.key), g.n, g.est, g.act, g.sel, g.tanpaNota]))
+        .concat([['TOTAL', t.n, t.est, t.act, t.sel, t.tanpaNota]]),
+      [2, 3, 4], [16, 16, 16, 16, 16, 18]), 'Per Bulan');
+
+    const kat = rekapGroup(rows, (r) => r['Kategori'] || '(tanpa kategori)').sort((a, b) => b.act - a.act || b.est - a.est);
+    XLSX.utils.book_append_sheet(wb, xlSheet(
+      [['Kategori', 'Jumlah kegiatan', 'Estimasi', 'Actual', 'Selisih']]
+        .concat(kat.map((g) => [g.key, g.n, g.est, g.act, g.sel]))
+        .concat([['TOTAL', t.n, t.est, t.act, t.sel]]),
+      [2, 3, 4], [28, 16, 16, 16, 16]), 'Per Kategori');
+
+    const posisi = {};
+    danaStats().forEach((d) => { posisi[d.nama] = d; });
+    const dn = rekapGroup(rows, (r) => r['Dana'] || '').sort((a, b) => b.act - a.act);
+    XLSX.utils.book_append_sheet(wb, xlSheet(
+      [['Dana', 'Kegiatan (periode)', 'Estimasi (periode)', 'Actual (periode)', 'Nominal dana', 'Reimburse', 'Terpakai (total)', 'Saldo saat ini']]
+        .concat(dn.map((g) => {
+          const d = posisi[g.key];
+          return [g.key || 'Transfer langsung (bukan dari dana)', g.n, g.est, g.act,
+            d ? d.nominal : '', d ? d.reimburse : '', d ? d.terpakai : '', d ? d.saldo : ''];
+        })),
+      [2, 3, 4, 5, 6, 7], [32, 16, 18, 16, 16, 14, 16, 16]), 'Per Dana');
+
+    XLSX.utils.book_append_sheet(wb, xlSheet(
+      [['Tgl dicatat', 'Item', 'Kategori', 'Tipe', 'PIC', 'Status', 'Jalur', 'Dana', 'Estimasi', 'Nominal transfer',
+        'Actual', 'Selisih', 'Tgl transfer', 'Nota', 'Catatan']]
+        .concat(rows.map((r) => {
+          const act = Number(r['Actual (Rp)']) || 0;
+          const est = Number(r['Estimasi (Rp)']) || 0;
+          return [xlDate(r['Tanggal Dicatat']), r['Item Kegiatan'] || '', r['Kategori'] || '', r['Tipe'] || '', r['PIC'] || '',
+            r['Status'] || '', r['Jalur'] || '', r['Dana'] || '', est, Number(r['Nominal Transfer (Rp)']) || '',
+            act || '', act ? act - est : '', xlDate(r['Tgl Transfer']), hasNota(r) ? r['Nota/Bukti'] : '', r['Catatan'] || ''];
+        })),
+      [8, 9, 10, 11], [11, 34, 22, 8, 10, 11, 10, 22, 14, 15, 14, 13, 11, 40, 40]), 'Detail');
+    // link nota bisa diklik di Excel
+    const det = wb.Sheets['Detail'];
+    rows.forEach((r, i) => {
+      if (!hasNota(r)) return;
+      const cell = det[XLSX.utils.encode_cell({ r: i + 1, c: 13 })];
+      if (cell) { cell.l = { Target: r['Nota/Bukti'] }; cell.v = 'Buka nota'; }
+    });
+
+    XLSX.writeFile(wb, 'Rekap Zerodeo - ' + label + '.xlsx');
+    setMsg($('rk-msg'), 'File Excel diunduh.', 'ok');
+  } catch (err) {
+    setMsg($('rk-msg'), err.message, 'err');
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Unduh Excel';
+  }
 }

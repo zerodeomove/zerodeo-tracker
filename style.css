@@ -311,3 +311,41 @@ body.savebar-on .toast { top: 56px; }
 .btn-danger { border: none; background: var(--red-bg); color: var(--red); padding: 8px 12px; border-radius: 8px; font-weight: 600; cursor: pointer; font-family: inherit; font-size: 13px; align-self: flex-start; }
 .modal-box .estack { display: flex; flex-direction: column; gap: 14px; }
 .modal-box .estack.box { border: 1px dashed var(--border); border-radius: 8px; padding: 12px; }
+
+/* saringan aktif (chip), tautan di kartu, tombol teks kecil */
+.chip { border: 1px solid var(--accent); background: var(--accent-light); color: var(--accent-dark); border-radius: 999px; padding: 4px 10px; font-size: 12px; cursor: pointer; font-family: inherit; }
+.card-link { color: var(--accent-dark); text-decoration: underline; }
+.link-btn { border: none; background: none; color: var(--red); cursor: pointer; font-size: 12px; padding: 0 2px; font-family: inherit; text-decoration: underline; }
+
+/* rekap */
+.rekap-total { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 8px; margin: 4px 0; }
+.rekap-total > div { background: var(--bg); border-radius: 8px; padding: 8px 10px; display: flex; flex-direction: column; min-width: 0; }
+.rekap-total span { font-size: 12px; color: var(--text-muted); }
+.rekap-total b { font-size: 15px; overflow-wrap: anywhere; }
+.rekap-total b.minus { color: var(--red); }
+.rekap-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 12px; }
+.rekap-title { font-weight: 600; font-size: 13px; margin-bottom: 6px; }
+.rekap-grid td.num, .rekap-grid td { font-size: 12px; }
+
+/* foto per baris di Isi Actual sekaligus */
+.settle-photo { font-size: 12px; max-width: 190px; }
+.settle-photo-ok { display: block; font-size: 12px; color: var(--green); margin-top: 4px; overflow-wrap: anywhere; }
+
+/* HP: tabel kegiatan jadi kartu per kegiatan (tidak perlu geser ke samping) */
+@media (max-width: 700px) {
+  #kegiatanScroll { overflow-x: visible; }
+  #tableKegiatan, #tableKegiatan tbody, #tableKegiatan tr, #tableKegiatan td { display: block; width: 100%; }
+  #tableKegiatan { border: none; background: transparent; }
+  #tableKegiatan thead { display: none; }
+  #tableKegiatan tr { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); margin-bottom: 10px; padding: 4px 0 8px; }
+  #tableKegiatan td { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; border: none; padding: 4px 14px; text-align: right; }
+  #tableKegiatan td::before { content: attr(data-label); color: var(--text-muted); font-size: 12px; text-align: left; flex: none; }
+  #tableKegiatan td.item { display: block; text-align: left; max-width: none; font-weight: 600; font-size: 15px; padding-top: 10px; }
+  #tableKegiatan td.item .sub { font-weight: 400; }
+  #tableKegiatan td.aksi { justify-content: flex-start; flex-wrap: wrap; gap: 6px; padding-top: 8px; }
+  #tableKegiatan td.aksi .aksi-btn { padding: 7px 12px; font-size: 13px; }
+  #tableKegiatan td.item::before, #tableKegiatan td.aksi::before, #tableKegiatan td.empty-state::before { content: none; }
+  #tableKegiatan td.empty-state { display: block; text-align: center; }
+  .toolbar select { flex: 1 1 45%; min-width: 0; }
+  .toolbar .push { width: 100%; justify-content: flex-end; flex-wrap: wrap; }
+}
