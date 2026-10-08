@@ -199,7 +199,7 @@ function renderCards() {
 
   // Deadline terdekat (belum Selesai, ada tanggal, urut terdekat, max 5)
   const upcoming = kegiatanData
-    .filter((r) => r['Status'] !== 'Selesai' && r['Status'] !== 'Dibatalkan' && r['Deadline Kegiatan'])
+    .filter((r) => deadlineAktif(r) && r['Deadline Kegiatan'])
     .map((r) => ({ item: r['Item Kegiatan'], date: r['Deadline Kegiatan'], days: daysUntil(r['Deadline Kegiatan']) }))
     .sort((a, b) => new Date(a.date) - new Date(b.date))
     .slice(0, 5);
@@ -216,6 +216,11 @@ function renderCards() {
       </div>`;
     }).join('');
   }
+}
+
+// Deadline hanya berarti untuk kegiatan yang masih berjalan: bukan Selesai, Ditolak, atau Dibatalkan.
+function deadlineAktif(r) {
+  return ['Selesai', 'Ditolak', 'Dibatalkan'].indexOf(r['Status']) === -1;
 }
 
 function filterMenungguApprove() {
@@ -274,7 +279,7 @@ function renderTable() {
     const rowNo = Number(r['_row']);
     const statusClass = STATUS_CLASS[r['Status']] || 'draft';
     const days = daysUntil(r['Deadline Kegiatan']);
-    const deadlineSoon = r['Status'] !== 'Selesai' && r['Status'] !== 'Dibatalkan' && days !== null && days <= 3;
+    const deadlineSoon = deadlineAktif(r) && days !== null && days <= 3;
     let aksi = '';
     const editBtn = backendEdit ? `<button class="aksi-btn edit" onclick="openEdit(${rowNo})">Edit</button>` : '';
     if (pend.has(rowNo)) {
