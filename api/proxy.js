@@ -4,7 +4,7 @@
 //   TEAM_CODE        kode akses tim (minimal 8 karakter, jangan angka pendek)
 //   APPS_SCRIPT_URL  URL web app Apps Script (.../exec), TIDAK ditulis di repo
 //   SHARED_SECRET    string acak panjang, sama persis dengan Script Property
-//                    SHARED_SECRET di Apps Script
+//                    SHARED_SECRET di Apps Script (WAJIB: tanpa ini proxy menolak jalan)
 //
 // Ubah env -> wajib Redeploy supaya berlaku.
 
@@ -21,8 +21,8 @@ module.exports = async (req, res) => {
   res.setHeader('Cache-Control', 'no-store');
   const { TEAM_CODE, APPS_SCRIPT_URL, SHARED_SECRET } = process.env;
 
-  if (!TEAM_CODE || !APPS_SCRIPT_URL) {
-    return res.status(500).json({ ok: false, error: 'Server belum dikonfigurasi (env TEAM_CODE / APPS_SCRIPT_URL).' });
+  if (!TEAM_CODE || !APPS_SCRIPT_URL || !SHARED_SECRET) {
+    return res.status(500).json({ ok: false, error: 'Server belum dikonfigurasi (env TEAM_CODE / APPS_SCRIPT_URL / SHARED_SECRET).' });
   }
 
   if (!safeEqual(req.headers['x-team-code'], TEAM_CODE)) {
@@ -33,12 +33,11 @@ module.exports = async (req, res) => {
   try {
     let upstream;
     if (req.method === 'GET') {
-      const url = new URL(APPS_SCRIPT_URL);
-      if (SHARED_SECRET) url.searchParams.set('secret', SHARED_SECRET);
-      // Hanya "fresh=1" (lewati cache Apps Script) yang diteruskan dari browser.
+      // Pembacaan data dikirim sebagai POST (action "get_data") supaya secret ada di body,
+      // bukan di URL (URL tercatat di log). Hanya "fresh=1" yang diteruskan dari browser.
       const q = req.query || Object.fromEntries(new URL(req.url, 'http://x').searchParams);
-      if (q && q.fresh === '1') url.searchParams.set('fresh', '1');
-      upstream = await fetch(url.toString(), { redirect: 'follow' });
+      const body = { action: 'get_data', fresh: !!(q && q.fresh === '1'), secret: SHARED_SECRET };
+      upstream = await fetch(APPS_SCRIPT_URL, { method: 'POST', body: JSON.stringify(body), redirect: 'follow' });
     } else if (req.method === 'POST') {
       let body = req.body;
       if (typeof body === 'string') {
@@ -47,7 +46,7 @@ module.exports = async (req, res) => {
       if (!body || typeof body !== 'object') {
         return res.status(400).json({ ok: false, error: 'Body tidak valid.' });
       }
-      if (SHARED_SECRET) body.secret = SHARED_SECRET;
+      body.secret = SHARED_SECRET;
       // Content-Type default (text/plain) memang disengaja: Apps Script tidak mendukung preflight
       upstream = await fetch(APPS_SCRIPT_URL, { method: 'POST', body: JSON.stringify(body), redirect: 'follow' });
     } else {

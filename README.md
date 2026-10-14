@@ -47,7 +47,7 @@ Tabel kegiatan diurutkan dari yang **terbaru** di atas, dan di bawah nama item t
 
 **Foto atau PDF nota:** di popup Lengkapi, Data lama, dan Edit (baris Selesai) cukup pilih foto atau PDF (foto otomatis dikecilkan; PDF maksimal 3 MB) dan disimpan ke folder Drive "Zerodeo - Nota Bukti", lalu linknya terisi sendiri di kolom Nota. Link manual tetap boleh; kalau keduanya diisi, foto yang dipakai. Fitur foto di Data lama/Edit baru muncul setelah Apps Script versi terbaru di-deploy.
 
-**Folder nota buatan sendiri (opsional):** buat folder di Drive, salin ID-nya (bagian akhir alamat folder), lalu tulis di `Code.gs` pada konstanta `NOTA_FOLDER_ID` (sudah berisi folder "Nota Zerodeo"; Script Property `NOTA_FOLDER_ID` masih boleh dipakai untuk menimpanya). Kalau kosong, folder "Zerodeo - Nota Bukti" dibuat otomatis. Nota yang sudah ada tampil sebagai ikon 📎 di tabel, dan bar simpan memberi tautan "Buka nota". Kalau server menjawab sukses tapi file tidak terunggah, bar menampilkan galat.
+**Folder nota buatan sendiri (opsional):** buat folder di Drive, salin ID-nya (bagian akhir alamat folder), lalu isi di Script Property `NOTA_FOLDER_ID` (repo ini public, jadi ID tidak ditulis di kode). Kalau kosong, folder "Zerodeo - Nota Bukti" dibuat otomatis. Nota yang sudah ada tampil sebagai ikon 📎 di tabel, dan bar simpan memberi tautan "Buka nota". Kalau server menjawab sukses tapi file tidak terunggah, bar menampilkan galat.
 
 **Isi Actual sekaligus** juga menerima foto/PDF per baris (maksimal 10 dan total ±3,4 MB sekali kirim, karena batas kiriman Vercel). Baris yang foto-nya gagal diunggah dilewati dengan alasan; baris lain tetap tersimpan.
 
@@ -222,8 +222,12 @@ diminta memasukkan kode baru saat membuka halaman berikutnya.
 
 Project Settings -> Script Properties (nilainya tidak ditulis di file mana pun di repo):
 
-- `SHARED_SECRET` — sama persis dengan env Vercel. **Selama belum diisi, Apps Script
-  berjalan "terbuka"** (masa transisi supaya tracker tidak putus).
+- `SHARED_SECRET` — sama persis dengan env Vercel. **Wajib diisi: kalau kosong, semua
+  panggilan ditolak** (tertutup bawaan; sebelumnya kosong = terbuka). Perbandingannya aman
+  dari serangan waktu.
+- `BLOCK_GET` — isi `1` untuk mematikan jalur GET (pembacaan data lewat URL). Proxy sekarang
+  membaca data lewat POST (`action: get_data`), jadi isi ini setelah proxy versi baru live.
+- `NOTA_FOLDER_ID` — ID folder Drive untuk foto nota (tidak lagi ditulis di `Code.gs`).
 - `APPROVAL_PIN` — PIN approve/reject Lemon. Bisa diisi langsung di sini, atau lewat
   menu Zerodeo Tools -> Ganti PIN Lemon di Google Sheet. Sebelum PIN diset,
   approve/reject ditolak.
@@ -243,8 +247,26 @@ Project Settings -> Script Properties (nilainya tidak ditulis di file mana pun d
    PIN lama). Tes ulang. Jangan dikunci lebih awal, tracker langsung error.
 
 Catatan: riwayat git lama masih memuat URL Apps Script dan PIN lama, karena riwayat
-tidak ditulis ulang. Pengamannya adalah langkah 6: ganti PIN dan kunci dengan secret,
-jadi URL lama tidak berguna tanpa secret. Jangan menunda langkah 6 terlalu lama.
+tidak ditulis ulang. Pengamannya: kunci dengan secret, matikan jalur GET (`BLOCK_GET`),
+arsipkan semua deployment Apps Script lama, dan ganti PIN. Urutan aman dan langkah rincinya
+ada di [`KEAMANAN.md`](KEAMANAN.md). Repo ini public: jangan pernah menulis secret, PIN,
+URL Apps Script, atau ID folder/Sheet di kode.
+
+## ID kegiatan
+
+Tab `kegiatan` punya kolom **ID** (kolom T, paling kanan). Tiap kegiatan baru diberi ID
+otomatis (`k-xxxxxxxxxx`), dan baris lama diisi sekali saat data dimuat atau lewat menu
+Zerodeo Tools -> Isi ID Kegiatan. ID tidak berubah walau baris diurutkan atau bergeser.
+Jangan diubah atau dihapus. (Dashboard masih memakai nomor baris untuk aksi; ID dipakai
+sebagai pengenal stabil, misalnya untuk penanda "menunggu tindakan" di Hub Pinggiran.)
+
+## Tes
+
+```
+node tests/p0.test.js
+```
+
+Menguji pengecekan secret, jalur GET/POST, proxy, dan pengisian ID (dengan Google API palsu).
 
 ## Yang HARUS dilakukan manual di luar repo (tidak bisa lewat git push)
 

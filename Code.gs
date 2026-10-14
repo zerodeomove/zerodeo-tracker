@@ -26,7 +26,7 @@
 // Penanda versi kode. Ubah setiap kali Code.gs diedit; tampil di dashboard (baris "Terakhir ambil data")
 // supaya kelihatan versi mana yang sebenarnya melayani dashboard (beda dengan isi editor kalau
 // belum Deploy -> New version).
-var KODE_VERSI = '2026-10-08 rekap-reimburse';
+var KODE_VERSI = '2026-10-14 p0-keamanan';
 
 var HEADER_ROW = 4;
 // BUKAN batas jumlah kegiatan. Ini hanya sampai baris mana template di Sheet disiapkan
@@ -60,7 +60,7 @@ var COL = {
   NO: 1, TGL_DICATAT: 2, DEADLINE: 3, PROJECT: 4, ITEM: 5, KATEGORI: 6, TIPE: 7,
   JALUR: 8, PIC: 9, ESTIMASI: 10, STATUS: 11, PIC_TRANSAKSI: 12,
   NOMINAL_TRANSFER: 13, TGL_TRANSFER: 14, ACTUAL: 15, SELISIH: 16, NOTA: 17, CATATAN: 18,
-  DANA: 19
+  DANA: 19, ID: 20
 };
 
 var NOTA_FOLDER_NAME = 'Zerodeo - Nota Bukti';
@@ -68,9 +68,9 @@ var NOTA_FOLDER_NAME = 'Zerodeo - Nota Bukti';
 // ID = bagian terakhir alamat folder: drive.google.com/drive/folders/<ID>.
 // Kalau kosong, folder NOTA_FOLDER_NAME dicari/dibuat otomatis.
 var NOTA_FOLDER_ID_KEY = 'NOTA_FOLDER_ID';
-// ID folder nota (folder 'Nota Zerodeo' di Drive). Ditulis langsung di kode, seperti Makshot.
-// Folder Drive itu privat; ID saja tidak memberi akses ke siapa pun.
-var NOTA_FOLDER_ID = '1fYR1VrVhL9GN9qpLv1uTC70zF2kMvLgT';
+// ID folder nota TIDAK ditulis di kode (repo ini public). Isi lewat Script Property NOTA_FOLDER_ID.
+// Kalau kosong, folder NOTA_FOLDER_NAME dicari/dibuat otomatis.
+var NOTA_FOLDER_ID = '';
 
 // ============================================================
 // MENU
@@ -81,6 +81,7 @@ function onOpen() {
     .addItem('Setup / Reset Tracker', 'setupTracker')
     .addItem('Perluas Tabel', 'perluasTabel')
     .addItem('Ganti PIN Lemon', 'gantiPinLemon')
+    .addItem('Isi ID Kegiatan', 'isiIdKegiatan')
     .addToUi();
 }
 
@@ -297,6 +298,70 @@ function kegiatanRange_(col) {
 function setColumnDropdown_(sheet, col, list) {
   var rule = SpreadsheetApp.newDataValidation().requireValueInList(list, true).setAllowInvalid(true).build();
   sheet.getRange(HEADER_ROW + 1, col, Math.max(sheet.getMaxRows() - HEADER_ROW, 1), 1).setDataValidation(rule);
+}
+
+// ============================================================
+// ID tetap per kegiatan (kolom T). Nomor baris bisa bergeser kalau Sheet diurutkan atau
+// ada baris dihapus, jadi hal yang perlu pengenal stabil (mis. penanda "menunggu tindakan")
+// memakai ID ini. Baris baru diberi ID saat dibuat; baris lama diisi sekali di sini.
+// ============================================================
+function newKegiatanId_() {
+  return 'k-' + Utilities.getUuid().replace(/-/g, '').slice(0, 10);
+}
+
+function ensureIdColumn_(sheet) {
+  var cell = sheet.getRange(HEADER_ROW, COL.ID);
+  if (String(cell.getValue() || '').trim() !== '') return;
+  cell.setValue('ID')
+    .setFontWeight('bold').setFontColor('#FFFFFF').setBackground('#1F4E5F')
+    .setHorizontalAlignment('center').setVerticalAlignment('middle').setWrap(true);
+  sheet.setColumnWidth(COL.ID, 90);
+}
+
+// Mengisi ID untuk baris berisi item yang belum punya ID. Mengembalikan jumlah ID yang dibuat.
+// Aman dipanggil berulang; tidak menyentuh ID yang sudah ada.
+function ensureKegiatanIds_() {
+  var sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('kegiatan');
+  if (!sheet) return 0;
+  var last = sheet.getLastRow();
+  if (last <= HEADER_ROW) return 0;
+  var n = last - HEADER_ROW;
+  var missing = function (items, ids) {
+    for (var i = 0; i < n; i++) {
+      if (String(items[i][0] || '').trim() !== '' && String(ids[i][0] || '').trim() === '') return true;
+    }
+    return false;
+  };
+  ensureIdColumn_(sheet);
+  var read = function () {
+    return [sheet.getRange(HEADER_ROW + 1, COL.ITEM, n, 1).getValues(),
+            sheet.getRange(HEADER_ROW + 1, COL.ID, n, 1).getValues()];
+  };
+  var cur = read();
+  if (!missing(cur[0], cur[1])) return 0;
+
+  var lock = LockService.getScriptLock();
+  if (!lock.tryLock(15000)) return 0;   // dicoba lagi saat data dimuat berikutnya
+  try {
+    cur = read();   // baca ulang di dalam kunci: jangan menimpa ID yang baru dibuat proses lain
+    var items = cur[0], ids = cur[1], made = 0;
+    for (var i = 0; i < n; i++) {
+      if (String(items[i][0] || '').trim() !== '' && String(ids[i][0] || '').trim() === '') {
+        ids[i][0] = newKegiatanId_();
+        made++;
+      }
+    }
+    if (made) sheet.getRange(HEADER_ROW + 1, COL.ID, n, 1).setValues(ids);
+    return made;
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+// Menu: jalankan manual kalau mau memastikan semua baris lama sudah punya ID.
+function isiIdKegiatan() {
+  var made = ensureKegiatanIds_();
+  SpreadsheetApp.getUi().alert(made ? ('ID dibuat untuk ' + made + ' kegiatan.') : 'Semua kegiatan sudah punya ID.');
 }
 
 function lastKegiatanRow_() {
@@ -571,7 +636,7 @@ function buildKegiatanSheet(ss) {
   // Urutan harus sama dengan COL di atas.
   var headers = ['No', 'Tanggal Dicatat', 'Deadline Kegiatan', 'Project/Brand', 'Item Kegiatan',
                   'Kategori', 'Tipe', 'Jalur', 'PIC', 'Estimasi (Rp)', 'Status', 'PIC Transaksi',
-                  'Nominal Transfer (Rp)', 'Tgl Transfer', 'Actual (Rp)', 'Selisih (Rp)', 'Nota/Bukti', 'Catatan', 'Dana'];
+                  'Nominal Transfer (Rp)', 'Tgl Transfer', 'Actual (Rp)', 'Selisih (Rp)', 'Nota/Bukti', 'Catatan', 'Dana', 'ID'];
   sheet.getRange(HEADER_ROW, 1, 1, headers.length).setValues([headers]);
   styleHeaderRow(sheet, HEADER_ROW, headers.length);
 
@@ -585,7 +650,7 @@ function buildKegiatanSheet(ss) {
   // Rumus No/Selisih, format, dan dropdown untuk baris 5..TEMPLATE_LAST_ROW (satu kali, batch).
   applyKegiatanTemplate_(sheet);
 
-  var widths = [40, 90, 90, 80, 260, 150, 70, 80, 70, 100, 90, 100, 110, 90, 100, 100, 120, 160, 140];
+  var widths = [40, 90, 90, 80, 260, 150, 70, 80, 70, 100, 90, 100, 110, 90, 100, 100, 120, 160, 140, 90];
   for (var i = 0; i < widths.length; i++) sheet.setColumnWidth(i + 1, widths[i]);
 
   sheet.setFrozenRows(HEADER_ROW);
@@ -763,11 +828,21 @@ function onEdit(e) {
 }
 
 function doGet(e) {
+  // Secret di query string ikut tercatat di log URL, jadi pembacaan data dipindah ke POST
+  // (action "get_data"). Setelah proxy memakai POST, set Script Property BLOCK_GET = 1
+  // untuk mematikan jalur GET ini sepenuhnya.
+  if (PropertiesService.getScriptProperties().getProperty('BLOCK_GET') === '1') {
+    return jsonResponse({ ok: false, error: 'unauthorized' });
+  }
   // isAuthorized_ ada di Marketing.gs (file terpisah di project Apps Script ini).
   if (!isAuthorized_(e && e.parameter && e.parameter.secret)) {
     return jsonResponse({ ok: false, error: 'unauthorized' });
   }
-  var fresh = e && e.parameter && e.parameter.fresh === '1';
+  return serveData_(e && e.parameter && e.parameter.fresh === '1');
+}
+
+// Seluruh data dashboard (dipakai doGet dan POST action "get_data").
+function serveData_(fresh) {
   if (!fresh) {
     var cached = cacheGet_();
     if (cached) {
@@ -781,6 +856,8 @@ function doGet(e) {
 
 function buildPayload_() {
   var t0 = Date.now();
+  // ID kegiatan harus sudah terisi sebelum data dibaca. Kalau gagal, data tetap dikirim.
+  try { ensureKegiatanIds_(); } catch (err) { /* abaikan: dicoba lagi di pemuatan berikutnya */ }
   var ss = SpreadsheetApp.getActiveSpreadsheet();
   var payload = {
     generated_at: new Date().toISOString(),
@@ -816,6 +893,10 @@ function doPost(e) {
 
     if (!isAuthorized_(data.secret)) {
       return jsonResponse({ ok: false, error: 'unauthorized' });
+    }
+    // Membaca data tidak mengubah apa pun, jadi tidak menghapus cache.
+    if (data.action === 'get_data') {
+      return serveData_(data.fresh === true || data.fresh === '1' || data.fresh === 1);
     }
     try {
       return routePost_(data);
@@ -957,6 +1038,8 @@ function handleAddKegiatan(data) {
     };
     block(COL.TGL_DICATAT, COL.ACTUAL);   // B..O
     block(COL.NOTA, COL.DANA);            // Q..S
+    ensureIdColumn_(sheet);
+    sheet.getRange(targetRow, COL.ID).setValue(newKegiatanId_());
 
     return jsonResponse({ ok: true, row: targetRow, nota: (arsip && data.photoBase64) ? nota : undefined });
   } finally {
@@ -1009,7 +1092,7 @@ function saveNotaPhoto_(itemName, base64, mime) {
     try {
       folder = DriveApp.getFolderById(folderId);
     } catch (err) {
-      throw new Error('Folder nota tidak bisa dibuka. Cek NOTA_FOLDER_ID di Code.gs (harus ID folder Drive yang bisa diakses akun ini).');
+      throw new Error('Folder nota tidak bisa dibuka. Cek Script Property NOTA_FOLDER_ID (harus ID folder Drive yang bisa diakses akun ini).');
     }
   } else {
     var folders = DriveApp.getFoldersByName(NOTA_FOLDER_NAME);

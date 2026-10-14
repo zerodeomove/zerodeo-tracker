@@ -5,7 +5,7 @@ const $ = (id) => document.getElementById(id);
 const PIC_LIST = ['Lenno', 'Ricko', 'Yanuar', 'Christina'];
 const TIPE_LIST = ['Capex', 'Opex'];
 // Harus sama dengan KODE_VERSI di Code.gs. Kalau Apps Script yang melayani berbeda, muncul peringatan.
-const EXPECTED_VERSI = '2026-10-08 rekap-reimburse';
+const EXPECTED_VERSI = '2026-10-14 p0-keamanan';
 
 function fmtRupiah(n) {
   if (n === null || n === undefined || n === '' || isNaN(n)) return '-';

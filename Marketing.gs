@@ -40,8 +40,10 @@
  *
  * ===== KUNCI (Project Settings -> Script Properties) =====
  *   SHARED_SECRET : string acak panjang, sama persis dengan env Vercel.
- *                   Selama BELUM diisi, Apps Script berjalan "terbuka"
- *                   (masa transisi supaya tracker lama tidak putus).
+ *                   WAJIB diisi: kalau kosong, semua panggilan ditolak (tertutup bawaan).
+ *   BLOCK_GET     : isi 1 untuk mematikan jalur GET (pembacaan data lewat URL).
+ *                   Isi setelah proxy Vercel versi POST terpasang.
+ *   NOTA_FOLDER_ID: ID folder Drive tempat foto nota (tidak ditulis di kode).
  *   APPROVAL_PIN  : PIN approve Lemon. Kalau belum diisi, dipakai konstanta
  *                   APPROVAL_PIN lama di Code.gs sebagai cadangan.
  */
@@ -66,8 +68,20 @@ var MKT_PIC = ['Lenno', 'Ricko', 'Yanuar', 'Christina'];
 // ============================================================
 function isAuthorized_(secret) {
   var expected = PropertiesService.getScriptProperties().getProperty('SHARED_SECRET');
-  if (!expected) return true; // belum dikunci (masa transisi)
-  return String(secret || '') === expected;
+  // Tertutup secara bawaan: kalau SHARED_SECRET belum diisi, semua panggilan ditolak
+  // (bukan dibuka). Isi dulu Script Property SHARED_SECRET sebelum deploy versi ini.
+  if (!expected) return false;
+  return safeEqual_(secret, expected);
+}
+
+// Perbandingan teks yang waktunya tidak bergantung pada seberapa banyak karakter yang cocok.
+function safeEqual_(a, b) {
+  a = String(a === undefined || a === null ? '' : a);
+  b = String(b === undefined || b === null ? '' : b);
+  var diff = a.length ^ b.length;
+  var n = Math.max(a.length, b.length);
+  for (var i = 0; i < n; i++) diff |= (a.charCodeAt(i) || 0) ^ (b.charCodeAt(i) || 0);
+  return diff === 0;
 }
 
 function getApprovalPin_() {
