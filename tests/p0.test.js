@@ -1,4 +1,4 @@
-// Tes perubahan keamanan (P0). Jalankan: node tests/p0.test.js   (tanpa dependensi)
+// Tes perubahan keamanan (P0): secret, jalur GET/POST, proxy, ID kegiatan. Jalankan: node tests/p0.test.js   (tanpa dependensi)
 const fs = require('fs');
 const path = require('path');
 const vm = require('vm');
@@ -26,6 +26,7 @@ function loadAppsScript(props, extra) {
   vm.createContext(ctx);
   vm.runInContext(fs.readFileSync(path.join(root, 'Marketing.gs'), 'utf8'), ctx);
   vm.runInContext(fs.readFileSync(path.join(root, 'Code.gs'), 'utf8'), ctx);
+  vm.runInContext(fs.readFileSync(path.join(root, 'Hub.gs'), 'utf8'), ctx);
   return { ctx, store };
 }
 const parse = (out) => JSON.parse(out.text);
@@ -141,7 +142,7 @@ const ENV = { TEAM_CODE: 'kode-tim-panjang', APPS_SCRIPT_URL: 'https://script.go
   assert.strictEqual(r.calls[0].url, ENV.APPS_SCRIPT_URL); ok('GET -> URL Apps Script tanpa query apa pun (secret tidak di URL)');
   assert.strictEqual(r.calls[0].opts.method, 'POST'); ok('GET dari browser diteruskan sebagai POST');
   const b1 = JSON.parse(r.calls[0].opts.body);
-  assert.deepStrictEqual(b1, { action: 'get_data', fresh: false, secret: ENV.SHARED_SECRET }); ok('body: get_data + secret di body');
+  assert.deepStrictEqual(b1, { action: 'get_data', fresh: false, secret: ENV.SHARED_SECRET, hub: null }); ok('body: get_data + secret di body (jalur kode tim: tanpa identitas)');
 
   r = await callProxy({ headers: { 'x-team-code': ENV.TEAM_CODE }, method: 'GET', query: { fresh: '1', secret: 'dari-browser', action: 'x' } }, ENV);
   const b2 = JSON.parse(r.calls[0].opts.body);

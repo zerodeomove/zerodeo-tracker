@@ -63,7 +63,7 @@ function renderStrategi() {
     <td>${splitList(r.Lane).map((x) => `<span class="pill">${zEsc(x)}</span>`).join('')}</td>
     <td>${splitList(r.Channel).map((x) => `<span class="pill alt">${zEsc(x)}</span>`).join('')}</td>
     <td style="white-space:nowrap">${mktDate(r.Mulai)}${r.Selesai ? ' – ' + mktDate(r.Selesai) : ' →'}</td>
-    <td>${zEsc(r.PIC)}</td>
+    <td>${zEsc(picNama(r.PIC))}</td>
     <td><select data-id="${zEsc(r.ID)}" onchange="setStrategiStatus(this.dataset.id, this.value)">${MKT_STATUS.map((s) => `<option ${s === r.Status ? 'selected' : ''}>${s}</option>`).join('')}</select></td>
   </tr>`).join('');
 }

@@ -2,10 +2,47 @@
 // Urutan script di index.html: common.js, app.js, tracker.js, marketing.js, lalu boot().
 
 const $ = (id) => document.getElementById(id);
-const PIC_LIST = ['Lenno', 'Ricko', 'Yanuar', 'Christina'];
+// Daftar anggota (dari tab Tim di Sheet, disinkron dari Hub). PIC disimpan sebagai ID dan ditampilkan sebagai nama.
+// Isi awal ini hanya cadangan sebelum data pertama dimuat.
+let TIM = [{ id: 'lenno', nama: 'Lenno', peran: '' }, { id: 'ricko', nama: 'Ricko', peran: '' },
+  { id: 'yanuar', nama: 'Yanuar', peran: '' }, { id: 'christina', nama: 'Christina', peran: '' }];
+
+// Nilai PIC (ID atau nama lama, huruf besar/kecil bebas) -> ID. Yang tidak dikenal dikembalikan apa adanya.
+function picKey(v) {
+  const s = String(v === null || v === undefined ? '' : v).trim();
+  const low = s.toLowerCase();
+  const t = TIM.find((x) => x.id === low || x.nama.toLowerCase() === low);
+  return t ? t.id : s;
+}
+// ID (atau nama lama) -> nama untuk tampilan.
+function picNama(v) {
+  if (v === null || v === undefined || v === '') return '';
+  return String(v).split(',').map((p) => {
+    const t = TIM.find((x) => x.id === picKey(p));
+    return t ? t.nama : p.trim();
+  }).join(', ');
+}
+function picOptionsHtml() {
+  return TIM.map((t) => `<option value="${zEsc(t.id)}">${zEsc(t.nama)}</option>`).join('');
+}
+// Isi ulang semua pilihan PIC (select[data-pic]); pilihan kosong/placeholder di atas dipertahankan.
+function fillPicSelects() {
+  document.querySelectorAll('select[data-pic]').forEach((sel) => {
+    const keep = sel.value;
+    const placeholders = [...sel.options].filter((o) => o.value === '').map((o) => o.outerHTML).join('');
+    sel.innerHTML = placeholders + picOptionsHtml();
+    if (keep && [...sel.options].some((o) => o.value === keep)) sel.value = keep;
+  });
+}
+
+// Peran pengguna ini dari token Hub (hanya untuk tampilan; server yang memutuskan). null = tanpa identitas.
+function myRole() { const c = zApi.me(); return c ? c.peran : null; }
+function myUid() { const c = zApi.me(); return c ? c.uid : null; }
+function isDecider() { const r = myRole(); return r === 'approver' || r === 'admin'; }
+function isOwnRow(r) { const me = myUid(); return !!me && String(r['PIC'] || '').split(',').some((p) => picKey(p).toLowerCase() === me); }
 const TIPE_LIST = ['Capex', 'Opex'];
 // Harus sama dengan KODE_VERSI di Code.gs. Kalau Apps Script yang melayani berbeda, muncul peringatan.
-const EXPECTED_VERSI = '2026-10-14 p0-keamanan';
+const EXPECTED_VERSI = '2026-10-15 sso-hub';
 
 function fmtRupiah(n) {
   if (n === null || n === undefined || n === '' || isNaN(n)) return '-';
@@ -84,8 +121,7 @@ function enqueueSave(job) {
 function failSave(job, msg) {
   job.state = 'err';
   job.error = msg;
-  job.noRetry = /PIN/i.test(msg);          // PIN salah: kirim ulang percuma, harus diubah
-  if (job.payload.pin) cachedPin = null;
+  job.noRetry = /hanya approver|tidak boleh|Masuk lewat Hub/i.test(msg);   // ditolak karena peran/identitas: kirim ulang percuma
 }
 
 async function runSaveQueue() {
@@ -100,7 +136,6 @@ async function runSaveQueue() {
         const json = await zApi.post(job.payload);
         if (json.ok) {
           job.state = 'ok';
-          if (job.payload.pin) cachedPin = job.payload.pin;
           if (job.expectNota && !json.nota) {
             // Server menjawab sukses tapi tidak mengunggah file: Apps Script kemungkinan belum versi terbaru.
             failSave(job, 'Server menjawab sukses tapi file nota tidak terunggah. Pastikan Apps Script sudah versi terbaru (Deploy → New version). Info server: ' + (json.foto || 'tidak ada (kemungkinan Apps Script versi lama)'));
@@ -288,6 +323,8 @@ async function load(fresh) {
   try {
     const json = await zApi.get(fresh === true);
     if (json.ok === false) throw new Error(json.error || 'Gagal');
+    if (Array.isArray(json.tim) && json.tim.length) TIM = json.tim;
+    fillPicSelects();
     kegiatanData = json.kegiatan || [];
     plafonData = json.plafon_fixed || [];
     backendBaru = Array.isArray(json.kategori);
@@ -316,8 +353,12 @@ async function load(fresh) {
     renderTracker();
     renderMarketing();
   } catch (err) {
-    setSync('Gagal ambil data: ' + err.message + ' — cek kode akses tim & konfigurasi proxy di Vercel.', true);
-    toast('Gagal memuat data. Tekan Refresh.', 'err');
+    if (/Masuk lewat Hub/.test(err.message)) {
+      setSync('Belum masuk lewat Hub.', false);   // layar "Masuk lewat Hub" sudah menjelaskan; tidak perlu toast galat
+    } else {
+      setSync('Gagal ambil data: ' + err.message + ' — cek login Hub & konfigurasi proxy di Vercel.', true);
+      toast('Gagal memuat data. Tekan Refresh.', 'err');
+    }
     showLoadError();
   } finally {
     dataLoaded = true;

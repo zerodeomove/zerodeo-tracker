@@ -32,11 +32,7 @@
  *      var mres = mkt_handlePost(data);
  *      if (mres) return jsonResponse(mres);
  *
- * 3) handleUpdateStatus — ganti pengecekan PIN lama
- *      if (data.pin !== APPROVAL_PIN) {...}
- *    menjadi
- *      var pin = getApprovalPin_();
- *      if (!pin || data.pin !== pin) {...}
+ * (Pengecekan PIN approve sudah tidak ada: peran approver/admin dari token Hub, lihat Hub.gs.)
  *
  * ===== KUNCI (Project Settings -> Script Properties) =====
  *   SHARED_SECRET : string acak panjang, sama persis dengan env Vercel.
@@ -44,8 +40,7 @@
  *   BLOCK_GET     : isi 1 untuk mematikan jalur GET (pembacaan data lewat URL).
  *                   Isi setelah proxy Vercel versi POST terpasang.
  *   NOTA_FOLDER_ID: ID folder Drive tempat foto nota (tidak ditulis di kode).
- *   APPROVAL_PIN  : PIN approve Lemon. Kalau belum diisi, dipakai konstanta
- *                   APPROVAL_PIN lama di Code.gs sebagai cadangan.
+ *   SECRET_ZERODEO, HUB_URL : lihat Hub.gs.
  */
 
 var MKT_TABS = {
@@ -61,7 +56,7 @@ var MKT_SEED_LANE = ['Crystal Glow', 'Daily Active', 'Vital Fresh'];
 var MKT_SEED_CHANNEL = ['Shopee', 'TikTok Shop', 'TikTok', 'Instagram',
                          'Komunitas Olahraga', 'Komunitas Vespa', 'Komunitas Barber', 'Komunitas Motor'];
 var MKT_STATUS = ['Ide', 'Jalan', 'Selesai'];
-var MKT_PIC = ['Lenno', 'Ricko', 'Yanuar', 'Christina'];
+// PIC marketing = anggota tim (ID dari tab Tim, lihat Hub.gs).
 
 // ============================================================
 // KEAMANAN
@@ -82,12 +77,6 @@ function safeEqual_(a, b) {
   var n = Math.max(a.length, b.length);
   for (var i = 0; i < n; i++) diff |= (a.charCodeAt(i) || 0) ^ (b.charCodeAt(i) || 0);
   return diff === 0;
-}
-
-function getApprovalPin_() {
-  var p = PropertiesService.getScriptProperties().getProperty('APPROVAL_PIN');
-  if (p) return p;
-  return (typeof APPROVAL_PIN !== 'undefined') ? APPROVAL_PIN : '';
 }
 
 // ============================================================
@@ -234,7 +223,7 @@ function mkt_addStrategi_(d) {
     if (!selesai) return { ok: false, error: 'Tanggal selesai tidak valid.' };
     if (selesai < mulai) return { ok: false, error: 'Tanggal selesai tidak boleh sebelum tanggal mulai.' };
   }
-  if (MKT_PIC.indexOf(d.pic) === -1) return { ok: false, error: 'PIC tidak dikenali.' };
+  if (!isKnownPic_(d.pic)) return { ok: false, error: 'PIC tidak dikenali.' };
   var status = d.status || 'Ide';
   if (MKT_STATUS.indexOf(status) === -1) return { ok: false, error: 'Status tidak dikenali.' };
 
@@ -244,7 +233,7 @@ function mkt_addStrategi_(d) {
 
   var id = 'S' + new Date().getTime().toString(36);
   var sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('strategi');
-  mkt_append_(sheet, [id, nama, lane.join(', '), pesan, channel.join(', '), mulai, selesai, d.pic, status, new Date()]);
+  mkt_append_(sheet, [id, nama, lane.join(', '), pesan, channel.join(', '), mulai, selesai, normalizePic_(d.pic), status, new Date()]);
   return { ok: true, id: id, lane: lane, channel: channel };
 }
 
@@ -269,7 +258,7 @@ function mkt_addHasilEvent_(d) {
   var tanggal = mkt_parseDate_(d.tanggal);
   if (!tanggal) return { ok: false, error: 'Tanggal event wajib diisi.' };
   if (!mkt_cleanLabel_(d.channel)) return { ok: false, error: 'Channel wajib diisi.' };
-  if (MKT_PIC.indexOf(d.pic) === -1) return { ok: false, error: 'PIC tidak dikenali.' };
+  if (!isKnownPic_(d.pic)) return { ok: false, error: 'PIC tidak dikenali.' };
 
   var channel = mkt_resolveLabels_('channel', [d.channel])[0];
   var id = 'E' + new Date().getTime().toString(36);
@@ -278,7 +267,7 @@ function mkt_addHasilEvent_(d) {
     id, tanggal, nama, channel,
     mkt_text_(d.komunitas, 80), mkt_text_(d.kode, 60),
     mkt_int_(d.hadir), mkt_int_(d.coba), mkt_int_(d.tanya), mkt_int_(d.order), mkt_int_(d.ugc),
-    mkt_text_(d.strategi, 120), d.pic, new Date()
+    mkt_text_(d.strategi, 120), normalizePic_(d.pic), new Date()
   ]);
   return { ok: true, id: id };
 }

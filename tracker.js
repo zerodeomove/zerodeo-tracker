@@ -9,7 +9,6 @@ const STATUS_CLASS = {
 
 let kegiatanData = [];
 let plafonData = []; // sengaja belum dirender ke UI (konsep plafon belum settle)
-let cachedPin = null;
 
 // Daftar kategori sebenarnya dari tab "kategori" di Sheet (dikirim di doGet).
 // Daftar bawaan ini hanya cadangan kalau Apps Script belum di-update.
@@ -31,21 +30,27 @@ let backendFoto = false;
 let backendReimburse = false;   // Catat reimburse di kartu dana (butuh Apps Script terbaru)
 let backendFotoBatch = false;   // foto/PDF per baris di Isi Actual sekaligus
 let noNotaOnly = false;         // saringan "Selesai tapi belum ada nota" (dari kartu)   // upload foto nota di Data lama / Edit (butuh Apps Script terbaru)
-const PIN_STATUSES = ['Approved', 'Ditransfer', 'Selesai'];
+// Kegiatan berstatus ini uangnya sudah diputuskan/bergerak: hanya approver/admin yang boleh mengubah, membatalkan, memulihkan.
+const KEPUTUSAN_STATUSES = ['Approved', 'Ditransfer', 'Selesai'];
 
-// ---------- approve / reject (PIN diverifikasi di Apps Script) ----------
+// ---------- approve / reject (peran dari token Hub, diperiksa lagi di server) ----------
+// Tidak ada lagi PIN: yang boleh memutuskan adalah approver/admin, dan tidak boleh untuk kegiatan sendiri.
+// Sebelum dikirim ada konfirmasi yang menyebut item dan nominalnya.
 function updateStatus(row, newStatus) {
-  let pin = cachedPin;
-  if (!pin) {
-    pin = prompt('PIN approve/reject dari Lemon:');
-    if (!pin) return;
-  }
+  const r = kegiatanData.find((x) => x['_row'] === row);
+  const nama = namaBaris(row) || 'baris ' + row;
+  const est = r ? fmtRupiah(r['Estimasi (Rp)']) : '-';
+  const verb = newStatus === 'Approved' ? 'Approve' : 'Reject';
+  if (!confirm(verb + ' "' + nama + '"' + (est !== '-' ? ' (' + est + ')' : '') + '?')) return;
   enqueueSave({
-    label: (newStatus === 'Approved' ? 'Approve' : 'Reject') + ': ' + (namaBaris(row) || 'baris ' + row),
-    payload: { action: 'update_status', row: row, status: newStatus, pin: pin },
+    label: verb + ': ' + nama,
+    payload: { action: 'update_status', row: row, status: newStatus },
     rows: [row], restore: null
   });
 }
+
+// Boleh memutuskan kegiatan ini? (hanya untuk menampilkan tombol; server tetap memeriksa)
+function canDecide(r) { return isDecider() && !isOwnRow(r); }
 
 // ---------- render ----------
 function renderTracker() {
@@ -98,7 +103,7 @@ function buildFilterOptions() {
   $('filterTipe').innerHTML = '<option value="">Semua Tipe</option>' +
     TIPE_LIST.map((t) => `<option value="${t}">${t}</option>`).join('');
   $('filterPic').innerHTML = '<option value="">Semua PIC</option>' +
-    PIC_LIST.map((p) => `<option value="${p}">${p}</option>`).join('');
+    picOptionsHtml();
   $('filterStatus').innerHTML = '<option value="">Semua Status</option>' +
     STATUS_ORDER.map((s) => `<option value="${s}">${s}</option>`).join('');
   $('filterDana').innerHTML = '<option value="">Semua Dana</option>' +
@@ -152,7 +157,7 @@ function renderUrgentList() {
     const soon = days !== null && days <= 3;
     return `<tr>
       <td class="item">${zEsc(r['Item Kegiatan'] || '-')}</td>
-      <td>${zEsc(r['PIC'] || '-')}</td>
+      <td>${zEsc(picNama(r['PIC']) || '-')}</td>
       <td class="num">${fmtRupiah(r['Estimasi (Rp)'])}</td>
       <td class="${soon ? 'deadline-soon' : ''}">${zEsc(fmtDate(r['Deadline Kegiatan']))}${days === null ? '' : ' (' + dayLabel(days) + ')'}</td>
       <td><button class="aksi-btn approve" onclick="openTransferModal(${Number(r['_row'])})">Tandai Ditransfer</button>${bayarDanaBtn(Number(r['_row']))}</td>
@@ -254,7 +259,7 @@ function renderTable() {
     if (noNotaOnly && !(r['Status'] === 'Selesai' && !hasNota(r))) return false;
     if (kat && r['Kategori'] !== kat) return false;
     if (tipe && r['Tipe'] !== tipe) return false;
-    if (pic && r['PIC'] !== pic) return false;
+    if (pic && picKey(r['PIC']) !== pic) return false;
     if (status && r['Status'] !== status) return false;
     if (dana && r['Dana'] !== dana) return false;
     if (search && !(r['Item Kegiatan'] || '').toLowerCase().includes(search)) return false;
@@ -285,8 +290,10 @@ function renderTable() {
     if (pend.has(rowNo)) {
       aksi = '<span class="pending-note">menyimpan…</span>';
     } else if (r['Status'] === 'Diajukan') {
-      aksi = `<button class="aksi-btn approve" onclick="updateStatus(${rowNo}, 'Approved')">Approve</button>
-         <button class="aksi-btn reject" onclick="updateStatus(${rowNo}, 'Ditolak')">Reject</button>`;
+      aksi = canDecide(r)
+        ? `<button class="aksi-btn approve" onclick="updateStatus(${rowNo}, 'Approved')">Approve</button>
+         <button class="aksi-btn reject" onclick="updateStatus(${rowNo}, 'Ditolak')">Reject</button>`
+        : `<span class="pending-note">${!myRole() ? 'masuk lewat Hub untuk approve' : isOwnRow(r) ? 'menunggu approver lain' : 'menunggu approver'}</span>`;
     } else if (r['Status'] === 'Ditransfer') {
       aksi = `<button class="aksi-btn approve" onclick="openComplete(${rowNo})">Lengkapi</button>`;
     } else if (r['Status'] !== 'Selesai' && r['Status'] !== 'Dibatalkan' && !r['Dana'] && (r['Jalur'] === 'Fixed' || r['Status'] === 'Approved')) {
@@ -298,7 +305,7 @@ function renderTable() {
       <td class="item">${zEsc(r['Item Kegiatan'] || '-')}${/^https?:\/\//i.test(r['Nota/Bukti'] || '') ? ` <a class="nota-link" href="${zEsc(r['Nota/Bukti'])}" data-item="${zEsc(r['Item Kegiatan'] || '')}" onclick="return openNota(this)" target="_blank" rel="noopener noreferrer" title="Lihat nota">📎</a>` : ''}<div class="sub">${r['Tanggal Dicatat'] ? 'dicatat ' + zEsc(fmtDate(r['Tanggal Dicatat'])) : ''}${r['Tanggal Dicatat'] && r['Dana'] ? ' · ' : ''}${r['Dana'] ? 'Dana: ' + zEsc(r['Dana']) : ''}</div></td>
       <td data-label="Kategori">${zEsc(r['Kategori'] || '-')}</td>
       <td data-label="Tipe">${zEsc(r['Tipe'] || '-')}</td>
-      <td data-label="PIC">${zEsc(r['PIC'] || '-')}</td>
+      <td data-label="PIC">${zEsc(picNama(r['PIC']) || '-')}</td>
       <td data-label="Status"><span class="badge ${statusClass}">${zEsc(r['Status'] || 'Draft')}</span></td>
       <td data-label="Deadline" class="${deadlineSoon ? 'deadline-soon' : ''}">${zEsc(fmtDate(r['Deadline Kegiatan']))}</td>
       <td data-label="Estimasi" class="num">${fmtRupiah(r['Estimasi (Rp)'])}</td>
@@ -315,7 +322,7 @@ let transferRow = null;
 function openTransferModal(row) {
   transferRow = row;
   $('tf-pic').innerHTML = '<option value="">Pilih PIC…</option>' +
-    PIC_LIST.map((p) => `<option value="${p}">${p}</option>`).join('');
+    picOptionsHtml();
   $('tf-nominal').value = '';
   $('tf-tanggal').value = todayStr();
   const errEl = $('tf-err');
@@ -401,7 +408,7 @@ function renderDana() {
       ? `<button class="aksi-btn edit" data-nama="${zEsc(d.nama)}" onclick="event.stopPropagation(); openDanaEdit(this.dataset.nama)">Edit</button>` : '';
     return `<div class="dana-card ${aktif === d.nama ? 'on' : ''}" data-nama="${zEsc(d.nama)}" onclick="filterDanaBy(this.dataset.nama)" title="Klik untuk lihat kebutuhan dari dana ini">
       <div class="dana-name">${zEsc(d.nama)}</div>
-      <div class="dana-meta">${zEsc(fmtDate(d.tgl))} · ${zEsc(d.pic || '-')} · ${d.jumlah} kebutuhan</div>
+      <div class="dana-meta">${zEsc(fmtDate(d.tgl))} · ${zEsc(picNama(d.pic) || '-')} · ${d.jumlah} kebutuhan</div>
       <div class="dana-nums"><span>Dana ${fmtDanaRp(d.nominal)}${d.reimburse ? ` + reimburse ${fmtDanaRp(d.reimburse)}` : ''}</span><span>Terpakai ${fmtDanaRp(d.terpakai)}</span></div>
       <div class="dana-bar"><div class="dana-fill ${minus ? 'over' : ''}" style="width:${pct}%"></div></div>
       <div class="dana-saldo ${minus ? 'minus' : ''}">${minus ? 'Perlu reimburse' : 'Saldo'} <b>${fmtDanaRp(Math.abs(d.saldo))}</b></div>
@@ -725,7 +732,6 @@ function openDana() {
   clearErrors($('danaForm'));
   setMsg($('d-msg'), '', '');
   setDanaMode(false);
-  $('d-pin-wrap').style.display = 'none';
   $('d-tgl').value = todayStr();
   openModal('m-dana');
 }
@@ -741,11 +747,8 @@ function openDanaEdit(nama) {
   $('d-nama').value = d['Nama Dana'] || '';
   $('d-nominal').value = d['Nominal (Rp)'] || '';
   $('d-tgl').value = String(d['Tgl Transfer'] || '').slice(0, 10);
-  $('d-pic').value = d['PIC Transaksi'] || '';
+  $('d-pic').value = picKey(d['PIC Transaksi'] || '');
   $('d-catatan').value = d['Catatan'] || '';
-  const terpakai = kegiatanData.some((r) => r['Dana'] === nama);   // PIN hanya kalau sudah dipakai
-  $('d-pin-wrap').style.display = terpakai ? '' : 'none';
-  $('d-pin').value = cachedPin || '';
   openModal('m-dana');
 }
 
@@ -761,12 +764,14 @@ $('danaForm').addEventListener('submit', (e) => {
   if (!nama) bad('err-d-nama');
   if (!nominal || Number(nominal) <= 0) bad('err-d-nominal');
   if (!pic) bad('err-d-pic');
-  const needPin = danaEditRow !== null && $('d-pin-wrap').style.display !== 'none';
-  if (needPin && !$('d-pin').value.trim()) { setMsg($('d-msg'), 'Isi PIN Lemon dulu.', 'err'); ok = false; }
+  // Dana yang sudah dipakai kegiatan hanya boleh diubah approver/admin (server memeriksa lagi).
+  if (danaEditRow !== null && !isDecider()) {
+    const lama = (danaList.find((x) => x['_row'] === danaEditRow) || {})['Nama Dana'];
+    if (kegiatanData.some((r) => r['Dana'] === lama)) { setMsg($('d-msg'), 'Dana ini sudah dipakai kegiatan. Hanya approver atau admin yang bisa mengubahnya.', 'err'); ok = false; }
+  }
   if (!ok) return;
 
   const snap = snapshotForm($('danaForm'));
-  delete snap['d-pin'];
   const edit = danaEditRow !== null;
   const row = danaEditRow;
   const oldNama = edit ? (danaList.find((x) => x['_row'] === row) || {})['Nama Dana'] : null;
@@ -775,7 +780,6 @@ $('danaForm').addEventListener('submit', (e) => {
     tglTransfer: $('d-tgl').value || null, picTransaksi: pic, catatan: $('d-catatan').value.trim() || null,
   };
   if (edit) payload.row = row;
-  if (needPin) payload.pin = $('d-pin').value.trim();
   enqueueSave({
     label: (edit ? 'Edit dana: ' : 'Dana: ') + nama,
     payload: payload, rows: [],
@@ -844,6 +848,9 @@ function openKegiatan() {
   setMsg($('k-msg'), '', '');
   fillKategori();
   fillDana();
+  // PIC bawaan = kamu sendiri (kalau kamu ada di daftar tim)
+  const me = myUid();
+  if (me && TIM.some((t) => t.id === me)) $('k-pic').value = me;
   $('k-arsip').closest('label').style.display = backendBaru ? '' : 'none';
   photos.k = null;
   showPhoto('k');
@@ -1168,11 +1175,11 @@ function openEdit(row) {
   $('ed-kategori').innerHTML = kats.map((k) => `<option value="${zEsc(k)}">${zEsc(k)}</option>`).join('');
 
   editOrig = {
-    item: r['Item Kegiatan'] || '', kategori: r['Kategori'] || '', tipe: r['Tipe'] || 'Opex', pic: r['PIC'] || '',
+    item: r['Item Kegiatan'] || '', kategori: r['Kategori'] || '', tipe: r['Tipe'] || 'Opex', pic: picKey(r['PIC'] || ''),
     estimasi: String(r['Estimasi (Rp)'] === null || r['Estimasi (Rp)'] === undefined ? '' : r['Estimasi (Rp)']),
     deadline: String(r['Deadline Kegiatan'] || '').slice(0, 10),
     nominal: String(r['Nominal Transfer (Rp)'] === null || r['Nominal Transfer (Rp)'] === undefined ? '' : r['Nominal Transfer (Rp)']),
-    pictrans: r['PIC Transaksi'] || '', tgltf: String(r['Tgl Transfer'] || '').slice(0, 10),
+    pictrans: picKey(r['PIC Transaksi'] || ''), tgltf: String(r['Tgl Transfer'] || '').slice(0, 10),
     actual: String(r['Actual (Rp)'] === null || r['Actual (Rp)'] === undefined ? '' : r['Actual (Rp)']),
     nota: r['Nota/Bukti'] || ''
   };
@@ -1200,28 +1207,20 @@ function openEdit(row) {
 
   const sudahTf = status === 'Ditransfer' || status === 'Selesai';
   $('ed-sub').textContent = (r['Item Kegiatan'] || '-') + ' · status ' + status + (r['Dana'] ? ' · dari dana "' + r['Dana'] + '"' : '');
-  $('ed-fields').style.display = batal ? 'none' : '';
-  $('ed-submit').style.display = batal ? 'none' : '';
+  // Uangnya sudah diputuskan/bergerak: hanya approver/admin yang boleh mengubah, membatalkan, atau memulihkan.
+  const locked = KEPUTUSAN_STATUSES.indexOf(batal ? priorStatusOf(r) : status) !== -1 && !isDecider();
+  $('ed-fields').style.display = (batal || locked) ? 'none' : '';
+  $('ed-submit').style.display = (batal || locked) ? 'none' : '';
+  if (locked) setMsg($('ed-msg'), !myRole() ? 'Masuk lewat Hub dulu untuk mengubah kegiatan ini.' : 'Uang kegiatan ini sudah diputuskan. Hanya approver atau admin yang bisa mengubah, membatalkan, atau memulihkannya.', 'err');
   $('ed-tf-box').style.display = sudahTf && (!r['Dana'] || r['PIC Transaksi'] || r['Tgl Transfer']) ? '' : 'none';
   $('ed-nominal-wrap').style.display = r['Dana'] ? 'none' : '';
   $('ed-sel-box').style.display = status === 'Selesai' ? '' : 'none';
-  const needPin = PIN_STATUSES.indexOf(batal ? priorStatusOf(r) : status) !== -1;
-  $('ed-pin-wrap').style.display = needPin ? '' : 'none';
-  $('ed-pin').value = cachedPin || '';
   $('ed-alasan').style.display = 'none';
   $('ed-alasan').value = '';
-  $('ed-cancel-btn').style.display = batal ? 'none' : '';
+  $('ed-cancel-btn').style.display = (batal || locked) ? 'none' : '';
   $('ed-cancel-btn').textContent = 'Batalkan kegiatan';
-  $('ed-restore-btn').style.display = batal ? '' : 'none';
+  $('ed-restore-btn').style.display = (batal && !locked) ? '' : 'none';
   openModal('m-edit');
-}
-
-// PIN dari popup edit; null (dan pesan galat) kalau dibutuhkan tapi kosong.
-function editPin() {
-  if ($('ed-pin-wrap').style.display === 'none') return '';
-  const pin = $('ed-pin').value.trim();
-  if (!pin) { setMsg($('ed-msg'), 'Isi PIN Lemon dulu.', 'err'); return null; }
-  return pin;
 }
 
 $('editForm').addEventListener('submit', (e) => {
@@ -1271,12 +1270,8 @@ $('editForm').addEventListener('submit', (e) => {
     changed++;
   }
   if (!changed) { closeModal('m-edit'); toast('Tidak ada perubahan.'); return; }
-  const pin = editPin();
-  if (pin === null) return;
-  if (pin) payload.pin = pin;
 
   const snap = snapshotForm($('editForm'));
-  delete snap['ed-pin'];
   enqueueSave({
     label: 'Edit: ' + (o.item || 'kegiatan') + (photoEd ? ' (+ foto nota)' : ''), payload: payload, rows: [row], expectNota: !!photoEd,
     restore: () => { openEdit(row); restoreForm(snap); photos.ed = photoEd; showPhoto('ed'); }
@@ -1292,12 +1287,9 @@ function cancelEditRow() {
     $('ed-alasan').focus();
     return;
   }
-  const pin = editPin();
-  if (pin === null) return;
   const row = editRow;
   const nama = editOrig.item || 'kegiatan';
   const payload = { action: 'cancel_kegiatan', row: row, alasan: $('ed-alasan').value.trim() || null };
-  if (pin) payload.pin = pin;
   enqueueSave({
     label: 'Batalkan: ' + nama, payload: payload, rows: [row],
     okMsg: 'Dibatalkan: ' + nama + '. Bisa dipulihkan lewat Edit.',
@@ -1307,12 +1299,9 @@ function cancelEditRow() {
 }
 
 function restoreEditRow() {
-  const pin = editPin();
-  if (pin === null) return;
   const row = editRow;
   const nama = editOrig.item || 'kegiatan';
   const payload = { action: 'restore_kegiatan', row: row };
-  if (pin) payload.pin = pin;
   enqueueSave({
     label: 'Pulihkan: ' + nama, payload: payload, rows: [row],
     okMsg: 'Dipulihkan: ' + nama,
@@ -1510,7 +1499,7 @@ async function downloadRekap() {
         .concat(rows.map((r) => {
           const act = Number(r['Actual (Rp)']) || 0;
           const est = Number(r['Estimasi (Rp)']) || 0;
-          return [xlDate(r['Tanggal Dicatat']), r['Item Kegiatan'] || '', r['Kategori'] || '', r['Tipe'] || '', r['PIC'] || '',
+          return [xlDate(r['Tanggal Dicatat']), r['Item Kegiatan'] || '', r['Kategori'] || '', r['Tipe'] || '', picNama(r['PIC']) || '',
             r['Status'] || '', r['Jalur'] || '', r['Dana'] || '', est, Number(r['Nominal Transfer (Rp)']) || '',
             act || '', act ? act - est : '', xlDate(r['Tgl Transfer']), hasNota(r) ? r['Nota/Bukti'] : '', r['Catatan'] || ''];
         })),

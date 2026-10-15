@@ -1,17 +1,42 @@
 # Zerodeo — Tracker Kegiatan & Budgeting
 
-Internal tool buat tim Zerodeo (Lenno, Ricko, Yanuar, Christina) mencatat kegiatan
-dan budgeting launch, plus proses approve/reject oleh Lemon. Ada juga modul marketing
-(strategi, lane, channel, hasil event).
+Internal tool buat tim Zerodeo mencatat kegiatan dan budgeting launch, plus proses
+approve/reject oleh approver (Lemon). Ada juga modul marketing (strategi, lane, channel,
+hasil event).
+
+## Masuk dan peran (login sekali lewat Hub)
+
+Zerodeo **tidak punya form login sendiri**. Masuk lewat **Hub Pinggiran**: login sekali di Hub, klik kartu
+Zerodeo, dan Hub menyerahkan token bertanda tangan lewat fragment URL (`#t=...`). Halaman membacanya,
+menyimpannya di perangkat, lalu langsung menghapusnya dari alamat. Kalau dibuka tanpa token (atau token
+habis, 12 jam), muncul layar **"Masuk lewat Hub"** dengan tautan ke Hub.
+
+Daftar orang dan peran dikelola di Hub (menu Tim). Peran di Zerodeo:
+
+| Peran | Boleh |
+|---|---|
+| **anggota** | mencatat kegiatan, tandai ditransfer, catat dana, lengkapi + nota; mengubah/membatalkan kegiatan yang **belum** diputuskan |
+| **approver** (Lemon) | semua di atas + **Approve/Reject**, dan mengubah/membatalkan/memulihkan kegiatan yang uangnya sudah diputuskan (Approved/Ditransfer/Selesai) dan dana yang sudah dipakai |
+| **admin** | sama dengan approver (cadangan) |
+
+Tidak ada PIN approve lagi. Aturan: **tidak ada yang boleh memutuskan kegiatannya sendiri** (kegiatan Lemon
+diputuskan admin, dan sebaliknya); Approve/Reject meminta konfirmasi yang menyebut item dan nominal; dan
+semua aksi tulis dicatat otomatis di tab **`log_aktivitas`** (siapa, peran, aksi, ID kegiatan). Hak ini
+diperiksa di **server** (Apps Script), bukan hanya disembunyikan di tampilan. Catatan: Google Sheets tidak bisa
+membuat tab benar-benar tak bisa diubah; siapa pun yang punya akses edit ke Sheet tetap bisa mengubah log.
+
+PIC disimpan sebagai **ID anggota** (`ricko`) dan ditampilkan sebagai nama. Data lama yang berisi nama
+("Ricko") tetap dikenali. Daftar anggota ada di tab **`Tim`**, disinkron dari Hub (menu *Zerodeo Tools ->
+Sinkron Tim dari Hub*, plus *Pasang Sinkron Harian*).
 
 ## Alur status kegiatan
 
 - **Jalur Pengajuan:** Draft -> Siap Ajukan -> Diajukan -> (tombol Approve/Reject,
-  pakai PIN Lemon) -> Approved -> (tombol "Tandai Ditransfer" di dashboard, isi PIC
+  hanya approver/admin) -> Approved -> (tombol "Tandai Ditransfer" di dashboard, isi PIC
   Transaksi + Nominal Transfer + Tgl Transfer) -> Ditransfer -> (tombol "Lengkapi"
   di dashboard, buka popup, isi Actual + foto nota) -> Selesai.
 - **Jalur Fixed:** lompat approve. Begitu statusnya belum Ditransfer/Selesai, tombol
-  "Tandai Ditransfer" langsung muncul di dashboard, tanpa perlu PIN.
+  "Tandai Ditransfer" langsung muncul di dashboard (boleh semua anggota).
 - **Data lama** (kegiatan yang sudah selesai sebelum dashboard dipakai): di popup
   "Kebutuhan baru" centang **Data lama**. Yang wajib hanya Actual; Nominal transfer,
   PIC Transaksi, Tanggal (kapan dibayar), dan link nota opsional (kosong = Nominal sama
@@ -33,8 +58,8 @@ langsung diisi. Statusnya tampil di bar tipis di paling atas layar:
   dimuat ulang **satu kali** otomatis.
 - Baris tabel yang sedang disimpan menampilkan *menyimpan…* sebagai ganti tombol aksi.
 - Kalau gagal, bar berwarna merah dengan **Coba lagi** (kirim ulang isi yang sama) dan
-  **Ubah** (membuka lagi popup dengan semua isian semula). Kalau penyebabnya PIN salah,
-  hanya **Ubah** yang ada.
+  **Ubah** (membuka lagi popup dengan semua isian semula). Kalau ditolak karena peran
+  (bukan approver/admin) atau belum masuk lewat Hub, hanya **Ubah** yang ada.
 - Menutup/me-refresh halaman saat masih ada simpan yang belum selesai memunculkan peringatan.
 - Pengecualian: popup yang melaporkan hasil per baris (**Isi Actual sekaligus**, **Bayar semua
   dari dana**) tetap menunggu di depan layar supaya alasan baris yang dilewati terbaca.
@@ -70,18 +95,18 @@ permanen; yang salah **dibatalkan** dan bisa **dipulihkan**.
   Nominal transfer, PIC transaksi, dan tgl transfer bisa diubah kalau statusnya Ditransfer/
   Selesai (nominal tidak untuk yang dibayar dari dana); Actual dan link nota kalau Selesai.
   Status Draft/Siap Ajukan/Diajukan/Revisi/Ditolak bebas diubah; status
-  **Approved/Ditransfer/Selesai butuh PIN Lemon** (kolom PIN terisi otomatis dari PIN yang
-  baru dipakai). Tiap perubahan dicatat di kolom Catatan, mis.
+  **Approved/Ditransfer/Selesai hanya boleh oleh approver/admin** (untuk anggota, popup
+  menampilkan penjelasan dan form terkunci). Tiap perubahan dicatat di kolom Catatan, mis.
   `Diedit 05-Okt-26: Estimasi Rp1.000.000 → Rp1.200.000`.
-- **Batalkan:** di popup Edit, dua klik (alasan opsional). Status jadi **Dibatalkan** (butuh
-  PIN kalau sebelumnya Approved/Ditransfer/Selesai). Kegiatan yang dibatalkan **tidak
+- **Batalkan:** di popup Edit, dua klik (alasan opsional). Status jadi **Dibatalkan** (hanya
+  approver/admin kalau sebelumnya Approved/Ditransfer/Selesai). Kegiatan yang dibatalkan **tidak
   dihitung** di kartu, saldo dana, `ringkasan`, dan Perlu Ditransfer; di tabel disembunyikan
   kecuali filter Status = Dibatalkan (ada petunjuk jumlahnya).
 - **Pulihkan:** buka Edit pada baris Dibatalkan, klik Pulihkan. Status kembali ke status
-  sebelum dibatalkan (dibaca dari Catatan; kalau tak ada jejaknya, Draft). PIN kalau status
-  asalnya Approved/Ditransfer/Selesai.
+  sebelum dibatalkan (dibaca dari Catatan; kalau tak ada jejaknya, Draft). Hanya approver/admin
+  kalau status asalnya Approved/Ditransfer/Selesai.
 - **Edit dana:** nama (harus unik; kegiatan yang tertaut ikut diganti namanya), nominal,
-  tanggal, PIC, catatan. PIN Lemon hanya diminta kalau dana sudah dipakai kegiatan.
+  tanggal, PIC, catatan. Hanya approver/admin yang boleh mengubah dana yang sudah dipakai kegiatan.
 
 ## Dana (transfer bulk)
 
@@ -147,16 +172,20 @@ Catatan: tab `plafon_fixed` dan scorecard Marketing/Ops di tab `ringkasan` masih
 
 ```
 Browser (halaman statis di Vercel)
-  └── common.js            zApi.get() / zApi.post(), simpan kode akses tim di localStorage
+  └── common.js            zApi.get() / zApi.post(), baca token Hub dari #t=..., kirim di header x-hub-token
         └── /api/proxy     Vercel Function (api/proxy.js)
-              ├── cek kode akses tim (header x-team-code vs env TEAM_CODE)
-              ├── tambahkan SHARED_SECRET (dari env) ke setiap request
+              ├── verifikasi token Hub (HMAC-SHA256 dengan env SECRET_ZERODEO, app, masa berlaku)
+              ├── tambahkan SHARED_SECRET dan identitas terverifikasi (body.hub = {uid, peran})
               └── Apps Script Web App (URL dari env APPS_SCRIPT_URL, TIDAK ada di repo)
                     └── Google Sheet ("Tracker Zerodeo") = database
 
-Project Apps Script (HIDUP DI GOOGLE, BUKAN DI REPO INI) berisi 2 file terpisah:
+Project Apps Script (HIDUP DI GOOGLE, BUKAN DI REPO INI) berisi 3 file terpisah:
   Code.gs       setupTracker(), doGet(), doPost() — tracker kegiatan + approve/reject
   Marketing.gs  modul marketing (strategi/lane/channel/hasil_event) + cek secret
+  Hub.gs        identitas dari Hub, tab Tim, aturan approve, titik merah (pending), log aktivitas
+
+Hub Pinggiran juga memanggil Apps Script ini langsung (server ke server) untuk titik merah ("pending"),
+dibuktikan token servis bertanda tangan SECRET_ZERODEO, bukan SHARED_SECRET.
 ```
 
 Halaman tidak pernah memanggil Apps Script langsung, jadi URL-nya tidak perlu (dan
@@ -183,7 +212,7 @@ File:
 - `app.js` — helper bersama, tab/routing, popup, dan pemuatan data
 - `tracker.js` — logika tab Budgeting (kartu, tabel, approve/reject, ditransfer, input, lengkapi)
 - `marketing.js` — logika tab Marketing (strategi, hasil event, popup inputnya)
-- `common.js` — kode akses tim, `zApi.get/post` ke `/api/proxy`, dan `zEsc()`
+- `common.js` — token dari Hub, layar "Masuk lewat Hub", `zApi.get/post` ke `/api/proxy`, dan `zEsc()`
   (wajib dipakai untuk semua teks dari data yang masuk ke innerHTML)
 - `input.html`, `complete.html`, `marketing.html`, `strategi-input.html`,
   `hasil-event.html` — **alamat lama saja**, isinya pengalih otomatis ke `index.html`
@@ -211,12 +240,10 @@ Project Settings -> Environment Variables. Nilainya diisi sendiri di dashboard V
 
 | Nama | Isi |
 |---|---|
-| `TEAM_CODE` | kode akses tim, minimal 8 karakter, bukan angka pendek. Dibagikan ke tim lewat chat pribadi. |
+| `SECRET_ZERODEO` | kunci tanda tangan token dari Hub. **SAMA PERSIS** dengan `SECRET_ZERODEO` di Script Properties Hub dan di Script Properties Apps Script Zerodeo |
 | `APPS_SCRIPT_URL` | URL web app Apps Script (berakhiran `/exec`) |
 | `SHARED_SECRET` | string acak panjang, harus SAMA PERSIS dengan Script Property `SHARED_SECRET` di Apps Script |
-
-Ganti kode akses tim: ubah `TEAM_CODE` di Vercel lalu Redeploy. Semua orang akan
-diminta memasukkan kode baru saat membuka halaman berikutnya.
+| `TEAM_CODE` | **sementara, opsional.** Kode tim lama untuk masa transisi: selama ada, yang belum masuk lewat Hub masih bisa membaca dan mencatat, tetapi **tanpa identitas** (tidak bisa approve/mengubah keputusan). **Hapus** setelah semua orang masuk lewat Hub. |
 
 ## Script Properties Apps Script
 
@@ -228,27 +255,33 @@ Project Settings -> Script Properties (nilainya tidak ditulis di file mana pun d
 - `BLOCK_GET` — isi `1` untuk mematikan jalur GET (pembacaan data lewat URL). Proxy sekarang
   membaca data lewat POST (`action: get_data`), jadi isi ini setelah proxy versi baru live.
 - `NOTA_FOLDER_ID` — ID folder Drive untuk foto nota (tidak lagi ditulis di `Code.gs`).
-- `APPROVAL_PIN` — PIN approve/reject Lemon. Bisa diisi langsung di sini, atau lewat
-  menu Zerodeo Tools -> Ganti PIN Lemon di Google Sheet. Sebelum PIN diset,
-  approve/reject ditolak.
+- `SECRET_ZERODEO` — kunci tanda tangan token; sama persis dengan Hub dan env Vercel. Dipakai
+  memverifikasi token servis dari Hub (titik merah) dan membuat token servis ke Hub (sinkron tim).
+- `HUB_URL` — URL web app Apps Script **Hub** (berakhiran `/exec`), untuk sinkron daftar tim.
+- `APPROVAL_PIN` — **sudah tidak dipakai**; hapus properti ini kalau masih ada.
 
 ## Urutan rollout (jangan dibalik)
 
-1. Paste `Code.gs` dan `Marketing.gs` ke project Apps Script, masing-masing sebagai
+1. Paste `Code.gs`, `Marketing.gs`, dan `Hub.gs` ke project Apps Script, masing-masing sebagai
    file sendiri. Save.
-2. Deploy -> Manage deployments -> edit -> New version. Klik Allow / Izinkan kalau
-   Google minta izin (akses Drive untuk foto nota).
-3. Isi env di Vercel: `TEAM_CODE`, `APPS_SCRIPT_URL`, `SHARED_SECRET`.
-4. Redeploy di Vercel.
-5. Tes halaman: buka situsnya, kedua tab (Budgeting, Marketing) dan tiap popup.
-   Tanpa kode -> halaman meminta kode akses; kode benar -> data tampil.
-6. BARU SETELAH semua halaman terbukti jalan lewat proxy: isi Script Properties
-   `SHARED_SECRET` (sama dengan Vercel) dan `APPROVAL_PIN` (PIN baru, jangan pakai
-   PIN lama). Tes ulang. Jangan dikunci lebih awal, tracker langsung error.
+2. Isi Script Properties: `SECRET_ZERODEO` (nilai dari Script Properties Hub), `HUB_URL`, dan
+   pastikan `SHARED_SECRET` terisi. Jalankan **Zerodeo Tools -> Sinkron Tim dari Hub** dan
+   **Pasang Sinkron Harian** (tab `Tim` terisi).
+3. Deploy -> Manage deployments -> edit -> New version. Klik Allow / Izinkan kalau
+   Google minta izin (akses Drive untuk foto nota, dan akses eksternal untuk sinkron tim).
+4. Isi env di Vercel: `SECRET_ZERODEO`, `APPS_SCRIPT_URL`, `SHARED_SECRET`. **Biarkan `TEAM_CODE` dulu**
+   (masa transisi).
+5. Merge ke `main` (Vercel otomatis deploy), atau Redeploy.
+6. Tes dari Hub: klik kartu Zerodeo -> terbuka tanpa login lagi. Coba Approve dengan akun approver.
+   Tanpa token -> layar "Masuk lewat Hub".
+7. Setelah semua orang bisa masuk lewat Hub: **hapus env `TEAM_CODE`** di Vercel dan Redeploy. Sejak itu hanya
+   token Hub yang diterima. Hapus juga Script Property `APPROVAL_PIN`.
+8. Di Hub: isi Script Property `ZERODEO_URL` (URL Apps Script Zerodeo, bukan alamat Vercel) supaya titik merah
+   di kartu Zerodeo menyala.
 
 Catatan: riwayat git lama masih memuat URL Apps Script dan PIN lama, karena riwayat
 tidak ditulis ulang. Pengamannya: kunci dengan secret, matikan jalur GET (`BLOCK_GET`),
-arsipkan semua deployment Apps Script lama, dan ganti PIN. Urutan aman dan langkah rincinya
+arsipkan semua deployment Apps Script lama, dan hapus PIN lama (sudah tidak dipakai). Urutan aman dan langkah rincinya
 ada di [`KEAMANAN.md`](KEAMANAN.md). Repo ini public: jangan pernah menulis secret, PIN,
 URL Apps Script, atau ID folder/Sheet di kode.
 
@@ -264,9 +297,10 @@ sebagai pengenal stabil, misalnya untuk penanda "menunggu tindakan" di Hub Pingg
 
 ```
 node tests/p0.test.js
+node tests/sso.test.js
 ```
 
-Menguji pengecekan secret, jalur GET/POST, proxy, dan pengisian ID (dengan Google API palsu).
+Menguji pengecekan secret, jalur GET/POST, proxy, pengisian ID, dan (`tests/sso.test.js`) token Hub, peran, approve tanpa PIN, PIC sebagai ID, sinkron tim, titik merah, dan log aktivitas (dengan Google API palsu).
 
 ## Yang HARUS dilakukan manual di luar repo (tidak bisa lewat git push)
 
@@ -275,8 +309,8 @@ Menguji pengecekan secret, jalur GET/POST, proxy, dan pengisian ID (dengan Googl
 2. Apps Script harus di-deploy sebagai Web App (Deploy -> Manage deployments),
    access level "Anyone with the link", supaya Vercel Function bisa memanggilnya
    tanpa login Google. Akses sebenarnya dikunci lewat `SHARED_SECRET`.
-3. Set PIN approve/reject (lihat "Script Properties Apps Script" di atas). Kabari
-   PIN-nya ke Lemon lewat chat pribadi (bukan ditulis di repo/commit).
+3. Atur siapa yang jadi approver/admin/anggota Zerodeo di **Hub** (menu Tim), bukan di sini. Tidak ada
+   PIN yang perlu diatur atau dibagikan.
 4. Kalau Code.gs atau Marketing.gs diedit, WAJIB redeploy versi baru (Deploy ->
    Manage deployments -> edit -> New version) — edit di editor Apps Script saja
    tidak otomatis update URL yang sudah jadi.

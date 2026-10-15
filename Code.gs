@@ -18,15 +18,16 @@
  * ULANG ketiga tab itu ke kondisi awal (formula & struktur, bukan data
  * yang sudah diisi tim) — hati-hati kalau sudah ada isian asli.
  *
- * PENTING: Code.gs sekarang bergantung pada Marketing.gs (isAuthorized_,
- * mkt_getData, mkt_handlePost). Di project Apps Script, paste KEDUANYA
- * sebagai file terpisah, lalu Deploy -> New version.
+ * PENTING: Code.gs bergantung pada Marketing.gs (isAuthorized_, mkt_getData,
+ * mkt_handlePost) dan Hub.gs (identitas dari Hub, tim, aturan approve, log).
+ * Di project Apps Script, paste KETIGANYA sebagai file terpisah, lalu
+ * Deploy -> New version.
  */
 
 // Penanda versi kode. Ubah setiap kali Code.gs diedit; tampil di dashboard (baris "Terakhir ambil data")
 // supaya kelihatan versi mana yang sebenarnya melayani dashboard (beda dengan isi editor kalau
 // belum Deploy -> New version).
-var KODE_VERSI = '2026-10-14 p0-keamanan';
+var KODE_VERSI = '2026-10-15 sso-hub';
 
 var HEADER_ROW = 4;
 // BUKAN batas jumlah kegiatan. Ini hanya sampai baris mana template di Sheet disiapkan
@@ -36,21 +37,18 @@ var TEMPLATE_LAST_ROW = 500;
 var CURR_FORMAT = '"Rp"#,##0;("Rp"#,##0);-';
 var DATE_FORMAT = 'dd-mmm-yy';
 
-// PIN buat approve/reject kegiatan — cuma Lemon yang tahu ini.
-// PIN TIDAK ditulis di kode: disimpan di Script Properties dan diatur lewat
-// menu Zerodeo Tools -> Ganti PIN Lemon. Kabari Lemon PIN-nya lewat chat pribadi.
-var PIN_PROPERTY_KEY = 'APPROVAL_PIN';
-var MIN_PIN_LENGTH = 4;
+// Tidak ada lagi PIN bersama: yang boleh approve/reject ditentukan peran di token dari Hub
+// (approver / admin), dan semua aksi dicatat di tab log_aktivitas. Lihat Hub.gs.
 
 var KATEGORI_LIST = ['Peralatan/Kulak', 'Packaging Tambahan', 'Ongkos Kirim/Logistik',
                       'Konten & Aktivasi Akar', 'Operasional Tim', 'Lain-lain'];
-var PIC_LIST = ['Lenno', 'Ricko', 'Yanuar', 'Christina'];
+// PIC disimpan sebagai ID anggota (daftarnya di tab Tim, disinkron dari Hub). Lihat Hub.gs.
 var STATUS_LIST = ['Draft', 'Siap Ajukan', 'Diajukan', 'Approved', 'Ditolak', 'Revisi', 'Ditransfer', 'Selesai', 'Dibatalkan'];
 // Status "Dibatalkan" = kegiatan yang dibatalkan/salah input (pengganti hapus). Tidak dihitung di
 // total, saldo dana, dan Perlu Ditransfer, tapi barisnya tetap ada dan bisa dipulihkan.
 var STATUS_BATAL = 'Dibatalkan';
-// Mengubah atau membatalkan kegiatan berstatus ini butuh PIN Lemon (uangnya sudah diputuskan/bergerak).
-var STATUS_BUTUH_PIN = ['Approved', 'Ditransfer', 'Selesai'];
+// Mengubah atau membatalkan kegiatan berstatus ini hanya boleh oleh approver/admin (uangnya sudah diputuskan/bergerak).
+var STATUS_KEPUTUSAN = ['Approved', 'Ditransfer', 'Selesai'];
 var TIPE_LIST = ['Capex', 'Opex'];
 
 // Posisi kolom di tab kegiatan (nomor kolom, mulai dari 1). Kalau nambah/geser
@@ -80,7 +78,8 @@ function onOpen() {
     .createMenu('Zerodeo Tools')
     .addItem('Setup / Reset Tracker', 'setupTracker')
     .addItem('Perluas Tabel', 'perluasTabel')
-    .addItem('Ganti PIN Lemon', 'gantiPinLemon')
+    .addItem('Sinkron Tim dari Hub', 'menuSinkronTim')
+    .addItem('Pasang Sinkron Harian', 'pasangTriggerSinkron')
     .addItem('Isi ID Kegiatan', 'isiIdKegiatan')
     .addToUi();
 }
@@ -132,45 +131,6 @@ function extendTemplate_(ss, sheet) {
       }
     }
   }
-}
-
-function getApprovalPin() {
-  return PropertiesService.getScriptProperties().getProperty(PIN_PROPERTY_KEY);
-}
-
-// Menu ganti PIN. Kalau PIN sudah pernah diset, minta PIN lama dulu.
-// Lupa PIN lama? Hapus properti APPROVAL_PIN di Apps Script:
-// Project Settings -> Script Properties.
-function gantiPinLemon() {
-  var ui = SpreadsheetApp.getUi();
-  var current = getApprovalPin();
-
-  if (current) {
-    var oldRes = ui.prompt('Ganti PIN Lemon', 'Masukkan PIN yang sekarang:', ui.ButtonSet.OK_CANCEL);
-    if (oldRes.getSelectedButton() !== ui.Button.OK) return;
-    if (oldRes.getResponseText().trim() !== current) {
-      ui.alert('PIN lama salah. PIN tidak diubah.');
-      return;
-    }
-  }
-
-  var newRes = ui.prompt('Ganti PIN Lemon', 'PIN baru (minimal ' + MIN_PIN_LENGTH + ' karakter):', ui.ButtonSet.OK_CANCEL);
-  if (newRes.getSelectedButton() !== ui.Button.OK) return;
-  var newPin = newRes.getResponseText().trim();
-  if (newPin.length < MIN_PIN_LENGTH) {
-    ui.alert('PIN terlalu pendek (minimal ' + MIN_PIN_LENGTH + ' karakter). PIN tidak diubah.');
-    return;
-  }
-
-  var confirmRes = ui.prompt('Ganti PIN Lemon', 'Ketik ulang PIN baru buat konfirmasi:', ui.ButtonSet.OK_CANCEL);
-  if (confirmRes.getSelectedButton() !== ui.Button.OK) return;
-  if (confirmRes.getResponseText().trim() !== newPin) {
-    ui.alert('Konfirmasi tidak sama. PIN tidak diubah.');
-    return;
-  }
-
-  PropertiesService.getScriptProperties().setProperty(PIN_PROPERTY_KEY, newPin);
-  ui.alert('PIN Lemon sudah diganti. Kabari Lemon lewat chat pribadi.');
 }
 
 function setupTracker() {
@@ -438,9 +398,9 @@ function applyKegiatanTemplate_(sheet) {
   setColumnDropdown_(sheet, COL.KATEGORI, getKategoriList());
   setColumnDropdown_(sheet, COL.TIPE, TIPE_LIST);
   setColumnDropdown_(sheet, COL.JALUR, ['Fixed', 'Pengajuan', JALUR_DANA]);
-  setColumnDropdown_(sheet, COL.PIC, PIC_LIST);
+  setColumnDropdown_(sheet, COL.PIC, picIdList_());
   setColumnDropdown_(sheet, COL.STATUS, STATUS_LIST);
-  setColumnDropdown_(sheet, COL.PIC_TRANSAKSI, PIC_LIST);
+  setColumnDropdown_(sheet, COL.PIC_TRANSAKSI, picIdList_());
   var danaNames = getDanaNames_();
   if (danaNames.length) setColumnDropdown_(sheet, COL.DANA, danaNames);
 }
@@ -558,7 +518,8 @@ function handleAddDana(data) {
   if (!nama) return jsonResponse({ ok: false, error: 'Nama dana wajib diisi.' });
   var nominal = Number(data.nominal);
   if (!nominal || nominal <= 0) return jsonResponse({ ok: false, error: 'Nominal dana harus angka lebih dari 0.' });
-  if (PIC_LIST.indexOf(data.picTransaksi) === -1) return jsonResponse({ ok: false, error: 'PIC Transaksi tidak dikenali.' });
+  var picTransaksi = normalizePic_(data.picTransaksi);
+  if (!picTransaksi) return jsonResponse({ ok: false, error: 'PIC Transaksi tidak dikenali.' });
   var tgl = new Date();
   if (data.tglTransfer) {
     tgl = new Date(data.tglTransfer);
@@ -574,7 +535,7 @@ function handleAddDana(data) {
     if (findDana_(nama)) {
       return jsonResponse({ ok: false, error: 'Sudah ada dana dengan nama itu. Pakai nama lain.' });
     }
-    sheet.appendRow([safeText_(nama), nominal, tgl, data.picTransaksi, safeText_(catatan), '', '', new Date()]);
+    sheet.appendRow([safeText_(nama), nominal, tgl, picTransaksi, safeText_(catatan), '', '', new Date()]);
     var r = sheet.getLastRow();
     sheet.getRange(r, 2).setNumberFormat(CURR_FORMAT);
     sheet.getRange(r, 3).setNumberFormat(DATE_FORMAT);
@@ -595,7 +556,7 @@ function handleReimburseDana(data) {
   var row = Number(data.row);
   var nominal = Number(data.nominal);
   if (!nominal || nominal <= 0) return jsonResponse({ ok: false, error: 'Nominal reimburse harus angka lebih dari 0.' });
-  if (data.pic && PIC_LIST.indexOf(data.pic) === -1) return jsonResponse({ ok: false, error: 'PIC tidak dikenali.' });
+  if (data.pic && !isKnownPic_(data.pic)) return jsonResponse({ ok: false, error: 'PIC tidak dikenali.' });
   var tgl = data.tgl ? new Date(data.tgl) : new Date();
   if (isNaN(tgl.getTime())) return jsonResponse({ ok: false, error: 'Tanggal tidak valid.' });
   var catatan = cleanText_(data.catatan, 150);
@@ -611,7 +572,7 @@ function handleReimburseDana(data) {
     sheet.getRange(row, DANA_COL_REIMBURSE).setValue(total).setNumberFormat(CURR_FORMAT);
     sheet.getRange(row, 7).setFormula(danaSaldoFormula_(row)).setNumberFormat(CURR_FORMAT);
     var stamp = 'Reimburse ' + fmtRp_(nominal) + ' (' + Utilities.formatDate(tgl, Session.getScriptTimeZone(), 'dd-MMM-yy') +
-      (data.pic ? ', ' + data.pic : '') + ')' + (catatan ? ': ' + catatan : '');
+      (data.pic ? ', ' + picNama_(normalizePic_(data.pic)) : '') + ')' + (catatan ? ': ' + catatan : '');
     var noteCell = sheet.getRange(row, 5);
     var old = noteCell.getValue();
     noteCell.setValue(safeText_(old ? old + ' | ' + stamp : stamp));
@@ -858,9 +819,12 @@ function buildPayload_() {
   var t0 = Date.now();
   // ID kegiatan harus sudah terisi sebelum data dibaca. Kalau gagal, data tetap dikirim.
   try { ensureKegiatanIds_(); } catch (err) { /* abaikan: dicoba lagi di pemuatan berikutnya */ }
+  try { maybeSyncTim_(); } catch (err) { /* abaikan: tab Tim memakai cadangan */ }
+  TIM_MEMO_ = null;
   var ss = SpreadsheetApp.getActiveSpreadsheet();
   var payload = {
     generated_at: new Date().toISOString(),
+    tim: readTim_(),
     kegiatan: sheetToObjects(ss.getSheetByName('kegiatan')),
     plafon_fixed: sheetToObjects(ss.getSheetByName('plafon_fixed')),
   };
@@ -890,16 +854,25 @@ function buildPayload_() {
 function doPost(e) {
   try {
     var data = JSON.parse(e.postData.contents);
+    CURRENT_WHO_ = null;
+    TIM_MEMO_ = null;
+
+    // Titik merah: Hub memanggil dengan token servis bertanda tangan (bukan SHARED_SECRET) dan hanya boleh action ini.
+    if (data.action === 'pending') return handlePending_(data);
 
     if (!isAuthorized_(data.secret)) {
       return jsonResponse({ ok: false, error: 'unauthorized' });
     }
+    // Identitas yang sudah diverifikasi proxy dari token Hub. Dipercaya hanya karena SHARED_SECRET benar di atas.
+    CURRENT_WHO_ = normalizeWho_(data.hub);
     // Membaca data tidak mengubah apa pun, jadi tidak menghapus cache.
     if (data.action === 'get_data') {
       return serveData_(data.fresh === true || data.fresh === '1' || data.fresh === 1);
     }
     try {
-      return routePost_(data);
+      var out = routePost_(data);
+      logAktivitas_(data, out);
+      return out;
     } finally {
       cacheClear_();   // data berubah: dashboard berikutnya mengambil langsung dari Sheet
     }
@@ -970,8 +943,8 @@ function handleAddKegiatan(data) {
       return jsonResponse({ ok: false, error: 'Data lama: Actual harus angka lebih dari 0.' });
     }
     nominal = Number(data.nominalTransfer) || actual;
-    picTrans = data.picTransaksi || data.pic || '';
-    if (picTrans && PIC_LIST.indexOf(picTrans) === -1) {
+    picTrans = normalizePic_(data.picTransaksi || data.pic || '');
+    if ((data.picTransaksi || data.pic) && !picTrans) {
       return jsonResponse({ ok: false, error: 'PIC Transaksi tidak dikenali.' });
     }
     if (data.tglTransfer) {
@@ -983,6 +956,8 @@ function handleAddKegiatan(data) {
       return jsonResponse({ ok: false, error: 'Link nota harus diawali http:// atau https://' });
     }
   }
+
+  if (data.pic && !isKnownPic_(data.pic)) return jsonResponse({ ok: false, error: 'PIC tidak dikenali.' });
 
   var lock = LockService.getScriptLock();
   if (!lock.tryLock(15000)) return jsonResponse({ ok: false, error: 'Server sedang sibuk, coba lagi sebentar.' });
@@ -1018,7 +993,7 @@ function handleAddKegiatan(data) {
     vals[COL.KATEGORI] = kat;
     vals[COL.TIPE] = data.tipe || '';
     vals[COL.JALUR] = danaName ? JALUR_DANA : (data.jalur || '');
-    vals[COL.PIC] = data.pic || '';
+    vals[COL.PIC] = normalizePic_(data.pic);
     vals[COL.ESTIMASI] = Number(data.estimasi) || actual || 0;
     vals[COL.STATUS] = arsip ? 'Selesai' : (danaName ? 'Ditransfer' : (data.status || 'Draft'));
     vals[COL.PIC_TRANSAKSI] = arsip ? picTrans : '';
@@ -1047,17 +1022,12 @@ function handleAddKegiatan(data) {
   }
 }
 
-// Approve / Reject — hanya jalan kalau PIN cocok. Row diambil dari
-// field "_row" yang doGet sisipkan ke tiap objek kegiatan, jadi
+// Approve / Reject — hanya approver atau admin (dari token Hub), dan tidak boleh untuk kegiatan
+// milik sendiri. Row diambil dari field "_row" yang doGet sisipkan ke tiap objek kegiatan, jadi
 // dashboard tinggal kirim balik nomor itu tanpa perlu cari lagi.
 function handleUpdateStatus(data) {
-  var approvalPin = getApprovalPin();
-  if (!approvalPin) {
-    return jsonResponse({ ok: false, error: 'PIN belum diset. Atur dulu lewat menu Zerodeo Tools -> Ganti PIN Lemon di Google Sheet.' });
-  }
-  if (data.pin !== approvalPin) {
-    return jsonResponse({ ok: false, error: 'PIN salah. Cuma yang punya PIN dari Lemon yang bisa approve/reject.' });
-  }
+  var denied = checkDecider_();
+  if (denied) return jsonResponse({ ok: false, error: denied });
   var row = Number(data.row);
   if (!row || row < HEADER_ROW + 1 || row > lastKegiatanRow_()) {
     return jsonResponse({ ok: false, error: 'Baris tidak valid.' });
@@ -1073,11 +1043,15 @@ function handleUpdateStatus(data) {
   if (currentStatus !== 'Diajukan') {
     return jsonResponse({ ok: false, error: 'Baris ini statusnya sudah "' + currentStatus + '", bukan "Diajukan" lagi — mungkin sudah diproses orang lain.' });
   }
+  // Tidak ada yang memutuskan kegiatannya sendiri (kegiatan Lemon diputuskan Lenno, dan sebaliknya).
+  if (ownerIds_(sheet.getRange(row, COL.PIC).getValue()).indexOf(CURRENT_WHO_.uid) !== -1) {
+    return jsonResponse({ ok: false, error: 'Kamu tidak boleh memutuskan kegiatanmu sendiri. Minta approver lain.' });
+  }
 
   sheet.getRange(row, COL.STATUS).setValue(data.status);
   var noteCell = sheet.getRange(row, COL.CATATAN);
   var existingNote = noteCell.getValue();
-  var stamp = data.status + ' oleh Lemon, ' + Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'dd-MMM-yy HH:mm');
+  var stamp = data.status + ' oleh ' + picNama_(CURRENT_WHO_.uid) + ', ' + Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'dd-MMM-yy HH:mm');
   noteCell.setValue(existingNote ? (existingNote + ' | ' + stamp) : stamp);
 
   return jsonResponse({ ok: true, row: row, status: data.status });
@@ -1155,7 +1129,8 @@ function handleMarkTransferred(data) {
   if (!nominal || nominal <= 0) {
     return jsonResponse({ ok: false, error: 'Nominal transfer harus angka lebih dari 0.' });
   }
-  if (PIC_LIST.indexOf(data.picTransaksi) === -1) {
+  var picTransaksi = normalizePic_(data.picTransaksi);
+  if (!picTransaksi) {
     return jsonResponse({ ok: false, error: 'PIC Transaksi tidak dikenali.' });
   }
 
@@ -1178,7 +1153,7 @@ function handleMarkTransferred(data) {
 
   var tglTransfer = data.tglTransfer ? new Date(data.tglTransfer) : new Date();
 
-  sheet.getRange(row, COL.PIC_TRANSAKSI).setValue(data.picTransaksi);
+  sheet.getRange(row, COL.PIC_TRANSAKSI).setValue(picTransaksi);
   sheet.getRange(row, COL.NOMINAL_TRANSFER).setValue(nominal).setNumberFormat(CURR_FORMAT);
   sheet.getRange(row, COL.TGL_TRANSFER).setValue(tglTransfer).setNumberFormat(DATE_FORMAT);
   sheet.getRange(row, COL.STATUS).setValue('Ditransfer');
@@ -1326,17 +1301,9 @@ function handleCompleteBatch(data) {
 // ============================================================
 // EDIT / BATALKAN / PULIHKAN
 // Tidak ada hapus permanen: kegiatan yang salah dibatalkan (status "Dibatalkan") dan
-// bisa dipulihkan. Kegiatan berstatus Approved/Ditransfer/Selesai butuh PIN Lemon
-// untuk diubah atau dibatalkan, karena uangnya sudah diputuskan atau bergerak.
+// bisa dipulihkan. Kegiatan berstatus Approved/Ditransfer/Selesai hanya boleh diubah atau
+// dibatalkan oleh approver/admin, karena uangnya sudah diputuskan atau bergerak.
 // ============================================================
-
-// '' kalau PIN valid, selain itu pesan galat.
-function checkPin_(pin) {
-  var approvalPin = getApprovalPin();
-  if (!approvalPin) return 'PIN belum diset. Atur dulu lewat menu Zerodeo Tools -> Ganti PIN Lemon di Google Sheet.';
-  if (pin !== approvalPin) return 'PIN salah. Perubahan ini butuh PIN dari Lemon.';
-  return '';
-}
 
 function stampNow_() {
   return Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'dd-MMM-yy');
@@ -1364,7 +1331,7 @@ function dateKey_(v) {
   return String(v || '');
 }
 
-// Cek baris kegiatan dan kunci PIN. Return {error} atau {sheet, status}.
+// Cek baris kegiatan. Return {error} atau {sheet, status}.
 function loadEditableRow_(row) {
   var sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('kegiatan');
   if (!sheet) return { error: 'Tab kegiatan tidak ditemukan.' };
@@ -1381,8 +1348,8 @@ function handleEditKegiatan(data) {
     if (ld.error) return jsonResponse({ ok: false, error: ld.error });
     var sheet = ld.sheet, status = ld.status;
     if (status === STATUS_BATAL) return jsonResponse({ ok: false, error: 'Kegiatan ini sudah dibatalkan. Pulihkan dulu kalau mau diedit.' });
-    if (STATUS_BUTUH_PIN.indexOf(status) !== -1) {
-      var pe = checkPin_(data.pin);
+    if (STATUS_KEPUTUSAN.indexOf(status) !== -1) {
+      var pe = checkDecider_();
       if (pe) return jsonResponse({ ok: false, error: pe });
     }
     var danaLinked = String(sheet.getRange(row, COL.DANA).getValue() || '').trim() !== '';
@@ -1413,8 +1380,8 @@ function handleEditKegiatan(data) {
       add(COL.TIPE, data.tipe, null, 'Tipe', 'txt');
     }
     if (has('pic')) {
-      if (PIC_LIST.indexOf(data.pic) === -1) return jsonResponse({ ok: false, error: 'PIC tidak dikenali.' });
-      add(COL.PIC, data.pic, null, 'PIC', 'txt');
+      if (!isKnownPic_(data.pic)) return jsonResponse({ ok: false, error: 'PIC tidak dikenali.' });
+      add(COL.PIC, normalizePic_(data.pic), null, 'PIC', 'txt');
     }
     if (has('estimasi')) {
       var est = Number(data.estimasi);
@@ -1439,8 +1406,8 @@ function handleEditKegiatan(data) {
     }
     if (has('picTransaksi')) {
       if (!sudahTf) return jsonResponse({ ok: false, error: 'PIC transaksi baru bisa diubah setelah status Ditransfer.' });
-      if (PIC_LIST.indexOf(data.picTransaksi) === -1) return jsonResponse({ ok: false, error: 'PIC Transaksi tidak dikenali.' });
-      add(COL.PIC_TRANSAKSI, data.picTransaksi, null, 'PIC transaksi', 'txt');
+      if (!isKnownPic_(data.picTransaksi)) return jsonResponse({ ok: false, error: 'PIC Transaksi tidak dikenali.' });
+      add(COL.PIC_TRANSAKSI, normalizePic_(data.picTransaksi), null, 'PIC transaksi', 'txt');
     }
     if (has('tglTransfer')) {
       if (!sudahTf) return jsonResponse({ ok: false, error: 'Tanggal transfer baru bisa diubah setelah status Ditransfer.' });
@@ -1494,8 +1461,8 @@ function handleCancelKegiatan(data) {
     var ld = loadEditableRow_(row);
     if (ld.error) return jsonResponse({ ok: false, error: ld.error });
     if (ld.status === STATUS_BATAL) return jsonResponse({ ok: false, error: 'Kegiatan ini sudah dibatalkan.' });
-    if (STATUS_BUTUH_PIN.indexOf(ld.status) !== -1) {
-      var pe = checkPin_(data.pin);
+    if (STATUS_KEPUTUSAN.indexOf(ld.status) !== -1) {
+      var pe = checkDecider_();
       if (pe) return jsonResponse({ ok: false, error: pe });
     }
     var alasan = cleanText_(data.alasan, 150).replace(/"/g, "'");
@@ -1520,8 +1487,8 @@ function handleRestoreKegiatan(data) {
     while ((m = re.exec(catatan)) !== null) {
       if (STATUS_LIST.indexOf(m[1]) !== -1 && m[1] !== STATUS_BATAL) target = m[1];
     }
-    if (STATUS_BUTUH_PIN.indexOf(target) !== -1) {
-      var pe = checkPin_(data.pin);
+    if (STATUS_KEPUTUSAN.indexOf(target) !== -1) {
+      var pe = checkDecider_();
       if (pe) return jsonResponse({ ok: false, error: pe });
     }
     ld.sheet.getRange(row, COL.STATUS).setValue(target);
@@ -1533,7 +1500,7 @@ function handleRestoreKegiatan(data) {
 }
 
 // Edit dana: nama (unik; kegiatan tertaut ikut diganti namanya), nominal, tanggal, PIC, catatan.
-// Butuh PIN Lemon hanya kalau sudah ada kegiatan yang tertaut ke dana itu.
+// Hanya approver/admin kalau sudah ada kegiatan yang tertaut ke dana itu.
 function handleEditDana(data) {
   var row = Number(data.row);
   var lock = LockService.getScriptLock();
@@ -1549,7 +1516,8 @@ function handleEditDana(data) {
     if (!nama) return jsonResponse({ ok: false, error: 'Nama dana wajib diisi.' });
     var nominal = Number(data.nominal);
     if (!nominal || nominal <= 0) return jsonResponse({ ok: false, error: 'Nominal dana harus angka lebih dari 0.' });
-    if (PIC_LIST.indexOf(data.picTransaksi) === -1) return jsonResponse({ ok: false, error: 'PIC Transaksi tidak dikenali.' });
+    var picTrans = normalizePic_(data.picTransaksi);
+    if (!picTrans) return jsonResponse({ ok: false, error: 'PIC Transaksi tidak dikenali.' });
     var tgl = data.tglTransfer ? new Date(data.tglTransfer) : null;
     if (!tgl || isNaN(tgl.getTime())) return jsonResponse({ ok: false, error: 'Tanggal transfer tidak valid.' });
     var catatan = cleanText_(data.catatan, 200);
@@ -1566,14 +1534,14 @@ function handleEditDana(data) {
       });
     }
     if (linkedRows.length) {
-      var pe = checkPin_(data.pin);
+      var pe = checkDecider_();
       if (pe) return jsonResponse({ ok: false, error: pe });
     }
 
     dsheet.getRange(row, 1).setValue(safeText_(nama));
     dsheet.getRange(row, 2).setValue(nominal).setNumberFormat(CURR_FORMAT);
     dsheet.getRange(row, 3).setValue(tgl).setNumberFormat(DATE_FORMAT);
-    dsheet.getRange(row, 4).setValue(data.picTransaksi);
+    dsheet.getRange(row, 4).setValue(picTrans);
     dsheet.getRange(row, 5).setValue(safeText_(catatan));
     if (nama !== oldName) {
       linkedRows.forEach(function (r) { ksheet.getRange(r, COL.DANA).setValue(nama); });

@@ -176,9 +176,8 @@
         <span class="field-error" id="err-k-jalur">Wajib dipilih.</span></label>
 
       <label>PIC
-        <select id="k-pic">
+        <select id="k-pic" data-pic>
           <option value="">Pilih PIC…</option>
-          <option>Lenno</option><option>Ricko</option><option>Yanuar</option><option>Christina</option>
         </select>
         <span class="field-error" id="err-k-pic">Wajib dipilih.</span></label>
 
@@ -198,8 +197,7 @@
           <input type="number" id="k-nominal" placeholder="0" min="0" step="1" inputmode="numeric"></label>
         <div class="row2">
           <label>PIC Transaksi <span class="opt">(opsional)</span>
-            <select id="k-pictrans"><option value="">Sama dengan PIC</option>
-              <option>Lenno</option><option>Ricko</option><option>Yanuar</option><option>Christina</option></select></label>
+            <select id="k-pictrans" data-pic><option value="">Sama dengan PIC</option></select></label>
           <label>Tanggal <span class="opt">(kapan dibayar)</span>
             <input type="date" id="k-tgltf"></label>
         </div>
@@ -245,7 +243,7 @@
           <label>Tipe
             <select id="ed-tipe"><option value="Capex">Capex</option><option value="Opex">Opex</option></select></label>
           <label>PIC
-            <select id="ed-pic"><option>Lenno</option><option>Ricko</option><option>Yanuar</option><option>Christina</option></select></label>
+            <select id="ed-pic" data-pic></select></label>
         </div>
         <div class="row2">
           <label>Estimasi (Rp)
@@ -260,7 +258,7 @@
             <span class="field-error" id="err-ed-nominal">Isi angka lebih dari 0.</span></label>
           <div class="row2">
             <label>PIC Transaksi
-              <select id="ed-pictrans"><option value="">-</option><option>Lenno</option><option>Ricko</option><option>Yanuar</option><option>Christina</option></select></label>
+              <select id="ed-pictrans" data-pic><option value="">-</option></select></label>
             <label>Tgl transfer
               <input type="date" id="ed-tgltf">
               <span class="field-error" id="err-ed-tgltf">Tanggal wajib diisi.</span></label>
@@ -279,10 +277,6 @@
           <div class="preview" id="ed-photo-prev"><img id="ed-photo-img" alt="Preview nota"><div class="size" id="ed-photo-size"></div></div></label>
         </div>
       </div>
-
-      <label id="ed-pin-wrap" style="display:none">PIN Lemon
-        <input type="password" id="ed-pin" autocomplete="off" placeholder="PIN">
-        <span class="hint" id="ed-pin-hint">Kegiatan yang sudah Approved/Ditransfer/Selesai butuh PIN Lemon untuk diubah, dibatalkan, atau dipulihkan.</span></label>
 
       <div class="msg" id="ed-msg"></div>
       <div class="modal-actions">
@@ -311,8 +305,7 @@
       <div class="row2">
         <label>Tanggal<input type="date" id="rb-tgl"></label>
         <label>Diterima oleh <span class="opt">(opsional)</span>
-          <select id="rb-pic"><option value="">-</option>
-            <option>Lenno</option><option>Ricko</option><option>Yanuar</option><option>Christina</option></select></label>
+          <select id="rb-pic" data-pic><option value="">-</option></select></label>
       </div>
       <label>Catatan <span class="opt">(opsional)</span>
         <input type="text" id="rb-catatan" placeholder="Contoh: diganti dari kas Lemon"></label>
@@ -381,17 +374,12 @@
       <div class="row2">
         <label>Tgl transfer<input type="date" id="d-tgl"></label>
         <label>Diterima oleh
-          <select id="d-pic"><option value="">Pilih PIC…</option>
-            <option>Lenno</option><option>Ricko</option><option>Yanuar</option><option>Christina</option></select>
+          <select id="d-pic" data-pic><option value="">Pilih PIC…</option></select>
           <span class="field-error" id="err-d-pic">Wajib dipilih.</span></label>
       </div>
 
       <label>Catatan <span class="opt">(opsional)</span>
         <input type="text" id="d-catatan" placeholder="Contoh: approved Lemon, untuk launch"></label>
-
-      <label id="d-pin-wrap" style="display:none">PIN Lemon
-        <input type="password" id="d-pin" autocomplete="off" placeholder="PIN">
-        <span class="hint">Dana ini sudah dipakai kegiatan, jadi mengubahnya butuh PIN Lemon.</span></label>
 
       <div class="msg" id="d-msg"></div>
       <div class="modal-actions">
@@ -554,7 +542,7 @@
 
       <div class="row2">
         <label>PIC
-          <select id="s-pic"><option value="">Pilih…</option><option>Lenno</option><option>Ricko</option><option>Yanuar</option><option>Christina</option></select>
+          <select id="s-pic" data-pic><option value="">Pilih…</option></select>
           <span class="field-error" id="err-s-pic">Wajib dipilih.</span></label>
         <label>Status
           <select id="s-status"><option>Ide</option><option>Jalan</option><option>Selesai</option></select></label>
@@ -582,7 +570,7 @@
       <div class="row2">
         <label>Tanggal event<input type="date" id="e-tanggal"><span class="field-error" id="err-e-tanggal">Wajib diisi.</span></label>
         <label>PIC pencatat
-          <select id="e-pic"><option value="">Pilih…</option><option>Lenno</option><option>Ricko</option><option>Yanuar</option><option>Christina</option></select>
+          <select id="e-pic" data-pic><option value="">Pilih…</option></select>
           <span class="field-error" id="err-e-pic">Wajib dipilih.</span></label>
       </div>
 
