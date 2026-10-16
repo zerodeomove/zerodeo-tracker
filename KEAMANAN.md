@@ -32,7 +32,7 @@ bergantung pada login Hub, **Hub harus sudah jalan duluan** (bagian A).
 2. **Paste `Code.gs`, `Marketing.gs`, dan `Hub.gs` terbaru** ke Apps Script (`Hub.gs` file baru, buat lewat tombol "+" di Files),
    lalu Deploy -> Manage deployments -> pensil -> **New version** (URL tidak berubah). Izinkan akses yang diminta Google
    (Drive dan akses eksternal untuk sinkron tim).
-3. Di Sheet: menu **Zerodeo Tools -> Sinkron Tim dari Hub** (tab `Tim` terisi), lalu **Pasang Sinkron Harian**.
+3. Di Sheet: menu **Zerodeo Tools -> Sinkron Tim dari Hub** (tab `Tim` terisi). Setelah itu sinkron berjalan **otomatis**: saat anggota baru dari Hub membuka Zerodeo, dan paling lama tiap 30 menit. **Pasang Sinkron Harian** hanya opsional sebagai cadangan.
    Baris lama kegiatan yang PIC-nya masih berupa nama ("Ricko") tetap dikenali; kolom **ID** (kolom T) terisi otomatis.
 4. Di Vercel: tambah env **`SECRET_ZERODEO`** (nilai yang sama). **Biarkan `TEAM_CODE`** dulu (masa transisi), lalu **merge PR ini
    ke `main`** supaya Vercel deploy proxy baru (baca data lewat POST, token Hub, secret tidak di URL).

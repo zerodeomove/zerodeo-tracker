@@ -75,6 +75,7 @@
     get: function (fresh) { return call('GET', null, fresh ? '?fresh=1' : ''); },
     post: function (b) { return call('POST', b); },
     me: claims,          // {uid, peran, exp} atau null (untuk tampilan saja)
+    logout: function () { lsDel(TOKEN_KEY); lsDel(LEGACY_KEY); location.href = HUB_URL; },   // hapus sesi di perangkat ini lalu ke Hub
     hubUrl: HUB_URL
   };
 

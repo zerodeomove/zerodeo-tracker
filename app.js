@@ -38,11 +38,34 @@ function fillPicSelects() {
 // Peran pengguna ini dari token Hub (hanya untuk tampilan; server yang memutuskan). null = tanpa identitas.
 function myRole() { const c = zApi.me(); return c ? c.peran : null; }
 function myUid() { const c = zApi.me(); return c ? c.uid : null; }
+// Tanda siapa yang sedang masuk (pojok kanan atas). Hanya tampilan; yang berwenang tetap server.
+function renderWho() {
+  const el = $('whoami');
+  if (!el) return;
+  const c = zApi.me();
+  el.textContent = '';
+  if (!c) {
+    const s = document.createElement('span');
+    s.className = 'who-off';
+    s.textContent = 'Belum masuk lewat Hub';
+    el.appendChild(s);
+    return;
+  }
+  const s = document.createElement('span');
+  s.className = 'who-name';
+  s.textContent = picNama(c.uid) + ' · ' + c.peran;
+  const b = document.createElement('button');
+  b.type = 'button';
+  b.className = 'btn ghost who-out';
+  b.textContent = 'Keluar';
+  b.onclick = () => zApi.logout();
+  el.append(s, b);
+}
 function isDecider() { const r = myRole(); return r === 'approver' || r === 'admin'; }
 function isOwnRow(r) { const me = myUid(); return !!me && String(r['PIC'] || '').split(',').some((p) => picKey(p).toLowerCase() === me); }
 const TIPE_LIST = ['Capex', 'Opex'];
 // Harus sama dengan KODE_VERSI di Code.gs. Kalau Apps Script yang melayani berbeda, muncul peringatan.
-const EXPECTED_VERSI = '2026-10-15 sso-hub';
+const EXPECTED_VERSI = '2026-10-16 sso-hub-2';
 
 function fmtRupiah(n) {
   if (n === null || n === undefined || n === '' || isNaN(n)) return '-';
@@ -319,12 +342,14 @@ document.addEventListener('visibilitychange', () => {
 // fresh = true: ambil langsung dari Sheet, lewati cache Apps Script (tombol Refresh).
 async function load(fresh) {
   loadingNow = true;
+  renderWho();
   setSync('Memuat…', false);
   try {
     const json = await zApi.get(fresh === true);
     if (json.ok === false) throw new Error(json.error || 'Gagal');
     if (Array.isArray(json.tim) && json.tim.length) TIM = json.tim;
     fillPicSelects();
+    renderWho();
     kegiatanData = json.kegiatan || [];
     plafonData = json.plafon_fixed || [];
     backendBaru = Array.isArray(json.kategori);

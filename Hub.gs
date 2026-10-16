@@ -175,15 +175,27 @@ function syncTimDariHub() {
   return users.length;
 }
 
-// Sinkron otomatis saat tab "Tim" masih kosong (pertama kali), paling sering sekali per 10 menit.
+// Sinkron otomatis tanpa pemicu terjadwal. Berjalan kalau: tab Tim masih kosong, orang yang baru masuk (token sah)
+// belum ada di tab Tim (anggota baru di Hub), atau sudah lebih dari 30 menit sejak sinkron terakhir.
+// Tidak pernah melempar galat (Hub tidak terjangkau -> tab Tim yang ada tetap dipakai) dan tidak dicoba
+// lebih sering dari tiap 2 menit, supaya Hub tidak dibebani.
 function maybeSyncTim_() {
-  var sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(TIM_TAB);
-  if (sheet && sheet.getLastRow() >= 2) return;
-  if (!PropertiesService.getScriptProperties().getProperty('HUB_URL')) return;
-  var cache = CacheService.getScriptCache();
-  if (cache.get('tim_try')) return;
-  cache.put('tim_try', '1', 600);
-  syncTimDariHub();
+  try {
+    if (!PropertiesService.getScriptProperties().getProperty('HUB_URL')) return;
+    var cache = CacheService.getScriptCache();
+    var sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(TIM_TAB);
+    var filled = !!(sheet && sheet.getLastRow() >= 2);
+    var uid = CURRENT_WHO_ ? String(CURRENT_WHO_.uid || '').toLowerCase() : '';
+    var known = true;
+    if (filled && uid) {
+      known = sheet.getRange(2, 1, sheet.getLastRow() - 1, 1).getValues().some(function (r) { return String(r[0] || '').trim().toLowerCase() === uid; });
+    }
+    if (filled && known && cache.get('tim_fresh')) return;
+    if (cache.get('tim_try')) return;
+    cache.put('tim_try', '1', 120);
+    syncTimDariHub();
+    cache.put('tim_fresh', '1', 1800);
+  } catch (err) { /* abaikan */ }
 }
 
 function menuSinkronTim() {
@@ -195,7 +207,7 @@ function menuSinkronTim() {
   }
 }
 
-// Pasang pemicu harian (jam 03.xx) supaya tab "Tim" mengikuti Hub. Aman dijalankan berulang.
+// Opsional: pemicu harian (jam 03.xx) sebagai cadangan. Sinkron otomatis sudah jalan sendiri saat dashboard dipakai (maybeSyncTim_).
 function pasangTriggerSinkron() {
   ScriptApp.getProjectTriggers().forEach(function (t) {
     if (t.getHandlerFunction() === 'syncTimDariHub') ScriptApp.deleteTrigger(t);

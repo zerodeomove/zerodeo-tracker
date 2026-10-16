@@ -240,6 +240,39 @@ const rowOf = (i) => H + 1 + i;
   env2.ctx.maybeSyncTim_(); assert.strictEqual(c2, 1); ok('gagal sinkron -> tidak dicoba lagi sampai 10 menit (tidak membebani Hub)');
 }
 
+{
+  // sinkron otomatis: anggota baru di Hub, dan paling lama tiap 30 menit
+  const env = freshEnv([]);
+  env.props.HUB_URL = 'https://hub.test/exec'; env.props.SECRET_ZERODEO = SECRET;
+  let calls = 0, users = [{ id: 'lemon', nama: 'Lemon', peran: 'approver' }];
+  env.ctx.UrlFetchApp = { fetch: () => { calls++; return { getContentText: () => JSON.stringify({ ok: true, users }) }; } };
+  env.ctx.maybeSyncTim_(); assert.strictEqual(calls, 1);
+  env.ctx.maybeSyncTim_(); assert.strictEqual(calls, 1); ok('tab Tim terisi dan baru disinkron: tidak sinkron lagi');
+  users = [{ id: 'lemon', nama: 'Lemon', peran: 'approver' }, { id: 'baru', nama: 'Baru', peran: 'anggota' }];
+  setWho(env, { uid: 'baru', peran: 'anggota' });
+  delete env.cache['tim_try'];
+  env.ctx.maybeSyncTim_(); assert.strictEqual(calls, 2);
+  assert.deepStrictEqual(env.sheets.Tim.rows.slice(1).map((r) => r[0]), ['lemon', 'baru']); ok('anggota baru di Hub membuka Zerodeo -> tab Tim langsung disinkron otomatis (tanpa pemicu harian)');
+  setWho(env, { uid: 'baru', peran: 'anggota' });
+  env.ctx.maybeSyncTim_(); assert.strictEqual(calls, 2); ok('sudah dikenal dan masih segar -> tidak sinkron');
+  delete env.cache['tim_fresh']; delete env.cache['tim_try'];
+  env.ctx.maybeSyncTim_(); assert.strictEqual(calls, 3); ok('lewat 30 menit -> sinkron lagi sendiri');
+  env.ctx.UrlFetchApp = { fetch: () => { throw new Error('Hub mati'); } };
+  delete env.cache['tim_fresh']; delete env.cache['tim_try'];
+  assert.doesNotThrow(() => env.ctx.maybeSyncTim_()); assert.strictEqual(env.sheets.Tim.rows.length, 3); ok('Hub mati -> tidak melempar galat, tab Tim lama tetap dipakai');
+  let n = 0; env.ctx.UrlFetchApp = { fetch: () => { n++; throw new Error('Hub mati'); } };
+  env.ctx.maybeSyncTim_(); env.ctx.maybeSyncTim_(); env.ctx.maybeSyncTim_(); assert(n <= 1); ok('Hub mati -> tidak dicoba berulang-ulang (maks sekali per 2 menit)');
+}
+{
+  // lewat doPost: pengguna baru yang token-nya sah memicu sinkron sebelum data dilayani
+  const env = freshEnv([]);
+  env.props.HUB_URL = 'https://hub.test/exec';
+  let calls = 0;
+  env.ctx.UrlFetchApp = { fetch: () => { calls++; return { getContentText: () => JSON.stringify({ ok: true, users: [{ id: 'lemon', nama: 'Lemon', peran: 'approver' }] }) }; } };
+  post(env, Object.assign({ action: 'get_data' }, as('lemon', 'approver')));   // isi respons tidak diperiksa di sini (Sheet tiruan minim); yang diuji: sinkron terjadi sebelum data dilayani
+  assert(calls >= 1); assert(env.sheets.Tim && env.sheets.Tim.rows.length === 2); ok('doPost get_data: tab Tim terisi otomatis dari Hub');
+}
+
 /* ================= log aktivitas ================= */
 {
   const env = setupApprove();
@@ -279,7 +312,7 @@ const rowOf = (i) => H + 1 + i;
   vm.runInContext("sheetToObjects = function () { return []; }; getKategoriList = function () { return []; }; getDanaData_ = function () { return []; }; mkt_getData = function () { return {}; };", env.ctx);
   const p = env.ctx.buildPayload_();
   assert(Array.isArray(p.tim) && p.tim.length === 5 && p.tim[0].id === 'lenno'); ok('payload dashboard membawa daftar tim (id, nama, peran)');
-  assert.strictEqual(p.versi, '2026-10-15 sso-hub'); ok('versi kode ikut naik');
+  assert.strictEqual(p.versi, '2026-10-16 sso-hub-2'); ok('versi kode ikut naik');
   const appJs = require('fs').readFileSync(require('path').join(__dirname, '..', 'app.js'), 'utf8');
   assert.strictEqual(/const EXPECTED_VERSI = '([^']+)'/.exec(appJs)[1], p.versi); ok('EXPECTED_VERSI di app.js sama dengan KODE_VERSI di Code.gs (tidak ada banner versi palsu)');
 }
