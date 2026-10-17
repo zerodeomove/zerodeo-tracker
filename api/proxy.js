@@ -25,7 +25,7 @@ function safeEqual(a, b) {
   return crypto.timingSafeEqual(ba, bb);
 }
 
-const PERAN = ['anggota', 'admin', 'approver'];
+const PERAN = ['anggota', 'admin', 'approver', 'marketing'];
 
 // Mengembalikan {uid, peran} kalau token sah untuk app ini, selain itu null.
 function verifyHubToken(token, secret, nowMs) {

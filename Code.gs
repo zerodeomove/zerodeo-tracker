@@ -27,7 +27,7 @@
 // Penanda versi kode. Ubah setiap kali Code.gs diedit; tampil di dashboard (baris "Terakhir ambil data")
 // supaya kelihatan versi mana yang sebenarnya melayani dashboard (beda dengan isi editor kalau
 // belum Deploy -> New version).
-var KODE_VERSI = '2026-10-16 sso-hub-2';
+var KODE_VERSI = '2026-10-17 peran-marketing';
 
 var HEADER_ROW = 4;
 // BUKAN batas jumlah kegiatan. Ini hanya sampai baris mana template di Sheet disiapkan
@@ -804,6 +804,10 @@ function doGet(e) {
 
 // Seluruh data dashboard (dipakai doGet dan POST action "get_data").
 function serveData_(fresh) {
+  // Peran marketing: data uang TIDAK PERNAH dikirim, dan hasil cache bersama (berisi uang) tidak boleh sampai ke dia.
+  if (isMarketingOnly_()) {
+    return ContentService.createTextOutput(JSON.stringify(buildMarketingPayload_())).setMimeType(ContentService.MimeType.JSON);
+  }
   if (!fresh) {
     var cached = cacheGet_();
     if (cached) {
@@ -813,6 +817,21 @@ function serveData_(fresh) {
   var text = JSON.stringify(buildPayload_());
   cachePut_(text);
   return ContentService.createTextOutput(text).setMimeType(ContentService.MimeType.JSON);
+}
+
+// Isi untuk peran marketing: hanya modul Marketing + daftar nama tim. Tidak ada kegiatan, dana, plafon, kategori, atau rekap.
+function buildMarketingPayload_() {
+  var m = mkt_getData();
+  return {
+    generated_at: new Date().toISOString(),
+    marketing_only: true,
+    tim: readTim_(),
+    versi: KODE_VERSI,
+    strategi: m.strategi,
+    lane: m.lane,
+    channel: m.channel,
+    hasil_event: m.hasil_event
+  };
 }
 
 function buildPayload_() {
@@ -883,6 +902,12 @@ function doPost(e) {
 }
 
 function routePost_(data) {
+  if (isMarketingOnly_()) {
+    // Peran marketing hanya boleh aksi modul Marketing; semua aksi lain (uang, kegiatan, dana, nota) ditolak.
+    var onlyMkt = mkt_handlePost(data);
+    if (onlyMkt) return jsonResponse(onlyMkt);
+    return jsonResponse({ ok: false, error: 'Peran marketing hanya boleh memakai modul Marketing.' });
+  }
   {
     // Aksi modul marketing (Marketing.gs). Return null = bukan aksi marketing.
     var mres = mkt_handlePost(data);

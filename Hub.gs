@@ -16,7 +16,7 @@
  */
 
 var HUB_APP = 'zerodeo';
-var PERAN_ZERODEO = ['anggota', 'admin', 'approver'];
+var PERAN_ZERODEO = ['anggota', 'admin', 'approver', 'marketing'];
 var TIM_TAB = 'Tim';
 var TIM_HEADERS = ['id', 'nama', 'peran', 'disinkron'];
 var LOG_TAB = 'log_aktivitas';
@@ -24,6 +24,11 @@ var LOG_HEADERS = ['Waktu', 'User', 'Peran', 'Aksi', 'ID Kegiatan', 'Rincian'];
 
 // Identitas pemanggil untuk request yang sedang berjalan: {uid, peran}, atau null (jalur kode tim lama, tanpa identitas).
 var CURRENT_WHO_ = null;
+
+// Peran "marketing" (videografer, vendor): hanya modul Marketing. Tidak menerima data uang sama sekali dan tidak boleh aksi uang.
+function isMarketingOnly_() {
+  return !!CURRENT_WHO_ && CURRENT_WHO_.peran === 'marketing';
+}
 var TIM_MEMO_ = null;
 
 // Cadangan sebelum tab "Tim" pernah disinkron dari Hub (ID = nama huruf kecil).
@@ -224,6 +229,7 @@ function pasangTriggerSinkron() {
 // Tidak ada titik untuk "perlu ditransfer": yang mentransfer tidak diminta membuka dashboard lagi.
 // ============================================================
 function pendingKeysFor_(rows, uid, peran, tim) {
+  if (peran === 'marketing') return [];   // peran marketing tidak punya urusan uang, jadi tidak ada titik merah
   var byId = {};
   tim.forEach(function (t) { byId[t.id] = t; });
   var keys = [];

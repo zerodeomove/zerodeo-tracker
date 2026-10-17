@@ -13,6 +13,7 @@ function makeSheet(name, rows) {
   sh.getLastRow = () => sh.rows.length;
   sh.getLastColumn = () => sh.rows.reduce((m, r) => Math.max(m, r.length), 0);
   sh.getMaxRows = () => Math.max(sh.rows.length, 500);
+  sh.getDataRange = () => sh.getRange(1, 1, Math.max(sh.rows.length, 1), Math.max(sh.getLastColumn(), 1));
   sh.setFrozenRows = () => {};
   sh.setColumnWidth = () => {};
   sh.clear = () => { sh.rows = []; return sh; };
@@ -41,7 +42,8 @@ function makeEnv(initialProps) {
   const ctx = {
     console,
     PropertiesService: { getScriptProperties: () => ({ getProperty: (k) => (k in props ? props[k] : null), setProperty: (k, v) => { props[k] = v; } }) },
-    CacheService: { getScriptCache: () => ({ get: (k) => (k in cache ? cache[k] : null), put: (k, v) => { cache[k] = String(v); }, remove: (k) => { delete cache[k]; } }) },
+    CacheService: { getScriptCache: () => ({ get: (k) => (k in cache ? cache[k] : null), put: (k, v) => { cache[k] = String(v); }, remove: (k) => { delete cache[k]; },
+      getAll: (ks) => { const o = {}; ks.forEach((k) => { if (k in cache) o[k] = cache[k]; }); return o; }, putAll: (o) => { Object.keys(o).forEach((k) => { cache[k] = String(o[k]); }); } }) },
     LockService: { getScriptLock: () => ({ tryLock: () => true, waitLock() {}, releaseLock() {} }) },
     ContentService: { MimeType: { JSON: 'json' }, createTextOutput: (t) => ({ text: t, getContent() { return t; }, setMimeType() { return this; } }) },
     Session: { getScriptTimeZone: () => 'Asia/Jakarta' },

@@ -61,11 +61,17 @@ function renderWho() {
   b.onclick = () => zApi.logout();
   el.append(s, b);
 }
+// Peran marketing (videografer, vendor): hanya melihat modul Marketing, tanpa tab Budgeting.
+function isMarketingOnly() { return myRole() === 'marketing'; }
+function applyRoleView() {
+  const tab = document.querySelector('.tab[data-main="tracker"]');
+  if (tab) tab.style.display = isMarketingOnly() ? 'none' : '';
+}
 function isDecider() { const r = myRole(); return r === 'approver' || r === 'admin'; }
 function isOwnRow(r) { const me = myUid(); return !!me && String(r['PIC'] || '').split(',').some((p) => picKey(p).toLowerCase() === me); }
 const TIPE_LIST = ['Capex', 'Opex'];
 // Harus sama dengan KODE_VERSI di Code.gs. Kalau Apps Script yang melayani berbeda, muncul peringatan.
-const EXPECTED_VERSI = '2026-10-16 sso-hub-2';
+const EXPECTED_VERSI = '2026-10-17 peran-marketing';
 
 function fmtRupiah(n) {
   if (n === null || n === undefined || n === '' || isNaN(n)) return '-';
@@ -288,6 +294,7 @@ const MKT_VIEWS = ['strategi', 'event'];
 let lastMktView = 'strategi';
 
 function showView(view) {
+  if (isMarketingOnly() && view === 'tracker') view = lastMktView;
   if (view !== 'tracker' && MKT_VIEWS.indexOf(view) === -1) view = 'tracker';
   const isMkt = view !== 'tracker';
   if (isMkt) lastMktView = view;
@@ -350,6 +357,8 @@ async function load(fresh) {
     if (Array.isArray(json.tim) && json.tim.length) TIM = json.tim;
     fillPicSelects();
     renderWho();
+    applyRoleView();
+    if (isMarketingOnly()) showView(lastMktView);
     kegiatanData = json.kegiatan || [];
     plafonData = json.plafon_fixed || [];
     backendBaru = Array.isArray(json.kategori);

@@ -273,6 +273,38 @@ const rowOf = (i) => H + 1 + i;
   assert(calls >= 1); assert(env.sheets.Tim && env.sheets.Tim.rows.length === 2); ok('doPost get_data: tab Tim terisi otomatis dari Hub');
 }
 
+/* ================= peran marketing (videografer, vendor) ================= */
+{
+  const env = setupApprove();
+  env.ctx.cachePut_(JSON.stringify({ kegiatan: [{ 'Item Kegiatan': 'RAHASIA-UANG' }], dana: [], plafon_fixed: [] }));   // cache bersama berisi data uang
+  const mk = as('vendor', 'marketing');
+  const g = post(env, Object.assign({ action: 'get_data' }, mk));
+  const txt = JSON.stringify(g);
+  assert.strictEqual(g.marketing_only, true);
+  ['strategi', 'lane', 'channel', 'hasil_event', 'tim'].forEach((k) => assert(Array.isArray(g[k]), k));
+  ['kegiatan', 'plafon_fixed', 'dana', 'kategori'].forEach((k) => assert(!(k in g), 'tidak boleh ada ' + k));
+  assert(!/RAHASIA-UANG|Sewa rak|Kegiatan Lemon|Sudah jalan/.test(txt)); ok('marketing: get_data hanya berisi modul Marketing + tim (tidak ada kegiatan, dana, plafon, kategori)');
+  assert(!/Estimasi|Nominal|Actual|nota/i.test(txt)); ok('marketing: tidak ada kolom uang sama sekali di jawaban');
+  const norm = post(env, Object.assign({ action: 'get_data' }, as('ricko', 'anggota')));
+  assert(/RAHASIA-UANG/.test(JSON.stringify(norm))); ok('anggota biasa tetap menerima data lengkap (cache tidak diganggu)');
+  const before = JSON.stringify(env.sheets.kegiatan.rows);
+  [{ action: 'update_status', row: rowOf(0), status: 'Approved' }, { action: 'mark_transferred', row: rowOf(3) }, { action: 'complete_kegiatan', row: rowOf(3) },
+    { action: 'add_kegiatan', item: 'X', estimasi: 1000, pic: 'ricko' }, { action: 'add_dana', nama: 'D', nominal: 1000 }, { action: 'edit_kegiatan', row: rowOf(0), item: 'diubah' }]
+    .forEach((a) => { const r = post(env, Object.assign(a, mk)); assert.strictEqual(r.ok, false); assert(/hanya boleh memakai modul Marketing/.test(r.error), a.action + ': ' + r.error); });
+  assert.strictEqual(JSON.stringify(env.sheets.kegiatan.rows), before); ok('marketing: semua aksi uang/kegiatan ditolak server dan Sheet kegiatan tidak berubah');
+  const s = post(env, Object.assign({ action: 'add_strategi', nama: 'Video peluncuran', pesan: 'Pesan inti', lane: ['Crystal Glow'], channel: ['TikTok'], mulai: '2030-01-01', pic: 'ricko' }, mk));
+  assert.strictEqual(s.ok, true, s.error); ok('marketing: boleh mencatat strategi');
+  const e = post(env, Object.assign({ action: 'add_hasil_event', nama: 'Event X', tanggal: '2030-01-02', channel: 'TikTok', pic: 'ricko', hadir: 10 }, mk));
+  assert.strictEqual(e.ok, true, e.error); ok('marketing: boleh mencatat hasil event');
+  const after = post(env, Object.assign({ action: 'get_data' }, mk));
+  assert(after.strategi.length >= 1 && after.hasil_event.length >= 1); ok('marketing: catatan barunya terlihat');
+  // titik merah: marketing tidak punya
+  assert.deepStrictEqual(Array.from(env.ctx.pendingKeysFor_(env.ctx.sheetToObjects(env.sheets.kegiatan), 'ricko', 'marketing', env.ctx.readTim_())), []); ok('marketing: tidak ada titik merah uang');
+  // proxy menerima token peran marketing
+  const tok = hubToken(SECRET, { uid: 'vendor', peran: 'marketing' });
+  assert.deepStrictEqual(proxy.verifyHubToken(tok, SECRET), { uid: 'vendor', peran: 'marketing' }); ok('proxy: token peran marketing diterima');
+}
+
 /* ================= log aktivitas ================= */
 {
   const env = setupApprove();
@@ -312,7 +344,7 @@ const rowOf = (i) => H + 1 + i;
   vm.runInContext("sheetToObjects = function () { return []; }; getKategoriList = function () { return []; }; getDanaData_ = function () { return []; }; mkt_getData = function () { return {}; };", env.ctx);
   const p = env.ctx.buildPayload_();
   assert(Array.isArray(p.tim) && p.tim.length === 5 && p.tim[0].id === 'lenno'); ok('payload dashboard membawa daftar tim (id, nama, peran)');
-  assert.strictEqual(p.versi, '2026-10-16 sso-hub-2'); ok('versi kode ikut naik');
+  assert.strictEqual(p.versi, '2026-10-17 peran-marketing'); ok('versi kode ikut naik');
   const appJs = require('fs').readFileSync(require('path').join(__dirname, '..', 'app.js'), 'utf8');
   assert.strictEqual(/const EXPECTED_VERSI = '([^']+)'/.exec(appJs)[1], p.versi); ok('EXPECTED_VERSI di app.js sama dengan KODE_VERSI di Code.gs (tidak ada banner versi palsu)');
 }
