@@ -347,53 +347,75 @@ document.addEventListener('visibilitychange', () => {
 });
 
 // fresh = true: ambil langsung dari Sheet, lewati cache Apps Script (tombol Refresh).
+// Memasang data ke seluruh tampilan. Dipakai untuk data tersimpan (langsung tampil) dan data baru dari server.
+function applyPayload(json) {
+  if (Array.isArray(json.tim) && json.tim.length) TIM = json.tim;
+  fillPicSelects();
+  renderWho();
+  applyRoleView();
+  if (isMarketingOnly()) showView(lastMktView);
+  kegiatanData = json.kegiatan || [];
+  plafonData = json.plafon_fixed || [];
+  backendBaru = Array.isArray(json.kategori);
+  backendDana = Array.isArray(json.dana);
+  backendEdit = json.edit === true;
+  backendFoto = json.fotoNota === true;
+  backendReimburse = json.reimburse === true;
+  backendFotoBatch = json.fotoBatch === true;
+  lastLoadAt = Date.now();
+  backendVersi = json.versi || 'lama';
+  const vb = $('versiBanner');
+  if (backendVersi !== EXPECTED_VERSI) {
+    vb.style.display = '';
+    vb.textContent = 'Apps Script yang melayani dashboard ini versi "' + backendVersi + '", seharusnya "' + EXPECTED_VERSI + '". Fitur baru (misalnya upload nota) belum jalan. Di Apps Script: Deploy → Manage deployments → ikon pensil → di Version pilih "New version" (bukan Version yang lama) → Deploy.';
+  } else {
+    vb.style.display = 'none';
+  }
+  danaList = backendDana ? json.dana : [];
+  kategoriList = (json.kategori && json.kategori.length) ? json.kategori : KATEGORI_DEFAULT.slice();
+  M = {
+    ada: 'strategi' in json,
+    strategi: json.strategi || [], lane: json.lane || [],
+    channel: json.channel || [], hasil_event: json.hasil_event || []
+  };
+  renderTracker();
+  renderMarketing();
+}
+
+// fresh = true: ambil langsung dari Sheet, lewati cache Apps Script (tombol Refresh).
+// Pemuatan biasa: kalau ada data tersimpan di perangkat ini, tampilkan dulu, lalu segarkan di latar.
 async function load(fresh) {
   loadingNow = true;
   renderWho();
-  setSync('Memuat…', false);
+  let cached = null;
+  if (fresh !== true && !dataLoaded) {
+    cached = zApi.cacheRead();
+    if (cached) {
+      try {
+        applyPayload(cached.json);
+        setSync('Menampilkan data tersimpan (' + new Date(cached.at).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }) + '), memperbarui…', false);
+      } catch (e) { cached = null; }
+    }
+  }
+  if (!cached) setSync('Memuat…', false);
   try {
     const json = await zApi.get(fresh === true);
     if (json.ok === false) throw new Error(json.error || 'Gagal');
-    if (Array.isArray(json.tim) && json.tim.length) TIM = json.tim;
-    fillPicSelects();
-    renderWho();
-    applyRoleView();
-    if (isMarketingOnly()) showView(lastMktView);
-    kegiatanData = json.kegiatan || [];
-    plafonData = json.plafon_fixed || [];
-    backendBaru = Array.isArray(json.kategori);
-    backendDana = Array.isArray(json.dana);
-    backendEdit = json.edit === true;
-    backendFoto = json.fotoNota === true;
-    backendReimburse = json.reimburse === true;
-    backendFotoBatch = json.fotoBatch === true;
-    lastLoadAt = Date.now();
-    backendVersi = json.versi || 'lama';
-    const vb = $('versiBanner');
-    if (backendVersi !== EXPECTED_VERSI) {
-      vb.style.display = '';
-      vb.textContent = 'Apps Script yang melayani dashboard ini versi "' + backendVersi + '", seharusnya "' + EXPECTED_VERSI + '". Fitur baru (misalnya upload nota) belum jalan. Di Apps Script: Deploy → Manage deployments → ikon pensil → di Version pilih "New version" (bukan Version yang lama) → Deploy.';
-    } else {
-      vb.style.display = 'none';
-    }
-    danaList = backendDana ? json.dana : [];
-    kategoriList = (json.kategori && json.kategori.length) ? json.kategori : KATEGORI_DEFAULT.slice();
-    M = {
-      ada: 'strategi' in json,
-      strategi: json.strategi || [], lane: json.lane || [],
-      channel: json.channel || [], hasil_event: json.hasil_event || []
-    };
+    applyPayload(json);
+    zApi.cacheWrite(json);
     setSync('Terakhir ambil data: ' + new Date().toLocaleString('id-ID') + ' · Apps Script: ' + backendVersi, false);
-    renderTracker();
-    renderMarketing();
   } catch (err) {
     if (/Masuk lewat Hub/.test(err.message)) {
       setSync('Belum masuk lewat Hub.', false);   // layar "Masuk lewat Hub" sudah menjelaskan; tidak perlu toast galat
+      if (cached) showLoadError();
+    } else if (cached) {
+      setSync('Gagal memperbarui (' + err.message + '). Data di layar dari ' + new Date(cached.at).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }) + ' — tekan Refresh untuk mencoba lagi.', true);
     } else {
       setSync('Gagal ambil data: ' + err.message + ' — cek login Hub & konfigurasi proxy di Vercel.', true);
       toast('Gagal memuat data. Tekan Refresh.', 'err');
+      showLoadError();
     }
-    showLoadError();
+    if (!cached && /Masuk lewat Hub/.test(err.message)) showLoadError();
   } finally {
     dataLoaded = true;
     loadingNow = false;

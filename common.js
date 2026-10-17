@@ -6,6 +6,7 @@
   const LEGACY_KEY = 'zerodeo_team_code';        // kode tim lama, hanya dipakai selama masa transisi
   const HUB_URL = 'https://pinggiran.vercel.app';   // alamat Hub (publik)
   const API = '/api/proxy';
+  const CACHE_KEY = 'zerodeo_data_cache_v1';   // data terakhir di perangkat ini (per pengguna), supaya dashboard langsung tampil
 
   function lsGet(k) { try { return localStorage.getItem(k); } catch (e) { return null; } }
   function lsSet(k, v) { try { localStorage.setItem(k, v); } catch (e) { /* mode privat: abaikan */ } }
@@ -62,6 +63,7 @@
     const res = await fetch(API + (query || ''), opts);
     if (res.status === 401) {
       if (token) lsDel(TOKEN_KEY); else lsDel(LEGACY_KEY);
+      lsDel(CACHE_KEY);
       showLoginHub(token ? 'Sesimu dari Hub sudah habis. Buka lagi dari Hub (cukup klik kartu Zerodeo).' : 'Masuk lewat Hub dulu, ya.');
       throw new Error('Masuk lewat Hub dulu.');
     }
@@ -70,12 +72,33 @@
     return json;
   }
 
+  // Data terakhir yang diterima, disimpan per pengguna. Dihapus saat Keluar atau sesi ditolak. Tidak disimpan kalau terlalu besar.
+  function cacheRead() {
+    const c = claims();
+    if (!c) return null;
+    try {
+      const x = JSON.parse(lsGet(CACHE_KEY));
+      if (x && x.uid === c.uid && x.json && x.json.ok !== false) return x;
+    } catch (e) { /* tidak ada */ }
+    return null;
+  }
+  function cacheWrite(json) {
+    const c = claims();
+    if (!c) return;
+    try {
+      const text = JSON.stringify({ uid: c.uid, at: Date.now(), json: json });
+      if (text.length < 4000000) lsSet(CACHE_KEY, text); else lsDel(CACHE_KEY);
+    } catch (e) { /* abaikan */ }
+  }
+
   window.zApi = {
     // fresh = true: lewati cache data di Apps Script (dipakai tombol Refresh)
     get: function (fresh) { return call('GET', null, fresh ? '?fresh=1' : ''); },
     post: function (b) { return call('POST', b); },
     me: claims,          // {uid, peran, exp} atau null (untuk tampilan saja)
-    logout: function () { lsDel(TOKEN_KEY); lsDel(LEGACY_KEY); location.href = HUB_URL; },   // hapus sesi di perangkat ini lalu ke Hub
+    logout: function () { lsDel(TOKEN_KEY); lsDel(LEGACY_KEY); lsDel(CACHE_KEY); location.href = HUB_URL; },
+    cacheRead: cacheRead,
+    cacheWrite: cacheWrite,   // hapus sesi di perangkat ini lalu ke Hub
     hubUrl: HUB_URL
   };
 
