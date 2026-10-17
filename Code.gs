@@ -27,7 +27,7 @@
 // Penanda versi kode. Ubah setiap kali Code.gs diedit; tampil di dashboard (baris "Terakhir ambil data")
 // supaya kelihatan versi mana yang sebenarnya melayani dashboard (beda dengan isi editor kalau
 // belum Deploy -> New version).
-var KODE_VERSI = '2026-10-18 aturan-peran';
+var KODE_VERSI = '2026-10-18 aturan-peran-2';
 
 var HEADER_ROW = 4;
 // BUKAN batas jumlah kegiatan. Ini hanya sampai baris mana template di Sheet disiapkan
@@ -885,6 +885,8 @@ function doPost(e) {
     // Identitas yang sudah diverifikasi proxy dari token Hub. Dipercaya hanya karena SHARED_SECRET benar di atas.
     CURRENT_WHO_ = normalizeWho_(data.hub);
     maybeSyncTim_();   // daftar tim ikut Hub secara otomatis (anggota baru, perubahan nama)
+    var tolak = enforceTimAccess_();   // akses yang sudah dicabut di Hub ikut berhenti (maks. ~10 menit), peran mengikuti Hub
+    if (tolak) return jsonResponse({ ok: false, error: tolak });
     // Membaca data tidak mengubah apa pun, jadi tidak menghapus cache.
     if (data.action === 'get_data') {
       return serveData_(data.fresh === true || data.fresh === '1' || data.fresh === 1);

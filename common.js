@@ -79,6 +79,7 @@
     try {
       const x = JSON.parse(lsGet(CACHE_KEY));
       if (x && x.uid === c.uid && x.json && x.json.ok !== false) return x;
+      if (x && x.uid !== c.uid) lsDel(CACHE_KEY);   // milik orang lain di perangkat ini: buang, jangan dibiarkan tersimpan
     } catch (e) { /* tidak ada */ }
     return null;
   }

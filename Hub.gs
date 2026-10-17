@@ -124,8 +124,8 @@ function checkCanEditRow_(picValue, status) {
 // ============================================================
 // TIM (daftar orang, disinkron dari Hub ke tab "Tim"). PIC disimpan sebagai ID, ditampilkan sebagai nama.
 // ============================================================
-function readTim_() {
-  if (TIM_MEMO_) return TIM_MEMO_;
+// Isi tab Tim apa adanya (kosong kalau tab belum ada / belum disinkron). Dipakai untuk memeriksa akses terkini.
+function timTabRows_() {
   var sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(TIM_TAB);
   var out = [];
   if (sheet && sheet.getLastRow() >= 2) {
@@ -135,8 +135,29 @@ function readTim_() {
       if (id && nama) out.push({ id: id, nama: nama, peran: String(r[2] || '').trim() });
     });
   }
+  return out;
+}
+
+function readTim_() {
+  if (TIM_MEMO_) return TIM_MEMO_;
+  var out = timTabRows_();
   TIM_MEMO_ = out.length ? out : LEGACY_TIM_.slice();
   return TIM_MEMO_;
+}
+
+// Token Hub berlaku sampai 12 jam, jadi akses yang dicabut di Hub belum tentu berhenti dengan sendirinya. Tab Tim
+// (disinkron dari Hub: hanya user aktif yang punya akses Zerodeo) dipakai sebagai sumber terkini: orang yang
+// sudah tidak ada di sana ditolak, dan perannya mengikuti tab Tim, bukan token. Selama tab Tim masih kosong
+// (belum pernah sinkron) tidak ada yang diubah. Mengembalikan pesan galat, atau '' kalau boleh.
+function enforceTimAccess_() {
+  if (!CURRENT_WHO_) return '';
+  var rows = timTabRows_();
+  if (!rows.length) return '';
+  var uid = String(CURRENT_WHO_.uid || '').toLowerCase();
+  var hit = rows.filter(function (t) { return t.id === uid; })[0];
+  if (!hit) return 'unauthorized';
+  if (PERAN_ZERODEO.indexOf(hit.peran) !== -1) CURRENT_WHO_.peran = hit.peran;
+  return '';
 }
 
 // Nilai PIC (ID atau nama, huruf besar/kecil bebas) -> ID, atau '' kalau tidak dikenal. Menerima data lama yang berisi nama.
@@ -213,9 +234,9 @@ function syncTimDariHub() {
 }
 
 // Sinkron otomatis tanpa pemicu terjadwal. Berjalan kalau: tab Tim masih kosong, orang yang baru masuk (token sah)
-// belum ada di tab Tim (anggota baru di Hub), atau sudah lebih dari 30 menit sejak sinkron terakhir.
+// belum ada di tab Tim (anggota baru di Hub), atau sudah lebih dari 10 menit sejak sinkron terakhir.
 // Tidak pernah melempar galat (Hub tidak terjangkau -> tab Tim yang ada tetap dipakai) dan tidak dicoba
-// lebih sering dari tiap 2 menit, supaya Hub tidak dibebani.
+// lebih sering dari tiap 20 detik, supaya Hub tidak dibebani.
 function maybeSyncTim_() {
   try {
     if (!PropertiesService.getScriptProperties().getProperty('HUB_URL')) return;
@@ -229,9 +250,9 @@ function maybeSyncTim_() {
     }
     if (filled && known && cache.get('tim_fresh')) return;
     if (cache.get('tim_try')) return;
-    cache.put('tim_try', '1', 120);
+    cache.put('tim_try', '1', 20);
     syncTimDariHub();
-    cache.put('tim_fresh', '1', 1800);
+    cache.put('tim_fresh', '1', 600);
   } catch (err) { /* abaikan */ }
 }
 

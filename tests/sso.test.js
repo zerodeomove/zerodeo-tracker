@@ -28,7 +28,7 @@ function freshEnv(rows) {
   return env;
 }
 const timRows = (list) => [['id', 'nama', 'peran', 'disinkron']].concat(list.map((t) => [t[0], t[1], t[2], 'x']));
-const TIM = [['lenno', 'Lenno', 'admin'], ['ricko', 'Ricko', 'admin'], ['yanuar', 'Yanuar', 'anggota'], ['christina', 'Christina', 'anggota'], ['lemon', 'Lemon', 'approver']];
+const TIM = [['lenno', 'Lenno', 'admin'], ['ricko', 'Ricko', 'admin'], ['yanuar', 'Yanuar', 'anggota'], ['christina', 'Christina', 'anggota'], ['lemon', 'Lemon', 'approver'], ['vendor', 'Vendor', 'marketing']];
 function withTim(env, list) { env.sheets.Tim = makeSheet('Tim', timRows(list || TIM)); }
 function post(env, body) { return JSON.parse(env.ctx.doPost({ postData: { contents: JSON.stringify(Object.assign({ secret: SHARED }, body)) } }).text); }
 const as = (uid, peran) => ({ hub: { uid, peran } });
@@ -81,7 +81,7 @@ const setWho = (env, who) => { env.ctx.CURRENT_WHO_ = who; vm.runInContext('CURR
   assert.strictEqual(env.ctx.normalizePic_('hantu'), ''); assert.strictEqual(env.ctx.isKnownPic_(''), false); ok('PIC tidak dikenal atau kosong -> tidak valid');
   assert.deepStrictEqual(Array.from(env.ctx.resolvePicIds_('Ricko, yanuar, ricko, hantu')), ['ricko', 'yanuar']); ok('beberapa PIC: unik, yang tidak dikenal dibuang');
   assert.strictEqual(env.ctx.picNama_('lemon'), 'Lemon'); assert.strictEqual(env.ctx.picNama_('hantu'), 'hantu'); ok('picNama_: ID -> nama');
-  assert.deepStrictEqual(Array.from(env.ctx.picIdList_()), ['lenno', 'ricko', 'yanuar', 'christina', 'lemon']); ok('picIdList_ mengikuti tab Tim');
+  assert.deepStrictEqual(Array.from(env.ctx.picIdList_()), ['lenno', 'ricko', 'yanuar', 'christina', 'lemon', 'vendor']); ok('picIdList_ mengikuti tab Tim');
 }
 
 /* ================= approve tanpa PIN ================= */
@@ -313,6 +313,27 @@ const rowOf = (i) => H + 1 + i;
   assert(calls >= 1); assert(env.sheets.Tim && env.sheets.Tim.rows.length === 2); ok('doPost get_data: tab Tim terisi otomatis dari Hub');
 }
 
+/* ================= akses yang dicabut di Hub (token masih sah, tab Tim sudah tidak memuatnya) ================= */
+{
+  const env = setupApprove();
+  assert.strictEqual(post(env, Object.assign({ action: 'get_data' }, as('yanuar', 'anggota'))).ok !== false, true); ok('anggota aktif di tab Tim: dilayani');
+  withTim(env, TIM.filter((t) => t[0] !== 'yanuar'));   // Yanuar dicabut di Hub, tab Tim sudah disinkron
+  env.props.HUB_URL = '';
+  const r = post(env, Object.assign({ action: 'get_data' }, as('yanuar', 'anggota')));
+  assert.strictEqual(r.ok, false); assert.strictEqual(r.error, 'unauthorized'); ok('dicabut dari Hub: token 12 jam miliknya ditolak server (unauthorized)');
+  const w = post(env, Object.assign({ action: 'update_status', row: 5, status: 'Approved' }, as('yanuar', 'anggota')));
+  assert.strictEqual(w.ok, false); assert.strictEqual(w.error, 'unauthorized'); ok('dicabut dari Hub: aksi tulis juga ditolak');
+  // peran turun di Hub: token masih bilang approver, tab Tim bilang anggota -> yang berlaku anggota
+  const env2 = setupApprove();
+  withTim(env2, TIM.map((t) => t[0] === 'lemon' ? ['lemon', 'Lemon', 'anggota'] : t));
+  env2.props.HUB_URL = '';
+  const d = post(env2, Object.assign({ action: 'update_status', row: 5, status: 'Approved' }, as('lemon', 'approver')));
+  assert.strictEqual(d.ok, false); ok('peran diturunkan di Hub: token lama bertuliskan approver tidak lagi bisa approve');
+  // tab Tim kosong (belum pernah sinkron): pemeriksaan tidak aktif, tidak mengunci siapa pun
+  const env3 = setupApprove(); env3.sheets.Tim = makeSheet('Tim', timRows([])); env3.props.HUB_URL = '';
+  assert.strictEqual(post(env3, Object.assign({ action: 'get_data' }, as('lemon', 'approver'))).ok !== false, true); ok('tab Tim kosong: tidak ada yang terkunci');
+}
+
 /* ================= peran marketing (videografer, vendor) ================= */
 {
   const env = setupApprove();
@@ -385,8 +406,8 @@ const rowOf = (i) => H + 1 + i;
   const env = setupApprove();
   vm.runInContext("sheetToObjects = function () { return []; }; getKategoriList = function () { return []; }; getDanaData_ = function () { return []; }; mkt_getData = function () { return {}; };", env.ctx);
   const p = env.ctx.buildPayload_();
-  assert(Array.isArray(p.tim) && p.tim.length === 5 && p.tim[0].id === 'lenno'); ok('payload dashboard membawa daftar tim (id, nama, peran)');
-  assert.strictEqual(p.versi, '2026-10-18 aturan-peran'); ok('versi kode ikut naik');
+  assert(Array.isArray(p.tim) && p.tim.length === 6 && p.tim[0].id === 'lenno'); ok('payload dashboard membawa daftar tim (id, nama, peran)');
+  assert.strictEqual(p.versi, '2026-10-18 aturan-peran-2'); ok('versi kode ikut naik');
   const appJs = require('fs').readFileSync(require('path').join(__dirname, '..', 'app.js'), 'utf8');
   assert.strictEqual(/const EXPECTED_VERSI = '([^']+)'/.exec(appJs)[1], p.versi); ok('EXPECTED_VERSI di app.js sama dengan KODE_VERSI di Code.gs (tidak ada banner versi palsu)');
 }

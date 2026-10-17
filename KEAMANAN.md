@@ -32,7 +32,7 @@ bergantung pada login Hub, **Hub harus sudah jalan duluan** (bagian A).
 2. **Paste `Code.gs`, `Marketing.gs`, dan `Hub.gs` terbaru** ke Apps Script (`Hub.gs` file baru, buat lewat tombol "+" di Files),
    lalu Deploy -> Manage deployments -> pensil -> **New version** (URL tidak berubah). Izinkan akses yang diminta Google
    (Drive dan akses eksternal untuk sinkron tim).
-3. Di Sheet: menu **Zerodeo Tools -> Sinkron Tim dari Hub** (tab `Tim` terisi). Setelah itu sinkron berjalan **otomatis**: saat anggota baru dari Hub membuka Zerodeo, dan paling lama tiap 30 menit. **Pasang Sinkron Harian** hanya opsional sebagai cadangan.
+3. Di Sheet: menu **Zerodeo Tools -> Sinkron Tim dari Hub** (tab `Tim` terisi). Setelah itu sinkron berjalan **otomatis**: saat anggota baru dari Hub membuka Zerodeo, dan paling lama tiap 10 menit. **Pasang Sinkron Harian** hanya opsional sebagai cadangan.
    Baris lama kegiatan yang PIC-nya masih berupa nama ("Ricko") tetap dikenali; kolom **ID** (kolom T) terisi otomatis.
 4. Di Vercel: tambah env **`SECRET_ZERODEO`** (nilai yang sama). **Biarkan `TEAM_CODE`** dulu (masa transisi), lalu **merge PR ini
    ke `main`** supaya Vercel deploy proxy baru (baca data lewat POST, token Hub, secret tidak di URL).
@@ -65,3 +65,12 @@ bergantung pada login Hub, **Hub harus sudah jalan duluan** (bagian A).
 - Semua aksi tulis dicatat otomatis di `log_aktivitas` (siapa, peran, aksi, ID kegiatan).
 - Tidak ada rahasia, PIN, URL Apps Script, atau ID folder di file aktif repo (sudah diperiksa).
 - Repo public itu aman selama aturannya dijaga: **jangan menulis secret/PIN/URL/ID ke kode atau commit.**
+
+
+## Akses yang dicabut di Hub
+
+Token Hub berlaku 12 jam, jadi mencabut akses di Hub tidak otomatis menghentikan token yang sudah beredar. Karena itu Apps Script Zerodeo
+memeriksa tab **Tim** (hanya user aktif yang punya akses Zerodeo) pada setiap permintaan: orang yang tidak ada di tab Tim ditolak
+(`unauthorized`), dan perannya mengikuti tab Tim, bukan token. Tab Tim disinkron otomatis paling lama tiap 10 menit (dan segera ketika
+ada orang yang belum tercatat), jadi akses yang dicabut atau diubah di Kelola Tim berlaku di Zerodeo dalam sekitar 10 menit.
+Selama tab Tim belum pernah terisi, pemeriksaan ini tidak aktif.
