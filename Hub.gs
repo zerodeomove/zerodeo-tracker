@@ -89,6 +89,38 @@ function checkDecider_() {
   return '';
 }
 
+// Peran approver di tab Tim (disinkron dari Hub).
+function isApproverId_(id) {
+  return readTim_().some(function (t) { return t.id === id && t.peran === 'approver'; });
+}
+
+// Siapa boleh memutuskan (approve/reject) satu kegiatan. '' kalau boleh, selain itu pesan galat.
+//   - tidak ada yang memutuskan kegiatannya sendiri
+//   - approver: kegiatan siapa pun
+//   - admin: hanya kegiatan milik approver (supaya kegiatan approver tetap ada yang memutuskan)
+function checkCanDecideRow_(picValue) {
+  if (!CURRENT_WHO_) return 'Masuk lewat Hub dulu supaya kami tahu siapa kamu.';
+  var owners = ownerIds_(picValue);
+  if (owners.indexOf(CURRENT_WHO_.uid) !== -1) return 'Kamu tidak boleh memutuskan kegiatanmu sendiri. Minta approver lain.';
+  if (CURRENT_WHO_.peran === 'approver') return '';
+  if (CURRENT_WHO_.peran === 'admin') {
+    if (owners.some(isApproverId_)) return '';
+    return 'Admin hanya memutuskan kegiatan milik approver. Kegiatan ini diputuskan oleh approver.';
+  }
+  return 'Hanya approver (atau admin untuk kegiatan milik approver) yang boleh memutuskan.';
+}
+
+// Siapa boleh mengubah, membatalkan, atau memulihkan satu kegiatan. '' kalau boleh, selain itu pesan galat.
+//   - uangnya sudah diputuskan (Approved/Ditransfer/Selesai): hanya approver atau admin
+//   - selain itu: PIC kegiatan itu, atau approver/admin
+function checkCanEditRow_(picValue, status) {
+  if (!CURRENT_WHO_) return 'Masuk lewat Hub dulu supaya kami tahu siapa kamu.';
+  if (whoCanDecide_()) return '';
+  if (STATUS_KEPUTUSAN.indexOf(status) !== -1) return 'Uang kegiatan ini sudah diputuskan. Hanya approver atau admin yang boleh mengubahnya.';
+  if (ownerIds_(picValue).indexOf(CURRENT_WHO_.uid) !== -1) return '';
+  return 'Hanya PIC kegiatan ini, admin, atau approver yang boleh mengubahnya.';
+}
+
 // ============================================================
 // TIM (daftar orang, disinkron dari Hub ke tab "Tim"). PIC disimpan sebagai ID, ditampilkan sebagai nama.
 // ============================================================

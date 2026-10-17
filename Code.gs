@@ -27,7 +27,7 @@
 // Penanda versi kode. Ubah setiap kali Code.gs diedit; tampil di dashboard (baris "Terakhir ambil data")
 // supaya kelihatan versi mana yang sebenarnya melayani dashboard (beda dengan isi editor kalau
 // belum Deploy -> New version).
-var KODE_VERSI = '2026-10-17 peran-marketing';
+var KODE_VERSI = '2026-10-18 aturan-peran';
 
 var HEADER_ROW = 4;
 // BUKAN batas jumlah kegiatan. Ini hanya sampai baris mana template di Sheet disiapkan
@@ -1069,10 +1069,9 @@ function handleUpdateStatus(data) {
   if (currentStatus !== 'Diajukan') {
     return jsonResponse({ ok: false, error: 'Baris ini statusnya sudah "' + currentStatus + '", bukan "Diajukan" lagi — mungkin sudah diproses orang lain.' });
   }
-  // Tidak ada yang memutuskan kegiatannya sendiri (kegiatan Lemon diputuskan Lenno, dan sebaliknya).
-  if (ownerIds_(sheet.getRange(row, COL.PIC).getValue()).indexOf(CURRENT_WHO_.uid) !== -1) {
-    return jsonResponse({ ok: false, error: 'Kamu tidak boleh memutuskan kegiatanmu sendiri. Minta approver lain.' });
-  }
+  // Tidak ada yang memutuskan kegiatannya sendiri; approver memutuskan semua, admin hanya kegiatan milik approver.
+  var denyRow = checkCanDecideRow_(sheet.getRange(row, COL.PIC).getValue());
+  if (denyRow) return jsonResponse({ ok: false, error: denyRow });
 
   sheet.getRange(row, COL.STATUS).setValue(data.status);
   var noteCell = sheet.getRange(row, COL.CATATAN);
@@ -1374,10 +1373,8 @@ function handleEditKegiatan(data) {
     if (ld.error) return jsonResponse({ ok: false, error: ld.error });
     var sheet = ld.sheet, status = ld.status;
     if (status === STATUS_BATAL) return jsonResponse({ ok: false, error: 'Kegiatan ini sudah dibatalkan. Pulihkan dulu kalau mau diedit.' });
-    if (STATUS_KEPUTUSAN.indexOf(status) !== -1) {
-      var pe = checkDecider_();
-      if (pe) return jsonResponse({ ok: false, error: pe });
-    }
+    var pe = checkCanEditRow_(sheet.getRange(row, COL.PIC).getValue(), status);
+    if (pe) return jsonResponse({ ok: false, error: pe });
     var danaLinked = String(sheet.getRange(row, COL.DANA).getValue() || '').trim() !== '';
     var sudahTf = status === 'Ditransfer' || status === 'Selesai';
     var has = function (k) { return Object.prototype.hasOwnProperty.call(data, k); };
@@ -1487,10 +1484,8 @@ function handleCancelKegiatan(data) {
     var ld = loadEditableRow_(row);
     if (ld.error) return jsonResponse({ ok: false, error: ld.error });
     if (ld.status === STATUS_BATAL) return jsonResponse({ ok: false, error: 'Kegiatan ini sudah dibatalkan.' });
-    if (STATUS_KEPUTUSAN.indexOf(ld.status) !== -1) {
-      var pe = checkDecider_();
-      if (pe) return jsonResponse({ ok: false, error: pe });
-    }
+    var pe = checkCanEditRow_(ld.sheet.getRange(row, COL.PIC).getValue(), ld.status);
+    if (pe) return jsonResponse({ ok: false, error: pe });
     var alasan = cleanText_(data.alasan, 150).replace(/"/g, "'");
     ld.sheet.getRange(row, COL.STATUS).setValue(STATUS_BATAL);
     appendCatatan_(ld.sheet, row, 'Dibatalkan dari "' + (ld.status || 'Draft') + '" (' + stampNow_() + ')' + (alasan ? ': ' + alasan : ''));
@@ -1513,10 +1508,8 @@ function handleRestoreKegiatan(data) {
     while ((m = re.exec(catatan)) !== null) {
       if (STATUS_LIST.indexOf(m[1]) !== -1 && m[1] !== STATUS_BATAL) target = m[1];
     }
-    if (STATUS_KEPUTUSAN.indexOf(target) !== -1) {
-      var pe = checkDecider_();
-      if (pe) return jsonResponse({ ok: false, error: pe });
-    }
+    var pe = checkCanEditRow_(ld.sheet.getRange(row, COL.PIC).getValue(), target);
+    if (pe) return jsonResponse({ ok: false, error: pe });
     ld.sheet.getRange(row, COL.STATUS).setValue(target);
     appendCatatan_(ld.sheet, row, 'Dipulihkan ke "' + target + '" (' + stampNow_() + ')');
     return jsonResponse({ ok: true, row: row, status: target });

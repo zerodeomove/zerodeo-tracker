@@ -50,7 +50,24 @@ function updateStatus(row, newStatus) {
 }
 
 // Boleh memutuskan kegiatan ini? (hanya untuk menampilkan tombol; server tetap memeriksa)
-function canDecide(r) { return isDecider() && !isOwnRow(r); }
+// approver: kegiatan siapa pun kecuali miliknya; admin: hanya kegiatan milik approver (dan bukan miliknya sendiri).
+function ownerIsApprover(r) {
+  return String(r['PIC'] || '').split(',').some((p) => { const t = TIM.find((x) => x.id === picKey(p).toLowerCase()); return !!t && t.peran === 'approver'; });
+}
+function canDecide(r) {
+  if (isOwnRow(r)) return false;
+  const role = myRole();
+  if (role === 'approver') return true;
+  if (role === 'admin') return ownerIsApprover(r);
+  return false;
+}
+// Boleh mengubah/membatalkan/memulihkan? Uang sudah diputuskan: hanya approver/admin. Selain itu: PIC-nya, atau approver/admin.
+function canEditRow(r) {
+  const status = r['Status'] || 'Draft';
+  const decided = KEPUTUSAN_STATUSES.indexOf(status === 'Dibatalkan' ? priorStatusOf(r) : status) !== -1;
+  if (isDecider()) return true;
+  return !decided && isOwnRow(r);
+}
 
 // ---------- render ----------
 function renderTracker() {
@@ -286,7 +303,7 @@ function renderTable() {
     const days = daysUntil(r['Deadline Kegiatan']);
     const deadlineSoon = deadlineAktif(r) && days !== null && days <= 3;
     let aksi = '';
-    const editBtn = backendEdit ? `<button class="aksi-btn edit" onclick="openEdit(${rowNo})">Edit</button>` : '';
+    const editBtn = (backendEdit && canEditRow(r)) ? `<button class="aksi-btn edit" onclick="openEdit(${rowNo})">Edit</button>` : '';
     if (pend.has(rowNo)) {
       aksi = '<span class="pending-note">menyimpan…</span>';
     } else if (r['Status'] === 'Diajukan') {
@@ -1208,10 +1225,10 @@ function openEdit(row) {
   const sudahTf = status === 'Ditransfer' || status === 'Selesai';
   $('ed-sub').textContent = (r['Item Kegiatan'] || '-') + ' · status ' + status + (r['Dana'] ? ' · dari dana "' + r['Dana'] + '"' : '');
   // Uangnya sudah diputuskan/bergerak: hanya approver/admin yang boleh mengubah, membatalkan, atau memulihkan.
-  const locked = KEPUTUSAN_STATUSES.indexOf(batal ? priorStatusOf(r) : status) !== -1 && !isDecider();
+  const locked = !canEditRow(r);
   $('ed-fields').style.display = (batal || locked) ? 'none' : '';
   $('ed-submit').style.display = (batal || locked) ? 'none' : '';
-  if (locked) setMsg($('ed-msg'), !myRole() ? 'Masuk lewat Hub dulu untuk mengubah kegiatan ini.' : 'Uang kegiatan ini sudah diputuskan. Hanya approver atau admin yang bisa mengubah, membatalkan, atau memulihkannya.', 'err');
+  if (locked) setMsg($('ed-msg'), !myRole() ? 'Masuk lewat Hub dulu untuk mengubah kegiatan ini.' : (KEPUTUSAN_STATUSES.indexOf(batal ? priorStatusOf(r) : status) !== -1 ? 'Uang kegiatan ini sudah diputuskan. Hanya approver atau admin yang bisa mengubah, membatalkan, atau memulihkannya.' : 'Hanya PIC kegiatan ini, admin, atau approver yang bisa mengubah, membatalkan, atau memulihkannya.'), 'err');
   $('ed-tf-box').style.display = sudahTf && (!r['Dana'] || r['PIC Transaksi'] || r['Tgl Transfer']) ? '' : 'none';
   $('ed-nominal-wrap').style.display = r['Dana'] ? 'none' : '';
   $('ed-sel-box').style.display = status === 'Selesai' ? '' : 'none';

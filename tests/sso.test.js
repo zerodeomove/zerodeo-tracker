@@ -91,6 +91,8 @@ function setupApprove() {
     { item: 'Kegiatan Lemon', status: 'Diajukan', pic: 'lemon', id: 'k-bbbbbbbbbb' },
     { item: 'Nama lama', status: 'Diajukan', pic: 'Lenno', id: 'k-cccccccccc' },      // PIC lama berupa nama
     { item: 'Sudah jalan', status: 'Approved', pic: 'yanuar', id: 'k-dddddddddd' },
+    { item: 'Draft Yanuar', status: 'Draft', pic: 'yanuar', id: 'k-ffffffffff' },
+    { item: 'Dua PIC', status: 'Draft', pic: 'yanuar,christina', id: 'k-gggggggggg' },
   ]);
   withTim(env);
   return env;
@@ -109,8 +111,15 @@ const rowOf = (i) => H + 1 + i;
   env = setupApprove();
   r = post(env, Object.assign({ action: 'update_status', row: rowOf(1), status: 'Approved' }, as('lemon', 'approver')));
   assert(/tidak boleh memutuskan kegiatanmu sendiri/.test(r.error)); ok('approver tidak boleh meng-approve kegiatannya sendiri');
-  r = post(env, Object.assign({ action: 'update_status', row: rowOf(1), status: 'Approved' }, as('lenno', 'admin')));
-  assert.strictEqual(r.ok, true); ok('kegiatan Lemon di-approve admin (cadangan)');
+  r = post(env, Object.assign({ action: 'update_status', row: rowOf(1), status: 'Approved' }, as('ricko', 'admin')));
+  assert.strictEqual(r.ok, true); ok('kegiatan Lemon (approver) di-approve admin Ricko');
+  r = post(env, Object.assign({ action: 'update_status', row: rowOf(0), status: 'Approved' }, as('lenno', 'admin')));
+  assert(/Admin hanya memutuskan kegiatan milik approver/.test(r.error)); assert.strictEqual(env.sheets.kegiatan.rows[rowOf(0) - 1][10], 'Diajukan'); ok('admin TIDAK boleh meng-approve kegiatan orang lain (bukan milik approver)');
+  r = post(env, Object.assign({ action: 'update_status', row: rowOf(0), status: 'Ditolak' }, as('lenno', 'admin')));
+  assert(/Admin hanya memutuskan/.test(r.error)); ok('admin juga tidak boleh me-reject kegiatan orang lain');
+  r = post(env, Object.assign({ action: 'update_status', row: rowOf(2), status: 'Approved' }, as('lemon', 'approver')));
+  assert.strictEqual(r.ok, true); ok('approver boleh memutuskan kegiatan siapa pun (termasuk PIC lama berupa nama)');
+  env = setupApprove();
   r = post(env, Object.assign({ action: 'update_status', row: rowOf(2), status: 'Approved' }, as('lenno', 'admin')));
   assert(/kegiatanmu sendiri/.test(r.error)); ok('PIC lama berupa nama ("Lenno") tetap dikenali sebagai miliknya');
   r = post(env, Object.assign({ action: 'update_status', row: rowOf(3), status: 'Approved' }, as('lemon', 'approver')));
@@ -128,7 +137,10 @@ const rowOf = (i) => H + 1 + i;
   let r = post(env, Object.assign({ action: 'update_status', row: rowOf(0), status: 'Approved' }, as('lemon', 'approver')));
   assert(/kegiatanmu sendiri/.test(r.error)); assert.strictEqual(env.sheets.kegiatan.rows[rowOf(0) - 1][10], 'Diajukan'); ok('tab Tim belum tersinkron: Lemon tetap tidak bisa meng-approve kegiatannya sendiri');
   r = post(env, Object.assign({ action: 'update_status', row: rowOf(0), status: 'Approved' }, as('lenno', 'admin')));
-  assert.strictEqual(r.ok, true); ok('dan admin lain tetap bisa memutuskannya');
+  assert(/Admin hanya memutuskan/.test(r.error)); ok('Tim belum tersinkron: admin belum bisa memutuskan (belum tahu Lemon approver)');
+  withTim(env);
+  r = post(env, Object.assign({ action: 'update_status', row: rowOf(0), status: 'Approved' }, as('lenno', 'admin')));
+  assert.strictEqual(r.ok, true); ok('setelah Tim tersinkron: admin bisa memutuskan kegiatan Lemon');
   assert.deepStrictEqual(Array.from(env.ctx.ownerIds_('Lemon, ricko , LEMON')), ['lemon', 'ricko']); ok('ownerIds_: huruf kecil, unik, nilai yang belum dikenal tetap dihitung');
   const rows2 = [{ ID: 'k9', Status: 'Ditransfer', PIC: 'lemon', 'Nota/Bukti': '' }];
   assert.deepStrictEqual(Array.from(env.ctx.pendingKeysFor_(rows2, 'lemon', 'approver', [{ id: 'ricko', nama: 'Ricko', peran: 'admin' }])), ['z:lengkapi:k9']); ok('titik merah: kegiatan milik orang yang belum tersinkron tetap sampai ke pemiliknya');
@@ -147,20 +159,48 @@ const rowOf = (i) => H + 1 + i;
   assert(/Masuk lewat Hub/.test(out2.error)); ok('identitas satu request tidak terbawa ke request berikutnya');
 }
 
-/* ================= ubah/batalkan kegiatan yang sudah diputuskan ================= */
+/* ================= ubah/batalkan: PIC, admin, approver ================= */
 {
   const env = setupApprove();
+  const st = (i) => env.sheets.kegiatan.rows[rowOf(i) - 1][10];
   let r = post(env, Object.assign({ action: 'cancel_kegiatan', row: rowOf(3), alasan: 'salah' }, as('yanuar', 'anggota')));
-  assert(/approver atau admin/.test(r.error)); assert.strictEqual(env.sheets.kegiatan.rows[rowOf(3) - 1][10], 'Approved'); ok('anggota tidak bisa membatalkan kegiatan Approved');
-  r = post(env, Object.assign({ action: 'cancel_kegiatan', row: rowOf(0), alasan: 'salah' }, as('yanuar', 'anggota')));
-  assert.strictEqual(r.ok, true); ok('anggota tetap bisa membatalkan kegiatan yang belum diputuskan (Diajukan)');
+  assert(/approver atau admin/.test(r.error)); assert.strictEqual(st(3), 'Approved'); ok('PIC sendiri pun tidak bisa membatalkan kegiatan yang sudah Approved');
   r = post(env, Object.assign({ action: 'edit_kegiatan', row: rowOf(3), estimasi: 2000000 }, as('yanuar', 'anggota')));
-  assert(/approver atau admin/.test(r.error)); ok('anggota tidak bisa mengedit kegiatan Approved');
+  assert(/approver atau admin/.test(r.error)); ok('PIC sendiri tidak bisa mengedit kegiatan yang sudah Approved');
   r = post(env, Object.assign({ action: 'edit_kegiatan', row: rowOf(3), estimasi: 2000000 }, as('lemon', 'approver')));
   assert.strictEqual(r.ok, true); ok('approver bisa mengedit kegiatan Approved');
-  r = post(env, Object.assign({ action: 'edit_kegiatan', row: rowOf(1), pic: 'Christina' }, as('yanuar', 'anggota')));
+  r = post(env, Object.assign({ action: 'edit_kegiatan', row: rowOf(3), estimasi: 2100000 }, as('ricko', 'admin')));
+  assert.strictEqual(r.ok, true); ok('admin bisa mengedit kegiatan Approved');
+
+  // belum diputuskan: PIC-nya, admin, approver
+  r = post(env, Object.assign({ action: 'edit_kegiatan', row: rowOf(0), estimasi: 1500000 }, as('yanuar', 'anggota')));
+  assert(/Hanya PIC kegiatan ini, admin, atau approver/.test(r.error)); ok('anggota BUKAN PIC tidak bisa mengedit kegiatan orang lain (Diajukan milik Ricko)');
+  r = post(env, Object.assign({ action: 'cancel_kegiatan', row: rowOf(0), alasan: 'iseng' }, as('yanuar', 'anggota')));
+  assert(/Hanya PIC kegiatan ini/.test(r.error)); assert.strictEqual(st(0), 'Diajukan'); ok('anggota BUKAN PIC tidak bisa membatalkan kegiatan orang lain');
+  r = post(env, Object.assign({ action: 'edit_kegiatan', row: rowOf(4), estimasi: 900000 }, as('christina', 'anggota')));
+  assert(/Hanya PIC kegiatan ini/.test(r.error)); ok('Christina tidak bisa mengedit Draft milik Yanuar');
+  r = post(env, Object.assign({ action: 'edit_kegiatan', row: rowOf(4), estimasi: 900000 }, as('yanuar', 'anggota')));
+  assert.strictEqual(r.ok, true); ok('PIC (Yanuar) bisa mengedit kegiatannya sendiri yang belum diputuskan');
+  r = post(env, Object.assign({ action: 'cancel_kegiatan', row: rowOf(4), alasan: 'batal' }, as('yanuar', 'anggota')));
+  assert.strictEqual(r.ok, true); assert.strictEqual(st(4), 'Dibatalkan'); ok('PIC bisa membatalkan kegiatannya sendiri');
+  r = post(env, Object.assign({ action: 'restore_kegiatan', row: rowOf(4) }, as('christina', 'anggota')));
+  assert(/Hanya PIC kegiatan ini/.test(r.error)); assert.strictEqual(st(4), 'Dibatalkan'); ok('bukan PIC tidak bisa memulihkan');
+  r = post(env, Object.assign({ action: 'restore_kegiatan', row: rowOf(4) }, as('yanuar', 'anggota')));
+  assert.strictEqual(r.ok, true); assert.strictEqual(st(4), 'Draft'); ok('PIC bisa memulihkan kegiatannya sendiri');
+  r = post(env, Object.assign({ action: 'edit_kegiatan', row: rowOf(4), estimasi: 800000 }, as('ricko', 'admin')));
+  assert.strictEqual(r.ok, true); ok('admin bisa mengedit kegiatan anggota yang belum diputuskan');
+  r = post(env, Object.assign({ action: 'edit_kegiatan', row: rowOf(4), estimasi: 700000 }, as('lemon', 'approver')));
+  assert.strictEqual(r.ok, true); ok('approver bisa mengedit kegiatan anggota yang belum diputuskan');
+  r = post(env, Object.assign({ action: 'edit_kegiatan', row: rowOf(5), estimasi: 500000 }, as('christina', 'anggota')));
+  assert.strictEqual(r.ok, true); r = post(env, Object.assign({ action: 'edit_kegiatan', row: rowOf(5), estimasi: 400000 }, as('yanuar', 'anggota')));
+  assert.strictEqual(r.ok, true); ok('dua PIC: masing-masing boleh mengedit');
+  r = post(env, Object.assign({ action: 'edit_kegiatan', row: rowOf(5), estimasi: 300000 }, as('ricko', 'admin')));
+  assert.strictEqual(r.ok, true);
+  r = post(env, { action: 'edit_kegiatan', row: rowOf(4), estimasi: 100 });
+  assert(/Masuk lewat Hub/.test(r.error)); ok('tanpa identitas (kode tim lama): tidak bisa mengedit');
+  r = post(env, Object.assign({ action: 'edit_kegiatan', row: rowOf(1), pic: 'Christina' }, as('ricko', 'admin')));
   assert.strictEqual(r.ok, true); assert.strictEqual(env.sheets.kegiatan.rows[rowOf(1) - 1][8], 'christina'); ok('edit PIC memakai nama menyimpan ID ("christina")');
-  r = post(env, Object.assign({ action: 'edit_kegiatan', row: rowOf(1), pic: 'hantu' }, as('yanuar', 'anggota')));
+  r = post(env, Object.assign({ action: 'edit_kegiatan', row: rowOf(1), pic: 'hantu' }, as('ricko', 'admin')));
   assert(/PIC tidak dikenali/.test(r.error)); ok('PIC yang tidak dikenal ditolak');
 }
 
@@ -319,8 +359,10 @@ const rowOf = (i) => H + 1 + i;
   assert.strictEqual(log.rows.length, 2); ok('aksi yang ditolak tidak dicatat sebagai berhasil');
   post(env, { action: 'cancel_kegiatan', row: rowOf(0), alasan: 'x' });   // tanpa identitas, sudah Approved -> ditolak
   assert.strictEqual(log.rows.length, 2);
-  post(env, { action: 'cancel_kegiatan', row: rowOf(2), alasan: 'salah ketik' });   // Diajukan, jalur tanpa identitas -> boleh
-  assert.strictEqual(log.rows[2][1], '(kode tim)'); ok('jalur kode tim lama dicatat sebagai "(kode tim)"');
+  const tolak = post(env, { action: 'cancel_kegiatan', row: rowOf(2), alasan: 'salah ketik' });   // Diajukan, jalur tanpa identitas -> sekarang ditolak
+  assert(/Masuk lewat Hub/.test(tolak.error)); assert.strictEqual(log.rows.length, 2); ok('jalur kode tim lama (tanpa identitas) tidak bisa membatalkan lagi, dan tidak dicatat');
+  post(env, Object.assign({ action: 'cancel_kegiatan', row: rowOf(2), alasan: 'salah ketik' }, as('ricko', 'admin')));
+  assert.strictEqual(log.rows[2][1], 'ricko'); assert.strictEqual(log.rows[2][2], 'admin'); ok('pembatalan oleh admin dicatat lengkap dengan siapa dan perannya');
   env.sheets.kegiatan.rows[rowOf(3) - 1][10] = 'Ditransfer';
   const before = log.rows.length;
   const done = post(env, Object.assign({ action: 'complete_kegiatan', row: rowOf(3), actual: 900000 }, as('yanuar', 'anggota')));
@@ -344,7 +386,7 @@ const rowOf = (i) => H + 1 + i;
   vm.runInContext("sheetToObjects = function () { return []; }; getKategoriList = function () { return []; }; getDanaData_ = function () { return []; }; mkt_getData = function () { return {}; };", env.ctx);
   const p = env.ctx.buildPayload_();
   assert(Array.isArray(p.tim) && p.tim.length === 5 && p.tim[0].id === 'lenno'); ok('payload dashboard membawa daftar tim (id, nama, peran)');
-  assert.strictEqual(p.versi, '2026-10-17 peran-marketing'); ok('versi kode ikut naik');
+  assert.strictEqual(p.versi, '2026-10-18 aturan-peran'); ok('versi kode ikut naik');
   const appJs = require('fs').readFileSync(require('path').join(__dirname, '..', 'app.js'), 'utf8');
   assert.strictEqual(/const EXPECTED_VERSI = '([^']+)'/.exec(appJs)[1], p.versi); ok('EXPECTED_VERSI di app.js sama dengan KODE_VERSI di Code.gs (tidak ada banner versi palsu)');
 }
