@@ -2,7 +2,7 @@
   // Cloudflare Workers (static assets + proxy). Nama harus sama dengan nama project di Cloudflare.
   // Semua file statis disajikan langsung; hanya /api/* yang dijalankan oleh worker.js (proxy ke Apps Script).
   // Rahasia (APPS_SCRIPT_URL, SHARED_SECRET, SECRET_ZERODEO) diisi di dashboard sebagai Secret, bukan di file ini.
-  "name": "zerodeo",
+  "name": "zerodeo-tracker",
   "main": "worker.js",
   "compatibility_date": "2025-10-01",
   "keep_vars": true,
