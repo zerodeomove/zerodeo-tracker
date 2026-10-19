@@ -57,8 +57,8 @@ function renderWho() {
   const b = document.createElement('button');
   b.type = 'button';
   b.className = 'btn ghost who-out';
-  b.textContent = 'Keluar';
-  b.onclick = () => zApi.logout();
+  b.textContent = '← Hub';
+  b.onclick = () => { location.href = zApi.hubUrl; };   // kembali ke Hub saja; logout hanya di Hub
   el.append(s, b);
 }
 // Peran marketing (videografer, vendor): hanya melihat modul Marketing, tanpa tab Budgeting.
