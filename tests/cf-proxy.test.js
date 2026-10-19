@@ -88,5 +88,18 @@ const BASE = { APPS_SCRIPT_URL: URLX, SHARED_SECRET: SHARED, SECRET_ZERODEO: SEC
   const res = await mod.onRequest({ request: new Request('https://x/api/proxy', { headers: { 'x-hub-token': tok } }), env: BASE });
   assert.strictEqual(res.status, 502); assert(/jaringan putus/.test((await res.json()).error)); ok('Apps Script tidak terjangkau: 502');
 
+  // ----- worker.js: /api/proxy ke proxy, selain itu ke file statis
+  const wsrc = fs.readFileSync(path.join(__dirname, '..', 'worker.js'), 'utf8').replace("'./functions/api/proxy.js'", JSON.stringify('data:text/javascript;base64,' + Buffer.from(src).toString('base64')));
+  const worker = (await import('data:text/javascript;base64,' + Buffer.from(wsrc).toString('base64'))).default;
+  let asset = null;
+  const wenv = Object.assign({ ASSETS: { fetch: async (rq) => { asset = new URL(rq.url).pathname; return new Response('statis'); } } }, BASE);
+  global.fetch = async () => ({ text: async () => '{"ok":true}' });
+  let wr = await worker.fetch(new Request('https://z.pages.dev/api/proxy', { headers: { 'x-hub-token': tok } }), wenv);
+  assert.strictEqual(wr.status, 200); assert.strictEqual(asset, null); ok('worker: /api/proxy dijalankan oleh proxy');
+  wr = await worker.fetch(new Request('https://z.pages.dev/index.html'), wenv);
+  assert.strictEqual(await wr.text(), 'statis'); assert.strictEqual(asset, '/index.html'); ok('worker: path lain diserahkan ke file statis');
+  wr = await worker.fetch(new Request('https://z.pages.dev/api/proxy'), wenv);
+  assert.strictEqual(wr.status, 401); ok('worker: tanpa token tetap 401');
+
   console.log('\n' + n + ' pemeriksaan lolos');
 })().catch((e) => { console.error('GAGAL:', e.message); process.exit(1); });

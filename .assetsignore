@@ -1,0 +1,12 @@
+# Tidak ikut disajikan ke publik (Cloudflare): kode Apps Script, server, tes, dokumen, metadata repo
+.git
+.github
+.claude
+node_modules
+api
+functions
+tests
+worker.js
+*.gs
+*.md
+package*.json
