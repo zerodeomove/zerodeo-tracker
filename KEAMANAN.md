@@ -74,3 +74,13 @@ memeriksa tab **Tim** (hanya user aktif yang punya akses Zerodeo) pada setiap pe
 (`unauthorized`), dan perannya mengikuti tab Tim, bukan token. Tab Tim disinkron otomatis paling lama tiap 10 menit (dan segera ketika
 ada orang yang belum tercatat), jadi akses yang dicabut atau diubah di Kelola Tim berlaku di Zerodeo dalam sekitar 10 menit.
 Selama tab Tim belum pernah terisi, pemeriksaan ini tidak aktif.
+
+## Hosting alternatif: Cloudflare Pages
+
+Repo yang sama bisa disajikan oleh Cloudflare Pages selain Vercel. Folder `api/` dipakai Vercel, folder `functions/` dipakai Cloudflare;
+isi keduanya setara (verifikasi token Hub, penimpaan `hub` dan `secret`, penolakan tanpa login). Tes: `node tests/cf-proxy.test.js`.
+
+Pasang di Cloudflare: Workers & Pages, Create, Pages, Connect to Git, pilih repo ini; Framework preset: None; Build command: kosong;
+Build output directory: `/`. Lalu Settings, Variables and Secrets (jenis Secret): `APPS_SCRIPT_URL`, `SHARED_SECRET`, `SECRET_ZERODEO`.
+Jangan isi `TEAM_CODE` (jalur lama sudah ditutup). Setelah mengubah variabel, deploy ulang. Tanda tangan token Hub membawa padding `=`
+di ujungnya; proxy Cloudflare sudah menormalkannya.
