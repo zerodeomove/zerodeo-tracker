@@ -6,8 +6,35 @@
 <title>Zerodeo — Tracker &amp; Marketing</title>
 <link rel="icon" type="image/svg+xml" href="favicon.svg">
 <link rel="stylesheet" href="style.css">
+<style>
+  /* Layar logo saat data pertama kali dimuat (tanpa data tersimpan). Ditulis langsung di sini supaya tampil di frame pertama. */
+  #splash { position: fixed; inset: 0; z-index: 100; display: grid; place-items: center; padding: 24px; background: #F5F4EF; transition: opacity .4s ease, visibility .4s ease; }
+  #splash.hide { opacity: 0; visibility: hidden; }
+  html.has-cache #splash { display: none; }
+  #splash .sp-card { width: min(300px, 100%); text-align: center; }
+  #splash .sp-logo { width: 220px; max-width: 80%; height: auto; animation: sp-denyut 1.8s ease-in-out infinite; }
+  #splash .sp-bar { display: block; height: 3px; margin: 26px auto 14px; max-width: 220px; border-radius: 99px; background: #DEDCD3; overflow: hidden; position: relative; }
+  #splash .sp-bar::after { content: ""; position: absolute; inset: 0 auto 0 0; width: 38%; border-radius: 99px; background: #4A87A8; animation: sp-geser 1.4s ease-in-out infinite; }
+  #splash p { margin: 0; font-size: 12px; color: #6B6F68; }
+  #splash .sp-gagal { display: none; margin-top: 14px; }
+  #splash.gagal .sp-bar, #splash.gagal .sp-logo { animation: none; }
+  @keyframes sp-denyut { 0%, 100% { opacity: .55; transform: scale(.97); } 50% { opacity: 1; transform: scale(1); } }
+  @keyframes sp-geser { 0% { transform: translateX(-100%); } 100% { transform: translateX(270%); } }
+  @media (prefers-reduced-motion: reduce) { #splash .sp-logo, #splash .sp-bar::after { animation: none; } #splash .sp-logo { opacity: 1; } #splash .sp-bar::after { width: 100%; } #splash { transition: none; } }
+</style>
+<script>
+  // Ada data tersimpan di perangkat ini -> tabel langsung tampil dari data itu, layar logo tidak perlu.
+  try { if (localStorage.getItem('zerodeo_data_cache_v1')) document.documentElement.className = 'has-cache'; } catch (e) { /* abaikan */ }
+</script>
 </head>
 <body>
+<div id="splash" role="status" aria-live="polite">
+  <div class="sp-card">
+    <img class="sp-logo" src="logo.svg" alt="Zerodeo">
+    <span class="sp-bar" aria-hidden="true"></span>
+    <p id="spText">Menyiapkan data…</p>
+  </div>
+</div>
 <div class="wrap">
 
   <header class="top">

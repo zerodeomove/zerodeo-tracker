@@ -384,6 +384,15 @@ function applyPayload(json) {
 
 // fresh = true: ambil langsung dari Sheet, lewati cache Apps Script (tombol Refresh).
 // Pemuatan biasa: kalau ada data tersimpan di perangkat ini, tampilkan dulu, lalu segarkan di latar.
+// Layar logo (index.html): hilang dengan fade setelah data pertama datang (atau gagal), minimal 0,6 detik supaya tidak berkedip.
+function hideSplash() {
+  const sp = document.getElementById('splash');
+  if (!sp) return;
+  clearTimeout(window.__splashMax);
+  setTimeout(() => { sp.classList.add('hide'); setTimeout(() => sp.remove(), 500); }, Math.max(0, 600 - performance.now()));
+}
+window.__splashMax = setTimeout(hideSplash, 20000);   // jaga-jaga: jangan menutupi halaman lebih dari 20 detik
+
 async function load(fresh) {
   loadingNow = true;
   renderWho();
@@ -419,6 +428,7 @@ async function load(fresh) {
   } finally {
     dataLoaded = true;
     loadingNow = false;
+    hideSplash();
     runPending();
   }
 }
