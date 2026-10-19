@@ -144,13 +144,27 @@ function dayLabel(days) {
   return days < 0 ? `${Math.abs(days)}h lewat` : days === 0 ? 'hari ini' : `${days}h lagi`;
 }
 
+// Dana yang pengeluarannya sudah melebihi uangnya: selisihnya ditalangi dulu dan perlu diganti (reimburse).
+function danaKurang() {
+  if (!backendDana) return { jumlah: 0, total: 0 };
+  const minus = danaStats().filter((d) => d.saldo < 0);
+  return { jumlah: minus.length, total: minus.reduce((sum, d) => sum - d.saldo, 0) };
+}
+
 function renderUrgentCard() {
   const items = urgentItems();
+  const rb = danaKurang();
   const wrap = $('urgentWrap');
-  wrap.classList.toggle('alert', items.length > 0);
-  wrap.classList.toggle('idle', items.length === 0);
+  const ada = items.length > 0 || rb.jumlah > 0;
+  wrap.classList.toggle('alert', ada);
+  wrap.classList.toggle('idle', !ada);
+  const rbHtml = rb.jumlah === 0 ? '' :
+    `<div class="card-sub"><a href="#danaSection" class="card-link" onclick="document.getElementById('danaSection').scrollIntoView({behavior:'smooth'}); return false;">Perlu reimburse ${fmtRupiah(rb.total)} (${rb.jumlah} dana) →</a></div>`;
   if (items.length === 0) {
-    $('urgentCard').innerHTML = '<div class="card-empty">Tidak ada. Semua yang sudah di-approve sudah ditransfer.</div>';
+    $('urgentCard').innerHTML = rb.jumlah === 0
+      ? '<div class="card-empty">Tidak ada. Semua yang sudah di-approve sudah ditransfer.</div>'
+      : `<div class="card-big">${fmtRupiah(rb.total)}</div>
+         <div class="card-sub">Perlu reimburse: pengeluaran melebihi dana, selisihnya ditalangi dulu.</div>` + rbHtml.replace(/Perlu reimburse [^(]*\((\d+) dana\) →/, 'Lihat $1 dana →');
     return;
   }
   const total = items.reduce((sum, r) => sum + (Number(r['Estimasi (Rp)']) || 0), 0);
@@ -159,7 +173,7 @@ function renderUrgentCard() {
   $('urgentCard').innerHTML =
     `<div class="card-big">${items.length} kegiatan</div>
      <div class="card-sub">Sudah di-approve, belum ditransfer · ${fmtRupiah(total)}</div>` +
-    (days === null ? '' : `<div class="card-sub">Deadline terdekat: <span class="${days <= 3 ? 'deadline-soon' : ''}">${dayLabel(days)}</span></div>`);
+    (days === null ? '' : `<div class="card-sub">Deadline terdekat: <span class="${days <= 3 ? 'deadline-soon' : ''}">${dayLabel(days)}</span></div>`) + rbHtml;
 }
 
 function renderUrgentList() {
@@ -184,7 +198,10 @@ function renderUrgentList() {
 }
 
 function openUrgent() {
-  if (urgentItems().length === 0) return;
+  if (urgentItems().length === 0) {
+    if (danaKurang().jumlah > 0 && $('danaSection')) $('danaSection').scrollIntoView({ behavior: 'smooth' });
+    return;
+  }
   setMsg($('ub-msg'), '', '');
   renderUrgentList();
   openModal('m-urgent');
@@ -214,9 +231,11 @@ function renderCards() {
   const belumNota = diterima - actualDariItu;
   // Kegiatan Selesai yang kolom notanya masih kosong: bisa diklik untuk menyaring tabel.
   const tanpaNota = kegiatanData.filter((r) => r['Status'] === 'Selesai' && !hasNota(r)).length;
+  const kelebihan = belumNota < 0 ? -belumNota : 0;   // pengeluaran sudah lebih besar dari uang yang cair
   $('belumNotaCard').innerHTML =
-    `<div class="card-big ${belumNota === 0 ? 'zero' : ''}">${fmtRupiah(belumNota)}</div>
+    `<div class="card-big ${belumNota <= 0 ? 'zero' : ''}">${fmtRupiah(Math.max(belumNota, 0))}</div>
      <div class="card-sub">Diterima ${fmtRupiah(diterima)} − actual ${fmtRupiah(actualDariItu)}</div>` +
+    (kelebihan ? `<div class="card-sub deadline-soon">Pengeluaran melebihi uang yang cair ${fmtRupiah(kelebihan)}. Selisihnya ditalangi dan perlu diganti (reimburse).</div>` : '') +
     (tanpaNota ? `<div class="card-sub"><a href="#" class="card-link" onclick="setNoNota(true); return false;">${tanpaNota} kegiatan Selesai belum ada nota →</a></div>` : '');
 
   // Deadline terdekat (belum Selesai, ada tanggal, urut terdekat, max 5)
