@@ -4,7 +4,7 @@
 (function () {
   const TOKEN_KEY = 'zerodeo_hub_token';
   const LEGACY_KEY = 'zerodeo_team_code';        // kode tim lama, hanya dipakai selama masa transisi
-  const HUB_URL = 'https://pinggiran.vercel.app';   // alamat Hub (publik)
+  const HUB_URL = 'https://hub.pinggiran.workers.dev';   // alamat Hub (publik)
   const API = '/api/proxy';
   const CACHE_KEY = 'zerodeo_data_cache_v1';   // data terakhir di perangkat ini (per pengguna), supaya dashboard langsung tampil
 
