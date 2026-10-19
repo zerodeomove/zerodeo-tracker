@@ -72,9 +72,9 @@ const BASE = { APPS_SCRIPT_URL: URLX, SHARED_SECRET: SHARED, SECRET_ZERODEO: SEC
   assert.strictEqual(r.status, 401); ok('token Hub salah tidak bisa "turun" ke kode tim');
 
   r = await call({ method: 'GET', headers: { 'x-hub-token': tok } }, { APPS_SCRIPT_URL: URLX, SHARED_SECRET: SHARED });
-  assert.strictEqual(r.status, 500); assert.strictEqual(r.calls.length, 0); ok('tanpa SECRET_ZERODEO dan tanpa TEAM_CODE: 500 (salah konfigurasi)');
+  assert.strictEqual(r.status, 500); assert.strictEqual(r.calls.length, 0); assert(/SECRET_ZERODEO/.test(r.body.error) && !/APPS_SCRIPT_URL/.test(r.body.error)); ok('tanpa SECRET_ZERODEO dan tanpa TEAM_CODE: 500 dan pesan menyebut variabel yang kurang');
   r = await call({ method: 'GET', headers: { 'x-hub-token': tok } }, { SECRET_ZERODEO: SECRET });
-  assert.strictEqual(r.status, 500); ok('tanpa APPS_SCRIPT_URL / SHARED_SECRET: 500');
+  assert.strictEqual(r.status, 500); assert(/APPS_SCRIPT_URL, SHARED_SECRET/.test(r.body.error)); assert(!/rahasia-zerodeo/.test(r.body.error)); ok('tanpa APPS_SCRIPT_URL / SHARED_SECRET: 500, hanya nama variabel yang disebut (bukan nilainya)');
 
   r = await call({ method: 'POST', headers: { 'x-hub-token': tok }, body: 'bukan json' }, BASE);
   assert.strictEqual(r.status, 400); assert.strictEqual(r.calls.length, 0); ok('body bukan JSON: 400');

@@ -75,7 +75,9 @@ export async function onRequest(context) {
   const { TEAM_CODE, APPS_SCRIPT_URL, SHARED_SECRET, SECRET_ZERODEO } = env;
 
   if (!APPS_SCRIPT_URL || !SHARED_SECRET || !(SECRET_ZERODEO || TEAM_CODE)) {
-    return json({ ok: false, error: 'Server belum dikonfigurasi (variabel APPS_SCRIPT_URL / SHARED_SECRET / SECRET_ZERODEO).' }, 500);
+    // Hanya nama variabel yang kurang yang disebut, tidak pernah nilainya.
+    const kurang = [!APPS_SCRIPT_URL && 'APPS_SCRIPT_URL', !SHARED_SECRET && 'SHARED_SECRET', !(SECRET_ZERODEO || TEAM_CODE) && 'SECRET_ZERODEO'].filter(Boolean);
+    return json({ ok: false, error: 'Server belum dikonfigurasi, variabel belum terbaca: ' + kurang.join(', ') + '. Isi di Cloudflare (Settings, Variables and Secrets) lalu deploy ulang.' }, 500);
   }
 
   // Identitas: token Hub yang sah, atau (sementara) kode tim lama tanpa identitas.

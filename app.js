@@ -411,7 +411,7 @@ async function load(fresh) {
     } else if (cached) {
       setSync('Gagal memperbarui (' + err.message + '). Data di layar dari ' + new Date(cached.at).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }) + ' — tekan Refresh untuk mencoba lagi.', true);
     } else {
-      setSync('Gagal ambil data: ' + err.message + ' — cek login Hub & konfigurasi proxy di Vercel.', true);
+      setSync('Gagal ambil data: ' + err.message + ' — cek login Hub & konfigurasi proxy (Cloudflare atau Vercel).', true);
       toast('Gagal memuat data. Tekan Refresh.', 'err');
       showLoadError();
     }
