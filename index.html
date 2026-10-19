@@ -12,15 +12,15 @@
   #splash.hide { opacity: 0; visibility: hidden; }
   html.has-cache #splash { display: none; }
   #splash .sp-card { width: min(300px, 100%); text-align: center; }
-  #splash .sp-logo { width: 220px; max-width: 80%; height: auto; animation: sp-denyut 1.8s ease-in-out infinite; }
+  #splash .sp-logo { width: 220px; max-width: 80%; height: auto; animation: sp-tersingkap 2.8s ease-in-out infinite; }   /* jenis "Tersingkap": kata tersingkap dari kiri ke kanan (lihat design system, Loading) */
   #splash .sp-bar { display: block; height: 3px; margin: 26px auto 14px; max-width: 220px; border-radius: 99px; background: #DEDCD3; overflow: hidden; position: relative; }
   #splash .sp-bar::after { content: ""; position: absolute; inset: 0 auto 0 0; width: 38%; border-radius: 99px; background: #4A87A8; animation: sp-geser 1.4s ease-in-out infinite; }
   #splash p { margin: 0; font-size: 12px; color: #6B6F68; }
   #splash .sp-gagal { display: none; margin-top: 14px; }
   #splash.gagal .sp-bar, #splash.gagal .sp-logo { animation: none; }
-  @keyframes sp-denyut { 0%, 100% { opacity: .55; transform: scale(.97); } 50% { opacity: 1; transform: scale(1); } }
+  @keyframes sp-tersingkap { 0% { clip-path: inset(0 100% 0 0); opacity: 1; } 55%, 85% { clip-path: inset(0 0 0 0); opacity: 1; } 100% { clip-path: inset(0 0 0 0); opacity: 0; } }
   @keyframes sp-geser { 0% { transform: translateX(-100%); } 100% { transform: translateX(270%); } }
-  @media (prefers-reduced-motion: reduce) { #splash .sp-logo, #splash .sp-bar::after { animation: none; } #splash .sp-logo { opacity: 1; } #splash .sp-bar::after { width: 100%; } #splash { transition: none; } }
+  @media (prefers-reduced-motion: reduce) { #splash .sp-logo, #splash .sp-bar::after { animation: none; } #splash .sp-logo { opacity: 1; clip-path: none; } #splash .sp-bar::after { width: 100%; } #splash { transition: none; } }
 </style>
 <script>
   // Ada data tersimpan di perangkat ini -> tabel langsung tampil dari data itu, layar logo tidak perlu.
