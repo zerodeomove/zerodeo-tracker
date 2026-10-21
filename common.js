@@ -29,7 +29,7 @@
       while (p.length % 4) p += '=';
       const d = JSON.parse(decodeURIComponent(escape(atob(p))));
       if (!d || typeof d.uid !== 'string' || !(d.exp * 1000 > Date.now())) return null;
-      return { uid: d.uid, peran: d.peran, exp: d.exp };
+      return { uid: d.uid, peran: d.peran, exp: d.exp, ha: d.ha === 1 };
     } catch (e) { return null; }
   }
 

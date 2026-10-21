@@ -59,7 +59,14 @@ function renderWho() {
   b.className = 'btn ghost who-out';
   b.textContent = '← Hub';
   b.onclick = () => { location.href = zApi.hubUrl; };   // kembali ke Hub saja; logout hanya di Hub
-  el.append(s, b);
+  if (c.ha) {   // hanya admin Hub
+    const k = document.createElement('button');
+    k.type = 'button';
+    k.className = 'btn ghost who-out';
+    k.textContent = 'Kelola Tim';
+    k.onclick = () => { location.href = zApi.hubUrl + '/tim/'; };
+    el.append(s, k, b);
+  } else el.append(s, b);
 }
 // Peran marketing (videografer, vendor): hanya melihat modul Marketing, tanpa tab Budgeting.
 function isMarketingOnly() { return myRole() === 'marketing'; }
