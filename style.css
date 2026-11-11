@@ -354,3 +354,49 @@ body.savebar-on .toast { top: 56px; }
   .toolbar select { flex: 1 1 45%; min-width: 0; }
   .toolbar .push { width: 100%; justify-content: flex-end; flex-wrap: wrap; }
 }
+
+/* ---------- rasa: respons ketukan, transisi, fokus ----------
+   Hanya transform / opacity / warna supaya ringan di HP. Mode "kurangi gerakan" mematikan semuanya. */
+html { -webkit-tap-highlight-color: transparent; }
+.btn, .tab, .subtab, .chip, .aksi-btn, .btn-danger, .link-btn, .modal-actions button, .sb-item button, .card.clickable {
+  transition: transform .12s ease, background-color .15s ease, border-color .15s ease, color .15s ease, opacity .15s ease;
+}
+.btn:active, .subtab:active, .chip:active, .aksi-btn:active, .btn-danger:active,
+.modal-actions button:active:not(:disabled), .sb-item button:active { transform: scale(.96); }
+.tab:active { opacity: .6; }
+.card.clickable:not(.idle):active { transform: scale(.985); }
+.modal-box .chip:active { transform: scale(.95); }
+tbody tr { transition: background-color .15s ease; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.tab:focus-visible, .subtab:focus-visible { outline-offset: -2px; }
+
+/* garis tab: tumbuh dari tengah saat dipilih */
+.tab { position: relative; }
+.tab.on { border-bottom-color: transparent; }
+.tab::after { content: ""; position: absolute; left: 12px; right: 12px; bottom: -1px; height: 2px; border-radius: 2px; background: var(--accent); transform: scaleX(0); transition: transform .22s cubic-bezier(.2, .8, .2, 1); }
+.tab.on::after { transform: scaleX(1); }
+
+/* isi tab dan subtab muncul halus */
+.panel.on { animation: zMasuk .22s ease both; }
+@keyframes zMasuk { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+
+/* popup: latar memudar, kotak naik sedikit; saat ditutup kebalikannya (kelas .keluar dari closeModal) */
+.modal-overlay.show { animation: zLatar .18s ease both; }
+.modal-overlay.show .modal-box { animation: zKotak .24s cubic-bezier(.2, .8, .2, 1) both; }
+.modal-overlay.keluar { display: flex; pointer-events: none; animation: zLatar .16s ease reverse both; }
+.modal-overlay.keluar .modal-box { animation: zKotak .16s ease reverse both; }
+@keyframes zLatar { from { opacity: 0; } to { opacity: 1; } }
+@keyframes zKotak { from { opacity: 0; transform: translateY(18px) scale(.98); } to { opacity: 1; transform: none; } }
+
+/* bar simpan: baris baru turun dari atas */
+.sb-item.ok, .sb-item.err { animation: zTurun .22s ease both; }
+@keyframes zTurun { from { transform: translateY(-100%); } to { transform: none; } }
+
+/* pesan galat di form: muncul dengan goyang kecil supaya terlihat */
+.field-error.show, .modal-err.show { animation: zGoyang .3s ease; }
+@keyframes zGoyang { 0%, 100% { transform: none; } 25% { transform: translateX(-4px); } 75% { transform: translateX(4px); } }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; }
+  .spin { animation: sbspin 1.6s linear infinite !important; }
+}

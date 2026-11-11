@@ -280,12 +280,23 @@ function restoreForm(snap) {
 
 // ---------- popup ----------
 function openModal(id) {
-  $(id).classList.add('show');
+  const el = $(id);
+  clearTimeout(el._keluarT);
+  el.classList.remove('keluar');
+  el.classList.add('show');
   document.body.classList.add('no-scroll');
 }
 
+// Kelas .show langsung dilepas (pemeriksaan "ada popup terbuka?" tetap benar seketika);
+// .keluar hanya menahan tampilan sebentar untuk animasi tutup.
 function closeModal(id) {
-  $(id).classList.remove('show');
+  const el = $(id);
+  if (el.classList.contains('show')) {
+    el.classList.add('keluar');
+    clearTimeout(el._keluarT);
+    el._keluarT = setTimeout(() => el.classList.remove('keluar'), 180);
+  }
+  el.classList.remove('show');
   if (!document.querySelector('.modal-overlay.show')) document.body.classList.remove('no-scroll');
 }
 
