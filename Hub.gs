@@ -515,7 +515,7 @@ function botNative_(a) {
   }
   if (j === 'strategi_baru') return { action: 'add_strategi', nama: a.nama, pesan: a.pesan, lane: a.lane || [], channel: a.channel || [], mulai: a.mulai, selesai: a.selesai || '', pic: a.pic, status: a.status || 'Ide' };
   if (j === 'status_strategi') return { action: 'update_strategi_status', id: a.id, status: a.status };
-  if (j === 'hasil_event_baru') return { action: 'add_hasil_event', nama: a.nama, tanggal: a.tanggal, channel: a.channel, komunitas: a.komunitas || '', kode: a.kode || '',
+  if (j === 'hasil_event_baru') return { action: 'add_hasil_event', nama: a.nama, tanggal: a.tanggal, channel: Array.isArray(a.channel) ? a.channel[0] : a.channel, komunitas: a.komunitas || '', kode: a.kode || '',
     hadir: a.hadir || 0, coba: a.coba || 0, tanya: a.tanya || 0, order: a.order || 0, ugc: a.ugc || 0, strategi: a.strategi || '', pic: a.pic, kegiatan: a.kegiatan || [] };
   if (j === 'tautkan_event') return { action: 'update_hasil_event_kegiatan', id: a.id, kegiatan: a.kegiatan || [] };
   return { error: 'Aksi tidak dikenal.' };
