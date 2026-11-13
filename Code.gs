@@ -27,7 +27,7 @@
 // Penanda versi kode. Ubah setiap kali Code.gs diedit; tampil di dashboard (baris "Terakhir ambil data")
 // supaya kelihatan versi mana yang sebenarnya melayani dashboard (beda dengan isi editor kalau
 // belum Deploy -> New version).
-var KODE_VERSI = '2026-11-13 bot-baca';
+var KODE_VERSI = '2026-11-13 bot-aksi';
 
 var HEADER_ROW = 4;
 // BUKAN batas jumlah kegiatan. Ini hanya sampai baris mana template di Sheet disiapkan
@@ -880,6 +880,7 @@ function doPost(e) {
     if (data.action === 'pending') return handlePending_(data);
     // Bot Telegram Hub: baca data atas nama satu orang (token servis Hub), mengikuti perannya. Hanya membaca.
     if (data.action === 'bot_baca') return handleBotBaca_(data);
+    if (data.action === 'bot_aksi') return handleBotAksi_(data);
 
     if (!isAuthorized_(data.secret)) {
       return jsonResponse({ ok: false, error: 'unauthorized' });

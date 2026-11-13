@@ -447,13 +447,88 @@ function botBaca_(uid, peran, q) {
 }
 
 // ============================================================
+// BOT TELEGRAM HUB: aksi atas nama satu orang, setelah dia menekan "Ya" di Telegram. Diterjemahkan ke permintaan yang
+// sama dengan dashboard lalu lewat routePost_ yang sama: semua aturan peran berlaku persis (marketing hanya Marketing,
+// approve hanya approver/admin dan bukan milik sendiri, ubah hanya PIC/approver/admin, dst.) dan tercatat di log aktivitas.
+// Kegiatan ditunjuk dengan ID (bukan nomor baris). Foto nota tetap lewat dashboard.
+// ============================================================
+function handleBotAksi_(data) {
+  var denied = jsonResponse({ ok: false, error: 'unauthorized' });
+  var claims;
+  try { claims = verifyHubToken_(data.token); } catch (e) { return denied; }
+  if (claims.peran !== 'service' || claims.uid !== 'hub-service') return denied;
+  CURRENT_WHO_ = normalizeWho_({ uid: String(data.for_uid || '').toLowerCase(), peran: data.for_peran });
+  if (!CURRENT_WHO_) return denied;
+  var tolak = enforceTimAccess_();
+  if (tolak) return jsonResponse({ ok: false, error: tolak });
+  var nat = botNative_(data.aksi && typeof data.aksi === 'object' ? data.aksi : {});
+  if (nat.error) return jsonResponse({ ok: false, error: nat.error });
+  nat.via = 'telegram';   // tercatat di log aktivitas
+  try {
+    var out = routePost_(nat);
+    logAktivitas_(nat, out);
+    return out;
+  } finally {
+    cacheClear_();
+  }
+}
+
+function botBarisKegiatan_(id) {
+  id = String(id || '').trim();
+  if (!id) return 0;
+  try { ensureKegiatanIds_(); } catch (e) { /* abaikan */ }
+  var sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('kegiatan');
+  var last = sheet ? sheet.getLastRow() : 0;
+  if (last <= HEADER_ROW) return 0;
+  var ids = sheet.getRange(HEADER_ROW + 1, COL.ID, last - HEADER_ROW, 1).getValues();
+  for (var i = 0; i < ids.length; i++) if (String(ids[i][0]).trim() === id) return HEADER_ROW + 1 + i;
+  return 0;
+}
+
+function botNative_(a) {
+  var baris = function () { var r = botBarisKegiatan_(a.id); return r ? r : null; };
+  var j = String(a.jenis || '');
+  var perluBaris = { putuskan: 'update_status', tandai_transfer: 'mark_transferred', lengkapi: 'complete_kegiatan', ubah_kegiatan: 'edit_kegiatan', batalkan_kegiatan: 'cancel_kegiatan', pulihkan_kegiatan: 'restore_kegiatan' };
+  if (perluBaris[j]) {
+    var row = baris();
+    if (!row) return { error: 'Kegiatan dengan ID "' + String(a.id || '') + '" tidak ditemukan.' };
+    if (j === 'putuskan') return { action: 'update_status', row: row, status: a.status };
+    if (j === 'tandai_transfer') return { action: 'mark_transferred', row: row, nominalTransfer: a.nominal, picTransaksi: a.pic_transaksi, tglTransfer: a.tanggal || '' };
+    if (j === 'lengkapi') return { action: 'complete_kegiatan', row: row, actual: a.actual };
+    if (j === 'batalkan_kegiatan') return { action: 'cancel_kegiatan', row: row, alasan: a.alasan || '' };
+    if (j === 'pulihkan_kegiatan') return { action: 'restore_kegiatan', row: row };
+    var ed = { action: 'edit_kegiatan', row: row };
+    ['item', 'kategori', 'tipe', 'pic', 'estimasi', 'deadline', 'nota'].forEach(function (k) { if (a[k] !== undefined && a[k] !== null) ed[k] = a[k]; });
+    if (a.nominal !== undefined && a.nominal !== null) ed.nominalTransfer = a.nominal;
+    if (a.pic_transaksi !== undefined && a.pic_transaksi !== null) ed.picTransaksi = a.pic_transaksi;
+    if (a.tanggal_transfer !== undefined && a.tanggal_transfer !== null) ed.tglTransfer = a.tanggal_transfer;
+    if (a.actual !== undefined && a.actual !== null) ed.actual = a.actual;
+    return ed;
+  }
+  if (j === 'ajukan_kegiatan') {
+    var st = a.status || 'Diajukan';
+    if (['Draft', 'Siap Ajukan', 'Diajukan'].indexOf(st) === -1) return { error: 'Status kegiatan baru harus Draft, Siap Ajukan, atau Diajukan.' };
+    if (a.jalur && ['Fixed', 'Pengajuan'].indexOf(a.jalur) === -1) return { error: 'Jalur harus Fixed atau Pengajuan.' };
+    var baru = { action: 'add_kegiatan', item: a.item, kategori: a.kategori, tipe: a.tipe, jalur: a.jalur || 'Pengajuan', pic: a.pic, estimasi: a.estimasi, deadline: a.deadline || '', status: st };
+    if (a.dana) baru.dana = a.dana;
+    return baru;
+  }
+  if (j === 'strategi_baru') return { action: 'add_strategi', nama: a.nama, pesan: a.pesan, lane: a.lane || [], channel: a.channel || [], mulai: a.mulai, selesai: a.selesai || '', pic: a.pic, status: a.status || 'Ide' };
+  if (j === 'status_strategi') return { action: 'update_strategi_status', id: a.id, status: a.status };
+  if (j === 'hasil_event_baru') return { action: 'add_hasil_event', nama: a.nama, tanggal: a.tanggal, channel: a.channel, komunitas: a.komunitas || '', kode: a.kode || '',
+    hadir: a.hadir || 0, coba: a.coba || 0, tanya: a.tanya || 0, order: a.order || 0, ugc: a.ugc || 0, strategi: a.strategi || '', pic: a.pic, kegiatan: a.kegiatan || [] };
+  if (j === 'tautkan_event') return { action: 'update_hasil_event_kegiatan', id: a.id, kegiatan: a.kegiatan || [] };
+  return { error: 'Aksi tidak dikenal.' };
+}
+
+// ============================================================
 // LOG AKTIVITAS (tab "log_aktivitas"): setiap aksi tulis yang berhasil dicatat otomatis oleh script,
 // lengkap dengan siapa pelakunya. Menjawab "siapa yang meng-approve / mencatat transfer ini".
 // Catatan: Google Sheets tidak bisa membuat tab benar-benar tidak bisa diubah; tab ini hanya diberi
 // peringatan saat diedit. Siapa pun yang punya akses edit ke Sheet tetap bisa mengubahnya.
 // ============================================================
 var LOG_FIELDS_ = ['status', 'item', 'kategori', 'tipe', 'pic', 'estimasi', 'nominalTransfer', 'nominal', 'actual',
-  'picTransaksi', 'dana', 'nama', 'alasan', 'reimburse', 'arsip'];
+  'picTransaksi', 'dana', 'nama', 'alasan', 'reimburse', 'arsip', 'via'];
 
 function ensureLogTab_() {
   var ss = SpreadsheetApp.getActiveSpreadsheet();

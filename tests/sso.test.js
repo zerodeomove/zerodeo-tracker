@@ -407,7 +407,7 @@ const rowOf = (i) => H + 1 + i;
   vm.runInContext("sheetToObjects = function () { return []; }; getKategoriList = function () { return []; }; getDanaData_ = function () { return []; }; mkt_getData = function () { return {}; };", env.ctx);
   const p = env.ctx.buildPayload_();
   assert(Array.isArray(p.tim) && p.tim.length === 6 && p.tim[0].id === 'lenno'); ok('payload dashboard membawa daftar tim (id, nama, peran)');
-  assert.strictEqual(p.versi, '2026-11-13 bot-baca'); ok('versi kode ikut naik');
+  assert.strictEqual(p.versi, '2026-11-13 bot-aksi'); ok('versi kode ikut naik');
   const appJs = require('fs').readFileSync(require('path').join(__dirname, '..', 'app.js'), 'utf8');
   assert.strictEqual(/const EXPECTED_VERSI = '([^']+)'/.exec(appJs)[1], p.versi); ok('EXPECTED_VERSI di app.js sama dengan KODE_VERSI di Code.gs (tidak ada banner versi palsu)');
 }
@@ -551,6 +551,45 @@ const PENV = { APPS_SCRIPT_URL: 'https://script.google.com/macros/s/ABC/exec', S
   assert.strictEqual(r.hasil.data[0].order, 2); assert(r.hasil.data[0].biaya > 0); ok('bot_baca hasil_event (admin): ikut biaya dari kegiatan yang ditautkan');
   r = baca('vendor', 'marketing', { jenis: 'hasil_event' });
   assert.strictEqual(r.hasil.data[0].hadir, 10); assert(!('biaya' in r.hasil.data[0])); ok('bot_baca hasil_event (marketing): tanpa biaya');
+}
+
+  /* ================= bot Telegram Hub: bot_aksi (aturan sama dengan dashboard) ================= */
+{
+  const env = setupApprove();
+  const call = (body) => JSON.parse(env.ctx.doPost({ postData: { contents: JSON.stringify(body) } }).text);
+  const svc = env.ctx.makeHubToken_('hub-service', 'service', 300);
+  const aksi = (uid, peran, a, tok) => call({ action: 'bot_aksi', token: tok || svc, for_uid: uid, for_peran: peran, aksi: a });
+  const status = (id) => env.sheets.kegiatan.rows.find((r) => r[19] === id)[10];
+  assert.strictEqual(aksi('lemon', 'approver', { jenis: 'putuskan', id: 'k-aaaaaaaaaa', status: 'Approved' }, hubToken(SECRET, { uid: 'lemon', peran: 'approver' })).error, 'unauthorized'); ok('bot_aksi: token pengguna (bukan servis) ditolak');
+  let r = aksi('yanuar', 'anggota', { jenis: 'putuskan', id: 'k-aaaaaaaaaa', status: 'Approved' });
+  assert(/approver atau admin/.test(r.error)); assert.strictEqual(status('k-aaaaaaaaaa'), 'Diajukan'); ok('bot_aksi putuskan: anggota ditolak, sama dengan dashboard');
+  r = aksi('lemon', 'approver', { jenis: 'putuskan', id: 'k-bbbbbbbbbb', status: 'Approved' });
+  assert(/kegiatanmu sendiri/.test(r.error)); ok('bot_aksi putuskan: approver tidak bisa meng-approve kegiatannya sendiri');
+  r = aksi('lemon', 'approver', { jenis: 'putuskan', id: 'k-aaaaaaaaaa', status: 'Approved' });
+  assert.strictEqual(r.ok, true, r.error); assert.strictEqual(status('k-aaaaaaaaaa'), 'Approved'); ok('bot_aksi putuskan: approver meng-approve lewat ID kegiatan');
+  const log = env.sheets.log_aktivitas.rows.slice(-1)[0];
+  assert(log[1] === 'lemon' && log[3] === 'update_status' && log[4] === 'k-aaaaaaaaaa' && /telegram/.test(log[5])); ok('bot_aksi: tercatat di log aktivitas atas nama Lemon, ditandai via telegram');
+  r = aksi('lemon', 'approver', { jenis: 'putuskan', id: 'k-tidakada', status: 'Approved' });
+  assert(/tidak ditemukan/.test(r.error)); ok('bot_aksi: ID kegiatan yang tidak ada ditolak');
+  r = aksi('vendor', 'marketing', { jenis: 'ajukan_kegiatan', item: 'Sewa sound', kategori: 'Peralatan/Kulak', tipe: 'Opex', pic: 'vendor', estimasi: 500000 });
+  assert(/hanya boleh memakai modul Marketing/.test(r.error)); ok('bot_aksi: peran marketing tidak bisa mengajukan kegiatan uang');
+  r = aksi('yanuar', 'anggota', { jenis: 'ajukan_kegiatan', item: 'Sewa sound', kategori: 'Peralatan/Kulak', tipe: 'Opex', pic: 'yanuar', estimasi: 500000, status: 'Diajukan' });
+  assert.strictEqual(r.ok, true, r.error);
+  const baru = env.sheets.kegiatan.rows.find((x) => x[4] === 'Sewa sound');
+  assert(baru && baru[10] === 'Diajukan' && baru[8] === 'yanuar' && baru[9] === 500000 && /^k-/.test(baru[19])); ok('bot_aksi ajukan_kegiatan: kegiatan baru tercatat (status, PIC, estimasi, ID)');
+  assert(/Draft, Siap Ajukan, atau Diajukan/.test(aksi('yanuar', 'anggota', { jenis: 'ajukan_kegiatan', item: 'x', kategori: 'Peralatan/Kulak', tipe: 'Opex', pic: 'yanuar', estimasi: 1, status: 'Selesai' }).error)); ok('bot_aksi ajukan_kegiatan: tidak bisa langsung Selesai/Approved');
+  r = aksi('christina', 'anggota', { jenis: 'ubah_kegiatan', id: 'k-ffffffffff', item: 'Diubah orang lain' });
+  assert(/Hanya PIC/.test(r.error)); ok('bot_aksi ubah_kegiatan: bukan PIC -> ditolak');
+  r = aksi('yanuar', 'anggota', { jenis: 'ubah_kegiatan', id: 'k-ffffffffff', estimasi: 750000 });
+  assert.strictEqual(r.ok, true, r.error); assert.strictEqual(env.sheets.kegiatan.rows.find((x) => x[19] === 'k-ffffffffff')[9], 750000); ok('bot_aksi ubah_kegiatan: PIC mengubah estimasi');
+  r = aksi('vendor', 'marketing', { jenis: 'strategi_baru', nama: 'Run club', pesan: 'Lari pagi', lane: ['Daily Active'], channel: ['Komunitas Olahraga'], mulai: '2030-01-01', pic: 'vendor', status: 'Jalan' });
+  assert.strictEqual(r.ok, true, r.error); ok('bot_aksi: peran marketing boleh membuat strategi');
+  const sid = r.id;
+  r = aksi('vendor', 'marketing', { jenis: 'status_strategi', id: sid, status: 'Selesai' });
+  assert.strictEqual(r.ok, true, r.error); ok('bot_aksi: ubah status strategi');
+  r = aksi('yanuar', 'anggota', { jenis: 'batalkan_kegiatan', id: 'k-ffffffffff', alasan: 'tidak jadi' });
+  assert.strictEqual(r.ok, true, r.error); assert.strictEqual(status('k-ffffffffff'), 'Dibatalkan'); ok('bot_aksi: batalkan kegiatan sendiri');
+  assert(/tidak dikenal/.test(aksi('lenno', 'admin', { jenis: 'hapus_semua' }).error)); ok('bot_aksi: aksi asing ditolak');
 }
 
 console.log('\n' + n + ' pemeriksaan lolos');
