@@ -133,14 +133,22 @@
         <input type="text" id="fSearch" placeholder="Cari strategi…" oninput="renderStrategi()">
         <span class="push">
           <span class="count" id="countS"></span>
+          <span class="seg" role="group" aria-label="Tampilan">
+            <button type="button" id="vsTabel" class="on" onclick="setTampilanS('tabel')">Tabel</button>
+            <button type="button" id="vsWaktu" onclick="setTampilanS('waktu')">Garis waktu</button>
+          </span>
           <button class="btn green" onclick="openStrategi()">+ Strategi</button>
         </span>
       </div>
-      <div class="scroll">
+      <div class="scroll" id="wrapTabelS">
         <table>
           <thead><tr><th>Strategi</th><th>Lane</th><th>Channel</th><th>Periode</th><th>PIC</th><th>Status</th></tr></thead>
           <tbody id="bodyS"><tr><td colspan="6" class="empty">Memuat…</td></tr></tbody>
         </table>
+      </div>
+      <div id="wrapWaktuS" hidden>
+        <div class="tl-legend"><span><i class="tl-k jalan"></i>Jalan</span><span><i class="tl-k ide"></i>Ide</span><span><i class="tl-k selesai"></i>Selesai</span><span><i class="tl-dot"></i>Hasil event</span><span><i class="tl-k hari"></i>Hari ini</span></div>
+        <div class="scroll tl-scroll"><div class="tl" id="timelineS"></div></div>
       </div>
     </div>
 

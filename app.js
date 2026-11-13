@@ -323,6 +323,7 @@ function showView(view) {
   $('view-strategi').style.display = view === 'strategi' ? '' : 'none';
   $('view-event').style.display = view === 'event' ? '' : 'none';
   history.replaceState(null, '', '#' + view);
+  if (view === 'strategi' && typeof geserKeHariIni === 'function') geserKeHariIni();
 }
 
 // Alamat lama (input.html dll) diarahkan ke sini dengan hash aksi:

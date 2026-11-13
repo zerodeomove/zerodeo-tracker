@@ -173,6 +173,7 @@ function renderStrategi() {
   }).sort((a, b) => (MKT_RANK[a.Status] - MKT_RANK[b.Status]) || String(a.Mulai || '').localeCompare(String(b.Mulai || '')));
 
   $('countS').textContent = rows.length + ' strategi';
+  renderTimeline(rows);
   if (!rows.length) { $('bodyS').innerHTML = '<tr><td colspan="6" class="empty">Belum ada strategi yang cocok.</td></tr>'; return; }
   $('bodyS').innerHTML = rows.map((r) => `<tr>
     <td style="max-width:300px"><b>${zEsc(r['Nama Strategi'])}</b><div class="sub">${zEsc(r['Pesan Inti'])}</div></td>
@@ -182,6 +183,79 @@ function renderStrategi() {
     <td>${zEsc(picNama(r.PIC))}</td>
     <td><select data-id="${zEsc(r.ID)}" onchange="setStrategiStatus(this.dataset.id, this.value)">${MKT_STATUS.map((s) => `<option ${s === r.Status ? 'selected' : ''}>${s}</option>`).join('')}</select></td>
   </tr>`).join('');
+}
+
+// ---------- garis waktu strategi ----------
+let tampilanS = 'tabel';
+try { if (localStorage.getItem('zerodeo_tampilan_strategi') === 'waktu') tampilanS = 'waktu'; } catch (e) { /* abaikan */ }
+function setTampilanS(v) {
+  tampilanS = v;
+  try { localStorage.setItem('zerodeo_tampilan_strategi', v); } catch (e) { /* abaikan */ }
+  terapkanTampilanS();
+  if (v === 'waktu') { tlSudahGeser = false; geserKeHariIni(); }
+}
+function terapkanTampilanS() {
+  $('wrapTabelS').hidden = tampilanS !== 'tabel';
+  $('wrapWaktuS').hidden = tampilanS !== 'waktu';
+  $('vsTabel').classList.toggle('on', tampilanS === 'tabel');
+  $('vsWaktu').classList.toggle('on', tampilanS === 'waktu');
+}
+const BULAN_PENDEK = ['Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des'];
+const hariKe = (s) => Math.round(new Date(s + 'T00:00:00Z').getTime() / 86400000);
+const okTgl = (s) => /^\d{4}-\d{2}-\d{2}$/.test(String(s || ''));
+function renderTimeline(rows) {
+  terapkanTampilanS();
+  const el = $('timelineS');
+  const data = rows.filter((r) => okTgl(r.Mulai));
+  if (!data.length) { el.innerHTML = '<div class="empty">Belum ada strategi dengan tanggal mulai.</div>'; return; }
+  const today = hariKe(todayStr());
+  const evBy = {};
+  M.hasil_event.forEach((e) => { const k = String(e.Strategi || '').trim().toLowerCase(); if (k && okTgl(e['Tanggal Event'])) (evBy[k] = evBy[k] || []).push(e); });
+  let a = Infinity, b = -Infinity;
+  data.forEach((r) => {
+    const m = hariKe(r.Mulai), s = okTgl(r.Selesai) ? hariKe(r.Selesai) : Math.max(m, today);
+    a = Math.min(a, m); b = Math.max(b, s);
+    (evBy[String(r['Nama Strategi'] || '').trim().toLowerCase()] || []).forEach((e) => { const d = hariKe(e['Tanggal Event']); a = Math.min(a, d); b = Math.max(b, d); });
+  });
+  a = Math.min(a, today); b = Math.max(b, today);
+  // mulai dari awal bulan, akhiri di akhir bulan, minimal 2 bulan
+  const awal = new Date(a * 86400000); a = hariKe(new Date(Date.UTC(awal.getUTCFullYear(), awal.getUTCMonth(), 1)).toISOString().slice(0, 10));
+  const akh = new Date(b * 86400000); b = hariKe(new Date(Date.UTC(akh.getUTCFullYear(), akh.getUTCMonth() + 1, 1)).toISOString().slice(0, 10));
+  if (b - a < 60) b = a + 60;
+  const span = b - a, pct = (d) => ((d - a) / span * 100).toFixed(2) + '%';
+  let bulan = '';
+  for (let d = new Date(a * 86400000); hariKe(d.toISOString().slice(0, 10)) < b; d = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth() + 1, 1))) {
+    const x = hariKe(d.toISOString().slice(0, 10));
+    bulan += `<span class="tl-bulan" style="left:${pct(x)}">${BULAN_PENDEK[d.getUTCMonth()]}${d.getUTCMonth() === 0 ? ' ' + d.getUTCFullYear() : ''}</span>`;
+  }
+  const garisHari = `<i class="tl-hari" style="left:${pct(today)}"></i>`;
+  el.innerHTML = `<div class="tl-row tl-head"><div class="tl-nama"></div><div class="tl-track">${bulan}${garisHari}</div></div>` + data.map((r) => {
+    const m = hariKe(r.Mulai), adaS = okTgl(r.Selesai), s = adaS ? hariKe(r.Selesai) : Math.max(m, today);
+    const evs = evBy[String(r['Nama Strategi'] || '').trim().toLowerCase()] || [];
+    const kelas = r.Status === 'Selesai' ? 'selesai' : r.Status === 'Jalan' ? 'jalan' : 'ide';
+    const telat = r.Status === 'Jalan' && adaS && s < today;
+    const hadir = evs.reduce((t, e) => t + (+e.Hadir || 0), 0), order = evs.reduce((t, e) => t + (+e['Order via Kode'] || 0), 0);
+    const dots = evs.map((e) => `<i class="tl-ev" style="left:${pct(hariKe(e['Tanggal Event']))}" title="${zEsc(e['Nama Event'] || '')} · ${mktDate(e['Tanggal Event'])} · hadir ${+e.Hadir || 0}, order ${+e['Order via Kode'] || 0}"></i>`).join('');
+    return `<div class="tl-row" onclick="this.classList.toggle('buka')">
+      <div class="tl-nama"><b>${zEsc(r['Nama Strategi'] || '')}</b><span class="sub">${zEsc(picNama(r.PIC))}</span></div>
+      <div class="tl-track">${garisHari}
+        <div class="tl-bar ${kelas}${adaS ? '' : ' terbuka'}${telat ? ' telat' : ''}" style="left:${pct(m)};width:max(6px, calc(${pct(s + 1)} - ${pct(m)}))"></div>${dots}
+      </div>
+      <div class="tl-info">${mktDate(r.Mulai)} – ${adaS ? mktDate(r.Selesai) : 'belum ditentukan'} · ${zEsc(r.Status || '')}${telat ? ' (lewat tanggal selesai)' : ''} ·
+        ${evs.length ? evs.length + ' hasil event, hadir ' + hadir + ', order ' + order : 'belum ada hasil event'}</div>
+    </div>`;
+  }).join('');
+  geserKeHariIni();
+}
+// Di layar sempit, geser garis waktu supaya garis "hari ini" terlihat (sekali per buka tampilan, tidak melawan geseran pengguna).
+let tlSudahGeser = false;
+function geserKeHariIni() {
+  if (tlSudahGeser || tampilanS !== 'waktu') return;
+  const wadah = document.querySelector('.tl-scroll'), garis = document.querySelector('#timelineS .tl-head .tl-hari');
+  if (!wadah || !garis || !wadah.clientWidth || wadah.scrollWidth <= wadah.clientWidth) return;
+  const x = garis.getBoundingClientRect().left - wadah.getBoundingClientRect().left + wadah.scrollLeft;
+  wadah.scrollLeft = Math.max(0, x - wadah.clientWidth * 0.6);
+  tlSudahGeser = true;
 }
 
 async function setStrategiStatus(id, status) {

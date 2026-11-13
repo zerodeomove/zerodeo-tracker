@@ -204,6 +204,41 @@ h2.sec:first-child { margin-top: 0; }
   padding: 2px 9px; border-radius: 20px; font-size: 12px; margin: 0 4px 4px 0; white-space: nowrap;
 }
 .pill.alt { background: #EEEDE8; color: var(--text-muted); }
+.seg { display: inline-flex; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; background: var(--surface); }
+.seg button { border: 0; background: transparent; padding: 7px 11px; font: inherit; font-size: 12.5px; color: var(--text-muted); cursor: pointer;
+  -webkit-tap-highlight-color: transparent; transition: background-color .15s, color .15s; }
+.seg button.on { background: var(--accent-light, #E3EEF4); color: var(--accent-dark); font-weight: 600; }
+.seg button:active { transform: scale(.97); }
+.tl-legend { display: flex; flex-wrap: wrap; gap: 6px 14px; font-size: 12px; color: var(--text-muted); margin: 2px 0 10px; }
+.tl-legend span { display: inline-flex; align-items: center; gap: 6px; }
+.tl-k { display: inline-block; width: 18px; height: 8px; border-radius: 4px; }
+.tl-k.jalan { background: var(--accent); } .tl-k.selesai { background: var(--green); } .tl-k.ide { background: transparent; border: 1.5px dashed #9AA09A; }
+.tl-k.hari { width: 2px; height: 12px; border-radius: 0; background: #C0392B; }
+.tl-dot { display: inline-block; width: 9px; height: 9px; border-radius: 50%; background: var(--amber); border: 2px solid #fff; box-shadow: 0 0 0 1px var(--amber); }
+.tl-scroll { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; }
+.tl { min-width: 640px; }
+.tl-row { display: grid; grid-template-columns: 150px 1fr; align-items: center; border-bottom: 1px solid var(--border); cursor: pointer; -webkit-tap-highlight-color: transparent; }
+.tl-row:last-child { border-bottom: 0; }
+.tl-row:not(.tl-head):hover, .tl-row:not(.tl-head):hover .tl-nama { background: #FAFAF7; }
+.tl-head { cursor: default; position: sticky; top: 0; background: var(--surface); z-index: 2; }
+.tl-nama { padding: 9px 10px 9px 12px; font-size: 12.5px; display: flex; flex-direction: column; gap: 1px; min-width: 0; position: sticky; left: 0; background: inherit; z-index: 3; }
+.tl-row:not(.tl-head) .tl-nama { background: var(--surface); }
+.tl-nama b { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tl-track { position: relative; height: 44px; margin-right: 12px; }
+.tl-head .tl-track { height: 28px; }
+.tl-bulan { position: absolute; top: 7px; font-size: 11px; color: var(--text-muted); padding-left: 4px; border-left: 1px solid var(--border); height: 21px; }
+.tl-hari { position: absolute; top: 0; bottom: 0; width: 2px; background: #C0392B; opacity: .55; z-index: 1; }
+.tl-bar { position: absolute; top: 50%; height: 12px; margin-top: -6px; border-radius: 6px; transform-origin: left center; animation: tlMasuk .35s ease-out; }
+.tl-bar.jalan { background: var(--accent); } .tl-bar.selesai { background: var(--green); opacity: .8; }
+.tl-bar.ide { background: transparent; border: 1.5px dashed #9AA09A; }
+.tl-bar.terbuka { -webkit-mask-image: linear-gradient(90deg, #000 75%, transparent); mask-image: linear-gradient(90deg, #000 75%, transparent); }
+.tl-bar.telat { box-shadow: 0 0 0 2px var(--amber-bg), 0 0 0 3px var(--amber); }
+.tl-ev { position: absolute; top: 50%; width: 11px; height: 11px; margin: -5.5px 0 0 -5.5px; border-radius: 50%; background: var(--amber); border: 2px solid #fff; z-index: 2; }
+.tl-info { display: none; grid-column: 1 / -1; padding: 0 12px 10px; font-size: 12px; color: var(--text-muted); position: sticky; left: 0; max-width: min(620px, calc(100vw - 56px)); }
+@media (max-width: 600px) { .tl-row { grid-template-columns: 112px 1fr; } .tl { min-width: 560px; } }
+.tl-row.buka .tl-info { display: block; animation: ingatMasuk .2s ease-out; }
+@keyframes tlMasuk { from { transform: scaleX(0); opacity: 0; } to { transform: scaleX(1); opacity: 1; } }
+@media (prefers-reduced-motion: reduce) { .tl-bar, .tl-row.buka .tl-info { animation: none; } }
 .ingat { padding: 12px 14px; border-radius: 10px; font-size: 13px; background: var(--amber-bg); color: var(--text, #1f2328); margin-bottom: 14px;
   border: 1px solid rgba(180, 120, 0, .25); display: flex; flex-direction: column; gap: 8px; animation: ingatMasuk .25s ease-out; }
 .ingat[hidden] { display: none; }
