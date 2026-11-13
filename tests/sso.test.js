@@ -407,7 +407,7 @@ const rowOf = (i) => H + 1 + i;
   vm.runInContext("sheetToObjects = function () { return []; }; getKategoriList = function () { return []; }; getDanaData_ = function () { return []; }; mkt_getData = function () { return {}; };", env.ctx);
   const p = env.ctx.buildPayload_();
   assert(Array.isArray(p.tim) && p.tim.length === 6 && p.tim[0].id === 'lenno'); ok('payload dashboard membawa daftar tim (id, nama, peran)');
-  assert.strictEqual(p.versi, '2026-11-13 bot-tombol'); ok('versi kode ikut naik');
+  assert.strictEqual(p.versi, '2026-11-13 bot-nota'); ok('versi kode ikut naik');
   const appJs = require('fs').readFileSync(require('path').join(__dirname, '..', 'app.js'), 'utf8');
   assert.strictEqual(/const EXPECTED_VERSI = '([^']+)'/.exec(appJs)[1], p.versi); ok('EXPECTED_VERSI di app.js sama dengan KODE_VERSI di Code.gs (tidak ada banner versi palsu)');
 }
@@ -592,6 +592,16 @@ const PENV = { APPS_SCRIPT_URL: 'https://script.google.com/macros/s/ABC/exec', S
   r = aksi('yanuar', 'anggota', { jenis: 'batalkan_kegiatan', id: 'k-ffffffffff', alasan: 'tidak jadi' });
   assert.strictEqual(r.ok, true, r.error); assert.strictEqual(status('k-ffffffffff'), 'Dibatalkan'); ok('bot_aksi: batalkan kegiatan sendiri');
   assert(/tidak dikenal/.test(aksi('lenno', 'admin', { jenis: 'hapus_semua' }).error)); ok('bot_aksi: aksi asing ditolak');
+  // lengkapi dengan foto nota dari Telegram
+  env.sheets.kegiatan.rows.find((x) => x[19] === 'k-dddddddddd')[10] = 'Ditransfer';
+  let fotoTersimpan = null;
+  vm.runInContext('saveNotaPhoto_ = function (item, b64, mime) { globalThis.__foto = { item: item, b64: b64, mime: mime }; return "https://drive.google.com/file/nota1"; }', env.ctx);
+  r = aksi('yanuar', 'anggota', { jenis: 'lengkapi', id: 'k-dddddddddd', actual: 950000, photoBase64: 'QUJDRA==', photoMime: 'image/jpeg' });
+  assert.strictEqual(r.ok, true, r.error);
+  fotoTersimpan = vm.runInContext('globalThis.__foto', env.ctx);
+  const rowD = env.sheets.kegiatan.rows.find((x) => x[19] === 'k-dddddddddd');
+  assert(fotoTersimpan && fotoTersimpan.b64 === 'QUJDRA==' && rowD[10] === 'Selesai' && rowD[14] === 950000 && rowD[16] === 'https://drive.google.com/file/nota1'); ok('bot_aksi lengkapi + foto nota: actual terisi, foto tersimpan ke Drive, status Selesai');
+  assert(/tidak valid/.test(aksi('yanuar', 'anggota', { jenis: 'lengkapi', id: 'k-dddddddddd', actual: 1, photoBase64: '<script>' }).error)); ok('bot_aksi: foto nota yang bukan base64 ditolak');
 }
 
 console.log('\n' + n + ' pemeriksaan lolos');

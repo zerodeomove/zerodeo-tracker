@@ -488,6 +488,15 @@ function botBarisKegiatan_(id) {
   return 0;
 }
 
+var BOT_FOTO_MAKS = 7 * 1024 * 1024;   // karakter base64 (~5 MB file)
+function botFotoNota_(a) {
+  if (!a.photoBase64) return {};
+  var mime = a.photoMime === 'application/pdf' ? 'application/pdf' : 'image/jpeg';
+  var b64 = String(a.photoBase64);
+  if (b64.length > BOT_FOTO_MAKS || !/^[A-Za-z0-9+\/=]+$/.test(b64.slice(0, 200))) return { error: 'Foto nota tidak valid atau terlalu besar.' };
+  return { photoBase64: b64, photoMime: mime };
+}
+
 function botNative_(a) {
   var baris = function () { var r = botBarisKegiatan_(a.id); return r ? r : null; };
   var j = String(a.jenis || '');
@@ -497,7 +506,10 @@ function botNative_(a) {
     if (!row) return { error: 'Kegiatan dengan ID "' + String(a.id || '') + '" tidak ditemukan.' };
     if (j === 'putuskan') return { action: 'update_status', row: row, status: a.status };
     if (j === 'tandai_transfer') return { action: 'mark_transferred', row: row, nominalTransfer: a.nominal, picTransaksi: a.pic_transaksi, tglTransfer: a.tanggal || '' };
-    if (j === 'lengkapi') return { action: 'complete_kegiatan', row: row, actual: a.actual };
+    // foto/PDF nota dari Telegram (diteruskan Hub sebagai base64) disimpan ke Drive persis seperti dari dashboard
+    var foto = botFotoNota_(a);
+    if (foto.error) return foto;
+    if (j === 'lengkapi') return Object.assign({ action: 'complete_kegiatan', row: row, actual: a.actual }, foto);
     if (j === 'batalkan_kegiatan') return { action: 'cancel_kegiatan', row: row, alasan: a.alasan || '' };
     if (j === 'pulihkan_kegiatan') return { action: 'restore_kegiatan', row: row };
     var ed = { action: 'edit_kegiatan', row: row };
@@ -506,7 +518,7 @@ function botNative_(a) {
     if (a.pic_transaksi !== undefined && a.pic_transaksi !== null) ed.picTransaksi = a.pic_transaksi;
     if (a.tanggal_transfer !== undefined && a.tanggal_transfer !== null) ed.tglTransfer = a.tanggal_transfer;
     if (a.actual !== undefined && a.actual !== null) ed.actual = a.actual;
-    return ed;
+    return Object.assign(ed, foto);
   }
   if (j === 'ajukan_kegiatan') {
     var st = a.status || 'Diajukan';
