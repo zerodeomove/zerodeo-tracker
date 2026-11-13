@@ -413,7 +413,7 @@ function botBaca_(uid, peran, q) {
     return potong(ev);
   }
   // ringkasan / pengingat: yang menunggu tindakan orang ini, dalam kalimat
-  var tindakan = [];
+  var tindakan = [], item = [];   // item: bentuk terstruktur (jenis + id) untuk tombol di Telegram
   if (uang) {
     var keys = pendingKeysFor_(kegiatan(), uid, peran, tim);
     var kegById = {};
@@ -423,6 +423,8 @@ function botBaca_(uid, peran, q) {
       if (!k) return;
       var label = { approve: 'perlu diputuskan (approve/tolak)', lengkapi: 'sudah ditransfer, tinggal isi Actual dan nota', nota: 'selesai tapi belum ada nota' }[p[1]];
       tindakan.push('Kegiatan "' + k['Item Kegiatan'] + '"' + (k['Project/Brand'] ? ' (' + k['Project/Brand'] + ')' : '') + ': ' + label);
+      item.push({ jenis: p[1], id: p[2], judul: String(k['Item Kegiatan'] || ''), project: String(k['Project/Brand'] || ''), pic: resolvePicIds_(k['PIC'], tim).map(function (x) { return picNama_(x); }).join(', '),
+        estimasi: Number(k['Estimasi (Rp)']) || 0, transfer: Number(k['Nominal Transfer (Rp)']) || 0 });
     });
   }
   var stById = {};
@@ -431,9 +433,10 @@ function botBaca_(uid, peran, q) {
     var p = key.split(':'), s = stById[p[2]];
     if (!s) return;
     tindakan.push('Strategi "' + s['Nama Strategi'] + '": ' + (p[1] === 'mkt-selesai' ? 'sudah lewat tanggal selesai (' + s['Selesai'] + ') tapi masih Jalan' : 'sudah selesai, hasil event-nya belum diisi'));
+    item.push({ jenis: p[1], id: p[2], judul: String(s['Nama Strategi'] || ''), selesai: String(s['Selesai'] || '') });
   });
   if (jenis === 'pengingat') return { tindakan: tindakan };
-  var out = { peran: peran, tindakan: tindakan };
+  var out = { peran: peran, tindakan: tindakan, item: item };
   if (uang) {
     var hitung = {};
     kegiatan().forEach(function (k) { var s = k['Status'] || '(kosong)'; hitung[s] = (hitung[s] || 0) + 1; });

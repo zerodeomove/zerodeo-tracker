@@ -407,7 +407,7 @@ const rowOf = (i) => H + 1 + i;
   vm.runInContext("sheetToObjects = function () { return []; }; getKategoriList = function () { return []; }; getDanaData_ = function () { return []; }; mkt_getData = function () { return {}; };", env.ctx);
   const p = env.ctx.buildPayload_();
   assert(Array.isArray(p.tim) && p.tim.length === 6 && p.tim[0].id === 'lenno'); ok('payload dashboard membawa daftar tim (id, nama, peran)');
-  assert.strictEqual(p.versi, '2026-11-13 bot-aksi'); ok('versi kode ikut naik');
+  assert.strictEqual(p.versi, '2026-11-13 bot-tombol'); ok('versi kode ikut naik');
   const appJs = require('fs').readFileSync(require('path').join(__dirname, '..', 'app.js'), 'utf8');
   assert.strictEqual(/const EXPECTED_VERSI = '([^']+)'/.exec(appJs)[1], p.versi); ok('EXPECTED_VERSI di app.js sama dengan KODE_VERSI di Code.gs (tidak ada banner versi palsu)');
 }
@@ -541,6 +541,8 @@ const PENV = { APPS_SCRIPT_URL: 'https://script.google.com/macros/s/ABC/exec', S
   assert.deepStrictEqual(r.hasil.data.map((k) => k.item).sort(), ['Draft Yanuar', 'Dua PIC', 'Sudah jalan']); ok('bot_baca kegiatan milikku: hanya kegiatan dengan PIC dia (termasuk PIC ganda)');
   r = baca('lemon', 'approver', { jenis: 'ringkasan' });
   assert(r.hasil.tindakan.some((t) => /Sewa rak.*perlu diputuskan/.test(t)) && r.hasil.kegiatan_per_status.Diajukan === 3); ok('bot_baca ringkasan: yang menunggu tindakan dalam kalimat + jumlah per status');
+  const it = r.hasil.item.find((x) => x.id === 'k-aaaaaaaaaa');
+  assert(it && it.jenis === 'approve' && it.judul === 'Sewa rak' && it.pic === 'Ricko' && typeof it.estimasi === 'number'); ok('bot_baca ringkasan: item terstruktur (jenis, id, judul, PIC, estimasi) untuk tombol');
   r = baca('vendor', 'marketing', { jenis: 'kegiatan' });
   assert.strictEqual(r.ok, false); assert(/marketing/.test(r.error)); ok('bot_baca: peran marketing ditolak untuk kegiatan Budgeting');
   r = baca('vendor', 'marketing', { jenis: 'ringkasan' });
