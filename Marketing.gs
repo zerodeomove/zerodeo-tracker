@@ -49,8 +49,11 @@ var MKT_TABS = {
   channel: ['Channel'],
   hasil_event: ['ID', 'Tanggal Event', 'Nama Event', 'Channel', 'Nama Komunitas', 'Kode Voucher',
                 'Hadir', 'Coba Produk', 'Tanya Beli Di Mana', 'Order via Kode', 'Konten UGC',
-                'Strategi', 'PIC Pencatat', 'Dicatat Pada']
+                'Strategi', 'PIC Pencatat', 'Dicatat Pada', 'Kegiatan']
 };
+// Kolom "Kegiatan" di hasil_event: ID kegiatan Budgeting yang membiayai event itu (dipisah koma), supaya biaya per orang hadir
+// dan per order bisa dihitung. Diisi peran selain marketing (peran marketing tidak melihat kegiatan dan uang).
+var MKT_MAKS_KEGIATAN = 10;
 var MKT_DATE_COLS = { strategi: [6, 7], hasil_event: [2] };
 var MKT_SEED_LANE = ['Crystal Glow', 'Daily Active', 'Vital Fresh'];
 var MKT_SEED_CHANNEL = ['Shopee', 'TikTok Shop', 'TikTok', 'Instagram',
@@ -118,7 +121,18 @@ function mkt_int_(v) {
 function mkt_ensureTabs_() {
   var ss = SpreadsheetApp.getActiveSpreadsheet();
   Object.keys(MKT_TABS).forEach(function (name) {
-    if (ss.getSheetByName(name)) return;
+    var ada = ss.getSheetByName(name);
+    if (ada) {
+      // tab lama: judul kolom baru (mis. "Kegiatan") ditambahkan di ujung kanan, data lama tidak disentuh
+      var lastCol = Math.max(ada.getLastColumn(), 1);
+      var punya = ada.getRange(1, 1, 1, lastCol).getValues()[0].map(function (h) { return String(h).trim(); });
+      var kurang = MKT_TABS[name].filter(function (h) { return punya.indexOf(h) === -1; });
+      if (kurang.length) {
+        var mulai = punya.filter(function (h) { return h; }).length + 1;
+        ada.getRange(1, mulai, 1, kurang.length).setValues([kurang]).setFontWeight('bold').setFontColor('#FFFFFF').setBackground('#1F4E5F');
+      }
+      return;
+    }
     var sheet = ss.insertSheet(name);
     var headers = MKT_TABS[name];
     sheet.getRange(1, 1, 1, headers.length).setValues([headers])
@@ -192,7 +206,7 @@ function mkt_resolveLabels_(tabName, labels) {
 // POST — mengembalikan objek hasil, atau null kalau bukan aksi marketing
 // ============================================================
 function mkt_handlePost(data) {
-  var known = { add_strategi: 1, update_strategi_status: 1, add_hasil_event: 1 };
+  var known = { add_strategi: 1, update_strategi_status: 1, add_hasil_event: 1, update_hasil_event_kegiatan: 1 };
   if (!data || !known[data.action]) return null;
   mkt_ensureTabs_();
   var lock = LockService.getScriptLock();
@@ -200,6 +214,7 @@ function mkt_handlePost(data) {
   try {
     if (data.action === 'add_strategi') return mkt_addStrategi_(data);
     if (data.action === 'update_strategi_status') return mkt_updateStatus_(data);
+    if (data.action === 'update_hasil_event_kegiatan') return mkt_updateEventKegiatan_(data);
     return mkt_addHasilEvent_(data);
   } finally {
     lock.releaseLock();
@@ -260,14 +275,65 @@ function mkt_addHasilEvent_(d) {
   if (!mkt_cleanLabel_(d.channel)) return { ok: false, error: 'Channel wajib diisi.' };
   if (!isKnownPic_(d.pic)) return { ok: false, error: 'PIC tidak dikenali.' };
 
+  // peran marketing tidak melihat kegiatan Budgeting, jadi tidak bisa menautkannya (diabaikan, bukan ditolak)
+  var keg = '';
+  if (!isMarketingOnly_() && Array.isArray(d.kegiatan) && d.kegiatan.length) {
+    var r = mkt_cekKegiatan_(d.kegiatan);
+    if (r.error) return { ok: false, error: r.error };
+    keg = r.ids.join(', ');
+  }
+
   var channel = mkt_resolveLabels_('channel', [d.channel])[0];
   var id = 'E' + new Date().getTime().toString(36);
   var sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('hasil_event');
-  mkt_append_(sheet, [
+  var baris = [
     id, tanggal, nama, channel,
     mkt_text_(d.komunitas, 80), mkt_text_(d.kode, 60),
     mkt_int_(d.hadir), mkt_int_(d.coba), mkt_int_(d.tanya), mkt_int_(d.order), mkt_int_(d.ugc),
     mkt_text_(d.strategi, 120), normalizePic_(d.pic), new Date()
-  ]);
-  return { ok: true, id: id };
+  ];
+  // kolom Kegiatan sesuai posisi judulnya di Sheet (tab lama bisa punya kolom tambahan)
+  var kol = mkt_kolom_(sheet, 'Kegiatan');
+  while (baris.length < kol - 1) baris.push('');
+  baris[kol - 1] = keg;
+  mkt_append_(sheet, baris);
+  return { ok: true, id: id, kegiatan: keg };
+}
+
+function mkt_kolom_(sheet, judul) {
+  var lastCol = Math.max(sheet.getLastColumn(), 1);
+  var h = sheet.getRange(1, 1, 1, lastCol).getValues()[0].map(function (x) { return String(x).trim(); });
+  var i = h.indexOf(judul);
+  return i >= 0 ? i + 1 : MKT_TABS.hasil_event.indexOf(judul) + 1;
+}
+
+// ID kegiatan harus ada di tab kegiatan. Hasil: { ids } atau { error }.
+function mkt_cekKegiatan_(ids) {
+  var bersih = [];
+  (ids || []).forEach(function (x) { x = mkt_text_(x, 40); if (x && bersih.indexOf(x) === -1) bersih.push(x); });
+  if (bersih.length > MKT_MAKS_KEGIATAN) return { error: 'Maksimal ' + MKT_MAKS_KEGIATAN + ' kegiatan per event.' };
+  if (!bersih.length) return { ids: [] };
+  var ada = {};
+  sheetToObjects(SpreadsheetApp.getActiveSpreadsheet().getSheetByName('kegiatan')).forEach(function (k) { if (k.ID) ada[String(k.ID)] = true; });
+  var asing = bersih.filter(function (x) { return !ada[x]; });
+  if (asing.length) return { error: 'Kegiatan tidak ditemukan: ' + asing.join(', ') + '. Muat ulang dashboard lalu coba lagi.' };
+  return { ids: bersih };
+}
+
+// Hubungkan (atau lepas) kegiatan Budgeting ke hasil event yang sudah tercatat. Bukan untuk peran marketing.
+function mkt_updateEventKegiatan_(d) {
+  if (isMarketingOnly_()) return { ok: false, error: 'Peran marketing tidak bisa menautkan kegiatan Budgeting.' };
+  var r = mkt_cekKegiatan_(Array.isArray(d.kegiatan) ? d.kegiatan : []);
+  if (r.error) return { ok: false, error: r.error };
+  var sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('hasil_event');
+  var last = sheet.getLastRow();
+  if (last < 2) return { ok: false, error: 'Belum ada hasil event.' };
+  var ids = sheet.getRange(2, 1, last - 1, 1).getValues();
+  for (var i = 0; i < ids.length; i++) {
+    if (String(ids[i][0]) === String(d.id)) {
+      sheet.getRange(i + 2, mkt_kolom_(sheet, 'Kegiatan')).setValue(r.ids.join(', '));
+      return { ok: true, id: d.id, kegiatan: r.ids.join(', ') };
+    }
+  }
+  return { ok: false, error: 'Hasil event tidak ditemukan.' };
 }

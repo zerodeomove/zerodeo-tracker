@@ -407,7 +407,7 @@ const rowOf = (i) => H + 1 + i;
   vm.runInContext("sheetToObjects = function () { return []; }; getKategoriList = function () { return []; }; getDanaData_ = function () { return []; }; mkt_getData = function () { return {}; };", env.ctx);
   const p = env.ctx.buildPayload_();
   assert(Array.isArray(p.tim) && p.tim.length === 6 && p.tim[0].id === 'lenno'); ok('payload dashboard membawa daftar tim (id, nama, peran)');
-  assert.strictEqual(p.versi, '2026-10-18 aturan-peran-2'); ok('versi kode ikut naik');
+  assert.strictEqual(p.versi, '2026-11-13 event-kegiatan'); ok('versi kode ikut naik');
   const appJs = require('fs').readFileSync(require('path').join(__dirname, '..', 'app.js'), 'utf8');
   assert.strictEqual(/const EXPECTED_VERSI = '([^']+)'/.exec(appJs)[1], p.versi); ok('EXPECTED_VERSI di app.js sama dengan KODE_VERSI di Code.gs (tidak ada banner versi palsu)');
 }
@@ -461,6 +461,39 @@ const PENV = { APPS_SCRIPT_URL: 'https://script.google.com/macros/s/ABC/exec', S
   r = await callProxy({ headers: { 'x-hub-token': tok }, method: 'GET' }, { APPS_SCRIPT_URL: PENV.APPS_SCRIPT_URL, SHARED_SECRET: SHARED });
   assert.strictEqual(r.res.code, 500); assert.strictEqual(r.calls.length, 0); ok('proxy: tanpa SECRET_ZERODEO dan tanpa TEAM_CODE -> 500 (salah konfigurasi)');
 
-  console.log('\n' + n + ' pemeriksaan lolos');
+  /* ================= hasil event ↔ kegiatan Budgeting ================= */
+{
+  const env = setupApprove();
+  const adm = as('ricko', 'admin'), mk = as('vendor', 'marketing');
+  // tab hasil_event versi lama (tanpa kolom Kegiatan) tetap jalan: judul kolom ditambah otomatis
+  env.sheets.hasil_event = makeSheet('hasil_event', [['ID', 'Tanggal Event', 'Nama Event', 'Channel', 'Nama Komunitas', 'Kode Voucher', 'Hadir', 'Coba Produk', 'Tanya Beli Di Mana', 'Order via Kode', 'Konten UGC', 'Strategi', 'PIC Pencatat', 'Dicatat Pada'],
+    ['Elama', '2030-01-01', 'Event lama', 'TikTok', '', '', 5, 0, 0, 1, 0, '', 'ricko', '2030-01-02']]);
+  let r = post(env, Object.assign({ action: 'add_hasil_event', nama: 'Fun run', tanggal: '2030-02-01', channel: 'Komunitas Olahraga', pic: 'ricko', hadir: 40, order: 4, kegiatan: ['k-aaaaaaaaaa', 'k-dddddddddd', 'k-aaaaaaaaaa'] }, adm));
+  assert.strictEqual(r.ok, true, r.error); assert.strictEqual(r.kegiatan, 'k-aaaaaaaaaa, k-dddddddddd');
+  const hdr = env.sheets.hasil_event.rows[0];
+  assert.strictEqual(hdr[14], 'Kegiatan'); ok('event-kegiatan: tab lama dapat kolom "Kegiatan" otomatis, data lama tidak disentuh');
+  const baris = env.sheets.hasil_event.rows.find((x) => x[2] === 'Fun run');
+  assert.strictEqual(baris[14], 'k-aaaaaaaaaa, k-dddddddddd'); ok('event-kegiatan: kegiatan tersimpan (dobel dibuang)');
+  const g = post(env, Object.assign({ action: 'get_data' }, adm));
+  assert.strictEqual(g.hasil_event.find((e) => e['Nama Event'] === 'Fun run').Kegiatan, 'k-aaaaaaaaaa, k-dddddddddd'); ok('event-kegiatan: ikut terkirim ke dashboard');
+  r = post(env, Object.assign({ action: 'add_hasil_event', nama: 'X', tanggal: '2030-02-01', channel: 'TikTok', pic: 'ricko', kegiatan: ['k-tidakada'] }, adm));
+  assert(!r.ok && /tidak ditemukan/.test(r.error)); ok('event-kegiatan: ID kegiatan asing ditolak');
+  r = post(env, Object.assign({ action: 'add_hasil_event', nama: 'X', tanggal: '2030-02-01', channel: 'TikTok', pic: 'ricko', kegiatan: Array.from({ length: 11 }, (_, i) => 'k' + i) }, adm));
+  assert(!r.ok && /Maksimal 10/.test(r.error)); ok('event-kegiatan: maksimal 10 kegiatan per event');
+  r = post(env, Object.assign({ action: 'add_hasil_event', nama: 'Event vendor', tanggal: '2030-02-02', channel: 'TikTok', pic: 'ricko', kegiatan: ['k-aaaaaaaaaa'] }, mk));
+  assert(r.ok && r.kegiatan === ''); ok('event-kegiatan: peran marketing tetap bisa mencatat event, tautan kegiatan diabaikan');
+  r = post(env, Object.assign({ action: 'update_hasil_event_kegiatan', id: 'Elama', kegiatan: ['k-ffffffffff'] }, adm));
+  assert(r.ok && env.sheets.hasil_event.rows[1][14] === 'k-ffffffffff' && env.sheets.hasil_event.rows[1][2] === 'Event lama'); ok('event-kegiatan: event lama bisa dihubungkan belakangan');
+  r = post(env, Object.assign({ action: 'update_hasil_event_kegiatan', id: 'Elama', kegiatan: [] }, adm));
+  assert(r.ok && env.sheets.hasil_event.rows[1][14] === ''); ok('event-kegiatan: tautan bisa dilepas');
+  r = post(env, Object.assign({ action: 'update_hasil_event_kegiatan', id: 'Elama', kegiatan: ['k-ffffffffff'] }, mk));
+  assert(!r.ok && /Peran marketing/.test(r.error)); ok('event-kegiatan: peran marketing tidak bisa menautkan kegiatan');
+  r = post(env, Object.assign({ action: 'update_hasil_event_kegiatan', id: 'Etidakada', kegiatan: [] }, adm));
+  assert(!r.ok && /tidak ditemukan/.test(r.error)); ok('event-kegiatan: event yang tidak ada ditolak');
+  const gm = post(env, Object.assign({ action: 'get_data' }, mk));
+  assert(!/Estimasi|Actual|Nominal/.test(JSON.stringify(gm))); ok('event-kegiatan: jawaban untuk peran marketing tetap tanpa angka uang');
+}
+
+console.log('\n' + n + ' pemeriksaan lolos');
 })().catch((e) => { console.error('GAGAL:', e.message); process.exit(1); });
 

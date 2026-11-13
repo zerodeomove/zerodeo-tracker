@@ -229,6 +229,7 @@ h2.sec:first-child { margin-top: 0; }
 .modal-box .hint { font-size: 12px; color: var(--text-muted); font-weight: 400; margin-top: -6px; }
 .modal-box form { display: flex; flex-direction: column; gap: 14px; }
 .modal-box label, .modal-box .l { font-size: 13px; font-weight: 500; display: flex; flex-direction: column; gap: 6px; }
+.modal-box .l[hidden] { display: none; }
 .modal-box input, .modal-box select, .modal-box textarea {
   font-family: inherit; font-size: 16px; padding: 10px 12px; border: 1px solid var(--border);
   border-radius: 8px; background: var(--bg); color: var(--text);
@@ -400,3 +401,10 @@ tbody tr { transition: background-color .15s ease; }
   *, *::before, *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; }
   .spin { animation: sbspin 1.6s linear infinite !important; }
 }
+
+/* pilihan kegiatan Budgeting untuk hasil event */
+.keg-chips { max-height: 240px; overflow-y: auto; flex-direction: column; flex-wrap: nowrap; align-items: stretch; gap: 6px; margin-top: 6px; }
+.keg-chips .chip { justify-content: flex-start; border-radius: 10px; }
+.keg-chips .chip .sub { display: block; font-size: 12px; }
+.biaya-est { color: var(--text-muted); }
+.link-keg { border: 1px solid var(--border); background: var(--surface); color: var(--accent-dark); border-radius: 6px; padding: 3px 8px; font: inherit; font-size: 12px; cursor: pointer; white-space: nowrap; }

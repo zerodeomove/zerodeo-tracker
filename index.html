@@ -151,14 +151,23 @@
       <h2 class="sec">Hasil event per channel</h2>
       <div class="scroll">
         <table>
-          <thead><tr><th>Channel</th><th>Event</th><th>Hadir</th><th>Coba</th><th>Tanya beli</th><th>Order</th><th>UGC</th><th>Order / Hadir</th></tr></thead>
+          <thead id="theadSum"><tr><th>Channel</th><th>Event</th><th>Hadir</th><th>Coba</th><th>Tanya beli</th><th>Order</th><th>UGC</th><th>Order / Hadir</th></tr></thead>
           <tbody id="bodySum"><tr><td colspan="8" class="empty">Memuat…</td></tr></tbody>
         </table>
+      </div>
+      <div id="secStrat" style="margin-top:22px" hidden>
+        <h2 class="sec">Hasil event per strategi</h2>
+        <div class="scroll">
+          <table>
+            <thead><tr><th>Strategi</th><th>Event</th><th>Hadir</th><th>Order</th><th>Biaya</th><th>Biaya / hadir</th><th>Biaya / order</th></tr></thead>
+            <tbody id="bodyStrat"></tbody>
+          </table>
+        </div>
       </div>
       <h2 class="sec">Semua hasil event</h2>
       <div class="scroll">
         <table>
-          <thead><tr><th>Tanggal</th><th>Event</th><th>Channel</th><th>Komunitas</th><th>Kode</th><th>Hadir</th><th>Coba</th><th>Tanya</th><th>Order</th><th>UGC</th></tr></thead>
+          <thead id="theadE"><tr><th>Tanggal</th><th>Event</th><th>Channel</th><th>Komunitas</th><th>Kode</th><th>Hadir</th><th>Coba</th><th>Tanya</th><th>Order</th><th>UGC</th></tr></thead>
           <tbody id="bodyE"><tr><td colspan="10" class="empty">Memuat…</td></tr></tbody>
         </table>
       </div>
@@ -587,6 +596,20 @@
   </div>
 </div>
 
+<!-- ================= POPUP: hubungkan hasil event ke kegiatan Budgeting ================= -->
+<div class="modal-overlay" id="m-eventKeg">
+  <div class="modal-box">
+    <h3 id="ek-judul">Hubungkan ke kegiatan</h3>
+    <div class="hint">Pilih kegiatan Budgeting yang membiayai event ini. Biaya memakai Actual; kalau belum ada, memakai Estimasi (ditandai ≈).</div>
+    <input type="text" id="ek-cari" placeholder="Cari kegiatan…" autocomplete="off">
+    <div class="chips keg-chips" id="ek-chips"></div>
+    <div class="modal-actions">
+      <button type="button" class="btn-cancel" onclick="closeModal('m-eventKeg')">Tutup</button>
+      <button type="button" class="btn-submit" id="ek-simpan">Simpan</button>
+    </div>
+  </div>
+</div>
+
 <!-- ================= POPUP: Hasil event ================= -->
 <div class="modal-overlay" id="m-event">
   <div class="modal-box">
@@ -621,6 +644,12 @@
       <label>Konten buatan orang (foto/story pakai produk)<input type="number" id="e-ugc" min="0" step="1" placeholder="0" inputmode="numeric"></label>
 
       <label>Strategi terkait (opsional)<select id="e-strategi"><option value="">-</option></select></label>
+
+      <div class="l" id="e-kegWrap" hidden>Kegiatan Budgeting yang membiayai event ini (opsional)
+        <input type="text" id="e-kegCari" placeholder="Cari kegiatan…" autocomplete="off">
+        <div class="chips keg-chips" id="e-kegChips"></div>
+        <span class="hint">Dipakai menghitung biaya per orang hadir dan per order. Yang paling dekat tanggal event tampil di atas.</span>
+      </div>
 
       <div class="msg" id="e-msg"></div>
       <div class="modal-actions">
