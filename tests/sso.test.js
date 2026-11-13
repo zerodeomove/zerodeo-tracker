@@ -407,7 +407,7 @@ const rowOf = (i) => H + 1 + i;
   vm.runInContext("sheetToObjects = function () { return []; }; getKategoriList = function () { return []; }; getDanaData_ = function () { return []; }; mkt_getData = function () { return {}; };", env.ctx);
   const p = env.ctx.buildPayload_();
   assert(Array.isArray(p.tim) && p.tim.length === 6 && p.tim[0].id === 'lenno'); ok('payload dashboard membawa daftar tim (id, nama, peran)');
-  assert.strictEqual(p.versi, '2026-11-13 pengingat'); ok('versi kode ikut naik');
+  assert.strictEqual(p.versi, '2026-11-13 bot-baca'); ok('versi kode ikut naik');
   const appJs = require('fs').readFileSync(require('path').join(__dirname, '..', 'app.js'), 'utf8');
   assert.strictEqual(/const EXPECTED_VERSI = '([^']+)'/.exec(appJs)[1], p.versi); ok('EXPECTED_VERSI di app.js sama dengan KODE_VERSI di Code.gs (tidak ada banner versi palsu)');
 }
@@ -523,6 +523,34 @@ const PENV = { APPS_SCRIPT_URL: 'https://script.google.com/macros/s/ABC/exec', S
   env.sheets.strategi.rows.push(['S8', 'Punya vendor', 'Daily Active', 'x', 'Komunitas Olahraga', '2020-01-01', '2020-01-02', 'vendor', 'Jalan', '']);
   const r2 = call({ action: 'pending', token: svc, for_uid: 'vendor', for_peran: 'marketing' });
   assert.deepStrictEqual(Array.from(r2.keys).sort(), ['z:mkt-hasil:S8', 'z:mkt-selesai:S8']); ok('pending: peran marketing dapat titik merah untuk strateginya sendiri (tanpa kunci uang)');
+}
+
+  /* ================= bot Telegram Hub: bot_baca ================= */
+{
+  const env = setupApprove();
+  const call = (body) => JSON.parse(env.ctx.doPost({ postData: { contents: JSON.stringify(body) } }).text);
+  const svc = env.ctx.makeHubToken_('hub-service', 'service', 300);
+  const baca = (uid, peran, q) => call({ action: 'bot_baca', token: svc, for_uid: uid, for_peran: peran, q });
+  assert.strictEqual(call({ action: 'bot_baca', for_uid: 'ricko', for_peran: 'admin' }).error, 'unauthorized'); ok('bot_baca tanpa token -> ditolak');
+  assert.strictEqual(call({ action: 'bot_baca', token: hubToken(SECRET, { uid: 'ricko', peran: 'admin' }), for_uid: 'ricko', for_peran: 'admin' }).error, 'unauthorized'); ok('bot_baca dengan token pengguna (bukan servis) -> ditolak');
+  assert.strictEqual(baca('ricko', 'raja', {}).error, 'unauthorized'); ok('bot_baca dengan peran asing -> ditolak');
+  let r = baca('lemon', 'approver', { jenis: 'kegiatan' });
+  assert.strictEqual(r.ok, true, r.error);
+  assert(r.hasil.data.some((k) => k.item === 'Sewa rak' && k.pic === 'Ricko' && typeof k.estimasi === 'number')); ok('bot_baca kegiatan (approver): daftar dengan nama PIC dan angka');
+  r = baca('yanuar', 'anggota', { jenis: 'kegiatan', milikku: true });
+  assert.deepStrictEqual(r.hasil.data.map((k) => k.item).sort(), ['Draft Yanuar', 'Dua PIC', 'Sudah jalan']); ok('bot_baca kegiatan milikku: hanya kegiatan dengan PIC dia (termasuk PIC ganda)');
+  r = baca('lemon', 'approver', { jenis: 'ringkasan' });
+  assert(r.hasil.tindakan.some((t) => /Sewa rak.*perlu diputuskan/.test(t)) && r.hasil.kegiatan_per_status.Diajukan === 3); ok('bot_baca ringkasan: yang menunggu tindakan dalam kalimat + jumlah per status');
+  r = baca('vendor', 'marketing', { jenis: 'kegiatan' });
+  assert.strictEqual(r.ok, false); assert(/marketing/.test(r.error)); ok('bot_baca: peran marketing ditolak untuk kegiatan Budgeting');
+  r = baca('vendor', 'marketing', { jenis: 'ringkasan' });
+  assert.strictEqual(r.ok, true); assert(!('kegiatan_per_status' in r.hasil) && !/Sewa rak|Rp|estimasi/i.test(JSON.stringify(r))); ok('bot_baca ringkasan peran marketing: tanpa kegiatan dan uang');
+  env.sheets.hasil_event = makeSheet('hasil_event', [['ID', 'Tanggal Event', 'Nama Event', 'Channel', 'Nama Komunitas', 'Kode Voucher', 'Hadir', 'Coba Produk', 'Tanya Beli Di Mana', 'Order via Kode', 'Konten UGC', 'Strategi', 'PIC Pencatat', 'Dicatat Pada', 'Kegiatan'],
+    ['E1', '2030-03-06', 'Ride', 'Komunitas Vespa', '', '', 10, 0, 0, 2, 0, '', 'ricko', '', 'k-aaaaaaaaaa']]);
+  r = baca('ricko', 'admin', { jenis: 'hasil_event' });
+  assert.strictEqual(r.hasil.data[0].order, 2); assert(r.hasil.data[0].biaya > 0); ok('bot_baca hasil_event (admin): ikut biaya dari kegiatan yang ditautkan');
+  r = baca('vendor', 'marketing', { jenis: 'hasil_event' });
+  assert.strictEqual(r.hasil.data[0].hadir, 10); assert(!('biaya' in r.hasil.data[0])); ok('bot_baca hasil_event (marketing): tanpa biaya');
 }
 
 console.log('\n' + n + ' pemeriksaan lolos');

@@ -324,6 +324,129 @@ function handlePending_(data) {
 }
 
 // ============================================================
+// BOT TELEGRAM HUB: baca data atas nama satu orang. Dipanggil Hub (token servis, sama seperti "pending"); Hub sudah memeriksa
+// orang itu punya akses Zerodeo dan mengirim perannya. Di sini peran itu diterapkan lagi: peran marketing tidak menerima
+// kegiatan, dana, atau angka uang apa pun. Hanya membaca, tidak ada yang diubah.
+//   jenis: ringkasan | kegiatan | strategi | hasil_event | pengingat
+// ============================================================
+var BOT_BACA_MAKS = 40;
+function handleBotBaca_(data) {
+  var denied = jsonResponse({ ok: false, error: 'unauthorized' });
+  var claims;
+  try { claims = verifyHubToken_(data.token); } catch (e) { return denied; }
+  if (claims.peran !== 'service' || claims.uid !== 'hub-service') return denied;
+  var uid = String(data.for_uid || '').toLowerCase();
+  if (!/^[a-z0-9_-]{2,30}$/.test(uid)) return jsonResponse({ ok: false, error: 'for_uid tidak valid.' });
+  if (PERAN_ZERODEO.indexOf(data.for_peran) === -1) return denied;
+  var q = data.q && typeof data.q === 'object' ? data.q : {};
+  try { return jsonResponse({ ok: true, hasil: botBaca_(uid, data.for_peran, q) }); }
+  catch (e) { return jsonResponse({ ok: false, error: String(e && e.message || e) }); }
+}
+
+function botBaca_(uid, peran, q) {
+  var uang = peran !== 'marketing';
+  var tim = readTim_();
+  var nama = function (v) { return resolvePicIds_(v, tim).map(function (id) { return picNama_(id); }).join(', ') || String(v || ''); };
+  var milik = function (v) { return ownerIds_(v, tim).indexOf(uid) !== -1; };
+  var teks = String(q.teks || '').trim().toLowerCase();
+  var jenis = String(q.jenis || 'ringkasan');
+  var potong = function (list) { return { total: list.length, data: list.slice(0, BOT_BACA_MAKS), dipotong: list.length > BOT_BACA_MAKS }; };
+  var kegMemo = null;
+  var kegiatan = function () {
+    if (kegMemo) return kegMemo;
+    try { ensureKegiatanIds_(); } catch (e) { /* abaikan */ }
+    return kegMemo = sheetToObjects(SpreadsheetApp.getActiveSpreadsheet().getSheetByName('kegiatan')).filter(function (r) { return r['Item Kegiatan'] || r['ID']; });
+  };
+  var adaNota = function (r) { return /^https?:\/\//i.test(String(r['Nota/Bukti'] || '')); };
+
+  if (jenis === 'kegiatan') {
+    if (!uang) throw new Error('Peran marketing tidak bisa melihat kegiatan Budgeting.');
+    var list = kegiatan().filter(function (r) {
+      if (q.status && String(r['Status']) !== String(q.status)) return false;
+      if (!q.status && !q.termasuk_selesai && (r['Status'] === 'Selesai' || r['Status'] === 'Dibatalkan')) return false;
+      if (q.milikku && !milik(r['PIC'])) return false;
+      if (q.belum_nota && !(r['Status'] === 'Selesai' && !adaNota(r))) return false;
+      if (teks && ((r['Item Kegiatan'] || '') + ' ' + (r['Project/Brand'] || '') + ' ' + (r['Catatan'] || '')).toLowerCase().indexOf(teks) === -1) return false;
+      return true;
+    }).map(function (r) {
+      return { id: r['ID'], item: r['Item Kegiatan'], project: r['Project/Brand'] || '', pic: nama(r['PIC']), status: r['Status'],
+        deadline: r['Deadline Kegiatan'] || '', estimasi: Number(r['Estimasi (Rp)']) || 0, actual: Number(r['Actual (Rp)']) || 0,
+        transfer: Number(r['Nominal Transfer (Rp)']) || 0, nota: adaNota(r), dana: r['Dana'] || '', kategori: r['Kategori'] || '' };
+    });
+    return potong(list);
+  }
+  if (jenis === 'strategi') {
+    var st = mkt_readTab_('strategi').filter(function (r) {
+      if (q.status && r['Status'] !== q.status) return false;
+      if (q.milikku && !milik(r['PIC'])) return false;
+      if (teks && ((r['Nama Strategi'] || '') + ' ' + (r['Pesan Inti'] || '') + ' ' + (r['Channel'] || '')).toLowerCase().indexOf(teks) === -1) return false;
+      return true;
+    }).map(function (r) {
+      return { id: r['ID'], nama: r['Nama Strategi'], lane: r['Lane'] || '', channel: r['Channel'] || '', pesan: String(r['Pesan Inti'] || '').slice(0, 200),
+        mulai: r['Mulai'] || '', selesai: r['Selesai'] || '', pic: nama(r['PIC']), status: r['Status'] };
+    });
+    return potong(st);
+  }
+  if (jenis === 'hasil_event') {
+    var keg = uang ? kegiatan() : [];
+    var byId = {};
+    keg.forEach(function (k) { byId[String(k['ID'])] = k; });
+    var ev = mkt_readTab_('hasil_event').filter(function (e) {
+      if (q.strategi && String(e['Strategi'] || '').toLowerCase() !== String(q.strategi).toLowerCase()) return false;
+      if (teks && ((e['Nama Event'] || '') + ' ' + (e['Channel'] || '') + ' ' + (e['Nama Komunitas'] || '')).toLowerCase().indexOf(teks) === -1) return false;
+      return true;
+    }).sort(function (a, b) { return String(b['Tanggal Event'] || '').localeCompare(String(a['Tanggal Event'] || '')); }).map(function (e) {
+      var o = { tanggal: e['Tanggal Event'] || '', nama: e['Nama Event'], channel: e['Channel'] || '', komunitas: e['Nama Komunitas'] || '',
+        hadir: Number(e['Hadir']) || 0, coba: Number(e['Coba Produk']) || 0, tanya: Number(e['Tanya Beli Di Mana']) || 0,
+        order: Number(e['Order via Kode']) || 0, ugc: Number(e['Konten UGC']) || 0, strategi: e['Strategi'] || '' };
+      if (uang) {
+        var rp = 0, perkiraan = false;
+        String(e['Kegiatan'] || '').split(',').forEach(function (id) {
+          var k = byId[id.trim()]; if (!k || k['Status'] === 'Dibatalkan') return;
+          var act = Number(k['Actual (Rp)']) || 0;
+          if (act > 0) rp += act; else { rp += Number(k['Estimasi (Rp)']) || 0; perkiraan = true; }
+        });
+        o.biaya = rp; o.biaya_perkiraan = perkiraan;
+      }
+      return o;
+    });
+    return potong(ev);
+  }
+  // ringkasan / pengingat: yang menunggu tindakan orang ini, dalam kalimat
+  var tindakan = [];
+  if (uang) {
+    var keys = pendingKeysFor_(kegiatan(), uid, peran, tim);
+    var kegById = {};
+    kegiatan().forEach(function (k) { kegById[String(k['ID'])] = k; });
+    keys.forEach(function (key) {
+      var p = key.split(':'), k = kegById[p[2]];
+      if (!k) return;
+      var label = { approve: 'perlu diputuskan (approve/tolak)', lengkapi: 'sudah ditransfer, tinggal isi Actual dan nota', nota: 'selesai tapi belum ada nota' }[p[1]];
+      tindakan.push('Kegiatan "' + k['Item Kegiatan'] + '"' + (k['Project/Brand'] ? ' (' + k['Project/Brand'] + ')' : '') + ': ' + label);
+    });
+  }
+  var stById = {};
+  mkt_readTab_('strategi').forEach(function (s) { stById[String(s['ID'])] = s; });
+  mkt_pengingatKeys_(uid, tim).forEach(function (key) {
+    var p = key.split(':'), s = stById[p[2]];
+    if (!s) return;
+    tindakan.push('Strategi "' + s['Nama Strategi'] + '": ' + (p[1] === 'mkt-selesai' ? 'sudah lewat tanggal selesai (' + s['Selesai'] + ') tapi masih Jalan' : 'sudah selesai, hasil event-nya belum diisi'));
+  });
+  if (jenis === 'pengingat') return { tindakan: tindakan };
+  var out = { peran: peran, tindakan: tindakan };
+  if (uang) {
+    var hitung = {};
+    kegiatan().forEach(function (k) { var s = k['Status'] || '(kosong)'; hitung[s] = (hitung[s] || 0) + 1; });
+    out.kegiatan_per_status = hitung;
+  }
+  var hs = {};
+  mkt_readTab_('strategi').forEach(function (s) { var x = s['Status'] || '(kosong)'; hs[x] = (hs[x] || 0) + 1; });
+  out.strategi_per_status = hs;
+  out.jumlah_hasil_event = mkt_readTab_('hasil_event').length;
+  return out;
+}
+
+// ============================================================
 // LOG AKTIVITAS (tab "log_aktivitas"): setiap aksi tulis yang berhasil dicatat otomatis oleh script,
 // lengkap dengan siapa pelakunya. Menjawab "siapa yang meng-approve / mencatat transfer ini".
 // Catatan: Google Sheets tidak bisa membuat tab benar-benar tidak bisa diubah; tab ini hanya diberi
