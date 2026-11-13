@@ -407,7 +407,7 @@ const rowOf = (i) => H + 1 + i;
   vm.runInContext("sheetToObjects = function () { return []; }; getKategoriList = function () { return []; }; getDanaData_ = function () { return []; }; mkt_getData = function () { return {}; };", env.ctx);
   const p = env.ctx.buildPayload_();
   assert(Array.isArray(p.tim) && p.tim.length === 6 && p.tim[0].id === 'lenno'); ok('payload dashboard membawa daftar tim (id, nama, peran)');
-  assert.strictEqual(p.versi, '2026-11-13 bot-nota'); ok('versi kode ikut naik');
+  assert.strictEqual(p.versi, '2026-11-13 bot-foto'); ok('versi kode ikut naik');
   const appJs = require('fs').readFileSync(require('path').join(__dirname, '..', 'app.js'), 'utf8');
   assert.strictEqual(/const EXPECTED_VERSI = '([^']+)'/.exec(appJs)[1], p.versi); ok('EXPECTED_VERSI di app.js sama dengan KODE_VERSI di Code.gs (tidak ada banner versi palsu)');
 }
