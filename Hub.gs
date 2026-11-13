@@ -280,6 +280,8 @@ function pasangTriggerSinkron() {
 //   z:lengkapi:<id> — kegiatan milikmu yang sudah Ditransfer, tinggal diisi Actual dan nota
 //   z:nota:<id>     — kegiatan milikmu yang Selesai tapi belum ada nota
 // Tidak ada titik untuk "perlu ditransfer": yang mentransfer tidak diminta membuka dashboard lagi.
+// Ditambah pengingat strategi untuk PIC-nya (z:mkt-selesai, z:mkt-hasil) dari mkt_pengingatKeys_ di Marketing.gs,
+// juga untuk peran marketing.
 // ============================================================
 function pendingKeysFor_(rows, uid, peran, tim) {
   if (peran === 'marketing') return [];   // peran marketing tidak punya urusan uang, jadi tidak ada titik merah
@@ -315,7 +317,10 @@ function handlePending_(data) {
   var peran = PERAN_ZERODEO.indexOf(data.for_peran) !== -1 ? data.for_peran : 'anggota';
   try { ensureKegiatanIds_(); } catch (e) { /* abaikan: dicoba lagi lain kali */ }
   var rows = sheetToObjects(SpreadsheetApp.getActiveSpreadsheet().getSheetByName('kegiatan'));
-  return jsonResponse({ ok: true, keys: pendingKeysFor_(rows, uid, peran, readTim_()) });
+  var tim = readTim_();
+  var keys = pendingKeysFor_(rows, uid, peran, tim);
+  try { keys = keys.concat(mkt_pengingatKeys_(uid, tim)); } catch (e) { /* tab marketing belum ada: lewati */ }
+  return jsonResponse({ ok: true, keys: keys });
 }
 
 // ============================================================

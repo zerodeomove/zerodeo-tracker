@@ -27,7 +27,7 @@
 // Penanda versi kode. Ubah setiap kali Code.gs diedit; tampil di dashboard (baris "Terakhir ambil data")
 // supaya kelihatan versi mana yang sebenarnya melayani dashboard (beda dengan isi editor kalau
 // belum Deploy -> New version).
-var KODE_VERSI = '2026-11-13 event-kegiatan';
+var KODE_VERSI = '2026-11-13 pengingat';
 
 var HEADER_ROW = 4;
 // BUKAN batas jumlah kegiatan. Ini hanya sampai baris mana template di Sheet disiapkan

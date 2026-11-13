@@ -407,7 +407,7 @@ const rowOf = (i) => H + 1 + i;
   vm.runInContext("sheetToObjects = function () { return []; }; getKategoriList = function () { return []; }; getDanaData_ = function () { return []; }; mkt_getData = function () { return {}; };", env.ctx);
   const p = env.ctx.buildPayload_();
   assert(Array.isArray(p.tim) && p.tim.length === 6 && p.tim[0].id === 'lenno'); ok('payload dashboard membawa daftar tim (id, nama, peran)');
-  assert.strictEqual(p.versi, '2026-11-13 event-kegiatan'); ok('versi kode ikut naik');
+  assert.strictEqual(p.versi, '2026-11-13 pengingat'); ok('versi kode ikut naik');
   const appJs = require('fs').readFileSync(require('path').join(__dirname, '..', 'app.js'), 'utf8');
   assert.strictEqual(/const EXPECTED_VERSI = '([^']+)'/.exec(appJs)[1], p.versi); ok('EXPECTED_VERSI di app.js sama dengan KODE_VERSI di Code.gs (tidak ada banner versi palsu)');
 }
@@ -492,6 +492,37 @@ const PENV = { APPS_SCRIPT_URL: 'https://script.google.com/macros/s/ABC/exec', S
   assert(!r.ok && /tidak ditemukan/.test(r.error)); ok('event-kegiatan: event yang tidak ada ditolak');
   const gm = post(env, Object.assign({ action: 'get_data' }, mk));
   assert(!/Estimasi|Actual|Nominal/.test(JSON.stringify(gm))); ok('event-kegiatan: jawaban untuk peran marketing tetap tanpa angka uang');
+}
+
+  /* ================= pengingat strategi untuk PIC ================= */
+{
+  const env = setupApprove();
+  const now = Date.parse('2030-03-10T05:00:00Z');   // 10 Mar 2030 siang WIB
+  const S = ['ID', 'Nama Strategi', 'Lane', 'Pesan Inti', 'Channel', 'Mulai', 'Selesai', 'PIC', 'Status', 'Dicatat Pada'];
+  env.sheets.strategi = makeSheet('strategi', [S,
+    ['S1', 'Run club Maret', 'Daily Active', 'x', 'Komunitas Olahraga', '2030-03-01', '2030-03-07', 'ricko', 'Jalan', ''],   // lewat & event tanpa hasil
+    ['S2', 'Iklan Shopee', 'Daily Active', 'x', 'Shopee', '2030-03-01', '2030-03-05', 'ricko', 'Jalan', ''],               // lewat, bukan event
+    ['S3', 'Vespa ride', 'Daily Active', 'x', 'Komunitas Vespa', '2030-03-01', '2030-03-07', 'ricko', 'Selesai', ''],      // sudah ada hasil
+    ['S4', 'Barber hari ini', 'Daily Active', 'x', 'Komunitas Barber', '2030-03-01', '2030-03-09', 'ricko', 'Selesai', ''], // baru 1 hari
+    ['S5', 'Ide motor', 'Daily Active', 'x', 'Komunitas Motor', '2030-03-01', '2030-03-01', 'ricko', 'Ide', ''],            // masih Ide
+    ['S6', 'Punya Yanuar', 'Daily Active', 'x', 'Komunitas Olahraga', '2030-03-01', '2030-03-05', 'Yanuar', 'Jalan', ''],   // PIC nama lama
+    ['S7', 'Masih jalan', 'Daily Active', 'x', 'Komunitas Olahraga', '2030-03-01', '2030-03-20', 'ricko', 'Jalan', ''],
+  ]);
+  env.sheets.hasil_event = makeSheet('hasil_event', [['ID', 'Tanggal Event', 'Nama Event', 'Channel', 'Nama Komunitas', 'Kode Voucher', 'Hadir', 'Coba Produk', 'Tanya Beli Di Mana', 'Order via Kode', 'Konten UGC', 'Strategi', 'PIC Pencatat', 'Dicatat Pada', 'Kegiatan'],
+    ['E1', '2030-03-06', 'Ride', 'Komunitas Vespa', '', '', 10, 0, 0, 1, 0, 'vespa ride', 'ricko', '', '']]);
+  const tim = env.ctx.readTim_();
+  const k = (uid) => Array.from(env.ctx.mkt_pengingatKeys_(uid, tim, now)).sort();
+  assert.deepStrictEqual(k('ricko'), ['z:mkt-hasil:S1', 'z:mkt-selesai:S1', 'z:mkt-selesai:S2']);
+  ok('pengingat Ricko: S1 (lewat + hasil belum), S2 lewat tapi bukan event -> hanya "tandai selesai"');
+  assert.deepStrictEqual(k('yanuar'), ['z:mkt-hasil:S6', 'z:mkt-selesai:S6']); ok('pengingat: PIC berupa nama lama tetap sampai ke pemiliknya');
+  assert.deepStrictEqual(k('lemon'), []); ok('pengingat hanya untuk PIC strategi, bukan semua orang');
+  const call = (body) => JSON.parse(env.ctx.doPost({ postData: { contents: JSON.stringify(body) } }).text);
+  const svc = env.ctx.makeHubToken_('hub-service', 'service', 300);
+  const r = call({ action: 'pending', token: svc, for_uid: 'vendor', for_peran: 'marketing' });
+  assert.strictEqual(r.ok, true); assert.deepStrictEqual(Array.from(r.keys), []); ok('pending peran marketing tanpa strategi: kosong');
+  env.sheets.strategi.rows.push(['S8', 'Punya vendor', 'Daily Active', 'x', 'Komunitas Olahraga', '2020-01-01', '2020-01-02', 'vendor', 'Jalan', '']);
+  const r2 = call({ action: 'pending', token: svc, for_uid: 'vendor', for_peran: 'marketing' });
+  assert.deepStrictEqual(Array.from(r2.keys).sort(), ['z:mkt-hasil:S8', 'z:mkt-selesai:S8']); ok('pending: peran marketing dapat titik merah untuk strateginya sendiri (tanpa kunci uang)');
 }
 
 console.log('\n' + n + ' pemeriksaan lolos');

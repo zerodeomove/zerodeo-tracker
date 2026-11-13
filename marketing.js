@@ -95,6 +95,47 @@ $('ek-simpan').addEventListener('click', () => {
   closeModal('m-eventKeg');
 });
 
+// ---------- pengingat untuk PIC strategi (aturan sama dengan mkt_pengingatKeys_ di Marketing.gs) ----------
+function pengingatMkt(uid) {
+  if (!uid) return [];
+  const tgl = (ms) => new Date(ms - new Date(ms).getTimezoneOffset() * 60000).toISOString().slice(0, 10);
+  const hariIni = todayStr(), batasHasil = tgl(Date.now() - 2 * 86400000);
+  const chEvent = new Set(), punyaHasil = new Set();
+  M.hasil_event.forEach((e) => {
+    splitList(e.Channel).forEach((c) => chEvent.add(c.toLowerCase()));
+    if (e.Strategi) punyaHasil.add(String(e.Strategi).trim().toLowerCase());
+  });
+  const out = [];
+  M.strategi.forEach((r) => {
+    const selesai = String(r.Selesai || '');
+    if (!r.ID || !/^\d{4}-\d{2}-\d{2}$/.test(selesai)) return;
+    if (!String(r.PIC || '').split(',').some((p) => picKey(p) === uid)) return;
+    if (r.Status === 'Jalan' && selesai < hariIni) out.push({ jenis: 'selesai', r });
+    const isEvent = splitList(r.Channel).some((c) => { c = c.toLowerCase(); return c.indexOf('komunitas') === 0 || chEvent.has(c); });
+    if (r.Status !== 'Ide' && isEvent && selesai <= batasHasil && !punyaHasil.has(String(r['Nama Strategi'] || '').trim().toLowerCase())) out.push({ jenis: 'hasil', r });
+  });
+  return out;
+}
+function renderPengingat() {
+  const list = pengingatMkt(myUid());
+  const box = $('mktIngat');
+  box.hidden = !list.length;
+  if (!list.length) { box.innerHTML = ''; return; }
+  box.innerHTML = '<b>Pengingat untukmu</b>' + list.map((x) => {
+    const nama = zEsc(x.r['Nama Strategi'] || ''), id = zEsc(x.r.ID);
+    return x.jenis === 'selesai'
+      ? `<div class="ingat-baris"><span>Strategi <b>${nama}</b> sudah lewat tanggal selesai (${mktDate(x.r.Selesai)}) tapi masih <i>Jalan</i>.</span>
+          <button type="button" class="btn" data-id="${id}" onclick="setStrategiStatus(this.dataset.id, 'Selesai')">Tandai Selesai</button></div>`
+      : `<div class="ingat-baris"><span>Strategi <b>${nama}</b> selesai ${mktDate(x.r.Selesai)}, hasil event-nya belum diisi.</span>
+          <button type="button" class="btn green" data-nama="${nama}" onclick="isiHasilUntuk(this.dataset.nama)">Isi hasil event</button></div>`;
+  }).join('');
+}
+function isiHasilUntuk(namaStrategi) {
+  showView('event');
+  openEvent();
+  $('e-strategi').value = namaStrategi;
+}
+
 // ---------- render ----------
 function renderMarketing() {
   const note = $('mktNote');
@@ -105,6 +146,7 @@ function renderMarketing() {
     note.style.display = 'block';
   }
   fillMktFilters();
+  renderPengingat();
   renderStrategi();
   renderEvents();
 }

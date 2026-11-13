@@ -169,6 +169,34 @@ function mkt_readTab_(name) {
   return out;
 }
 
+// ---------- pengingat untuk PIC strategi (titik merah Hub + kotak di tab Marketing) ----------
+// Aturan yang sama ada di marketing.js (pengingatMkt) untuk kotak di halaman; Hub memakai kunci dari sini.
+//   z:mkt-selesai:<id> — strategimu berstatus Jalan padahal tanggal Selesai sudah lewat
+//   z:mkt-hasil:<id>   — strategi event milikmu sudah selesai >= 2 hari tapi belum ada satu pun hasil event
+// "Strategi event" = salah satu channel-nya diawali "Komunitas" atau pernah dipakai di hasil_event.
+var MKT_HARI_HASIL = 2;
+function mkt_tglStr_(ms) { return Utilities.formatDate(new Date(ms), Session.getScriptTimeZone(), 'yyyy-MM-dd'); }
+function mkt_pengingatKeys_(uid, tim, nowMs) {
+  var now = nowMs === undefined ? Date.now() : nowMs;
+  var hariIni = mkt_tglStr_(now), batasHasil = mkt_tglStr_(now - MKT_HARI_HASIL * 86400000);
+  var strategi = mkt_readTab_('strategi'), events = mkt_readTab_('hasil_event');
+  var chEvent = {}, punyaHasil = {};
+  events.forEach(function (e) {
+    String(e['Channel'] || '').split(',').forEach(function (c) { c = c.trim().toLowerCase(); if (c) chEvent[c] = 1; });
+    var s = String(e['Strategi'] || '').trim().toLowerCase(); if (s) punyaHasil[s] = 1;
+  });
+  var keys = [];
+  strategi.forEach(function (r) {
+    var id = String(r['ID'] || '').trim(), selesai = String(r['Selesai'] || ''), status = String(r['Status'] || '');
+    if (!id || !/^\d{4}-\d{2}-\d{2}$/.test(selesai)) return;
+    if (ownerIds_(r['PIC'], tim).indexOf(uid) === -1) return;
+    if (status === 'Jalan' && selesai < hariIni) keys.push('z:mkt-selesai:' + id);
+    var isEvent = String(r['Channel'] || '').split(',').some(function (c) { c = c.trim().toLowerCase(); return c && (c.indexOf('komunitas') === 0 || chEvent[c]); });
+    if (status !== 'Ide' && isEvent && selesai <= batasHasil && !punyaHasil[String(r['Nama Strategi'] || '').trim().toLowerCase()]) keys.push('z:mkt-hasil:' + id);
+  });
+  return keys;
+}
+
 function mkt_readList_(name, headerName) {
   return mkt_readTab_(name).map(function (o) { return mkt_text_(o[headerName], 60); }).filter(Boolean);
 }

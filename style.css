@@ -204,6 +204,13 @@ h2.sec:first-child { margin-top: 0; }
   padding: 2px 9px; border-radius: 20px; font-size: 12px; margin: 0 4px 4px 0; white-space: nowrap;
 }
 .pill.alt { background: #EEEDE8; color: var(--text-muted); }
+.ingat { padding: 12px 14px; border-radius: 10px; font-size: 13px; background: var(--amber-bg); color: var(--text, #1f2328); margin-bottom: 14px;
+  border: 1px solid rgba(180, 120, 0, .25); display: flex; flex-direction: column; gap: 8px; animation: ingatMasuk .25s ease-out; }
+.ingat[hidden] { display: none; }
+.ingat-baris { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
+.ingat-baris .btn { padding: 6px 12px; font-size: 12.5px; }
+@keyframes ingatMasuk { from { opacity: 0; transform: translateY(-4px); } to { opacity: 1; transform: none; } }
+@media (prefers-reduced-motion: reduce) { .ingat { animation: none; } }
 .note { padding: 12px 14px; border-radius: 8px; font-size: 13px; background: var(--amber-bg); color: var(--amber); margin-bottom: 14px; }
 
 /* ---------- popup ---------- */
