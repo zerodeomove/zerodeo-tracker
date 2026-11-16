@@ -412,6 +412,24 @@ function hideSplash() {
 }
 window.__splashMax = setTimeout(hideSplash, 20000);   // jaga-jaga: jangan menutupi halaman lebih dari 20 detik
 
+// Tautan langsung dari bot / Hub: ?cari=<nama kegiatan> mengisi kotak cari kegiatan setelah data tampil.
+let cariTautan = (function () {
+  try {
+    const c = new URLSearchParams(location.search).get('cari');
+    if (c) history.replaceState(null, '', location.pathname + location.hash);
+    return c ? c.slice(0, 80) : '';
+  } catch (e) { return ''; }
+})();
+function terapkanCariTautan() {
+  if (!cariTautan || typeof renderTable !== 'function' || !$('searchBox')) return;
+  $('searchBox').value = cariTautan;
+  if ($('filterStatus')) $('filterStatus').value = '';
+  cariTautan = '';
+  renderTable();
+  const t = $('tableKegiatan');
+  if (t) setTimeout(() => t.scrollIntoView({ behavior: 'smooth', block: 'start' }), 150);
+}
+
 async function load(fresh) {
   loadingNow = true;
   renderWho();
@@ -449,6 +467,7 @@ async function load(fresh) {
     loadingNow = false;
     hideSplash();
     runPending();
+    terapkanCariTautan();
   }
 }
 
