@@ -396,7 +396,34 @@ body.savebar-on .toast { top: 56px; }
   #tableKegiatan td.empty-state { display: block; text-align: center; }
   .toolbar select { flex: 1 1 45%; min-width: 0; }
   .toolbar .push { width: 100%; justify-content: flex-end; flex-wrap: wrap; }
+  .toolbar #searchBox { flex: 1 1 auto; min-width: 0; }
+  /* kartu kegiatan lebih padat: judul, lalu Status · PIC · Deadline, lalu Estimasi · Actual · Selisih, lalu Kategori · Tipe */
+  #tableKegiatan tr { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); column-gap: 8px; row-gap: 6px; padding: 4px 0 10px; }
+  #tableKegiatan td { display: flex; flex-direction: column; align-items: flex-start; justify-content: flex-start; gap: 1px; text-align: left; padding: 2px 14px; font-size: 13px; min-width: 0; overflow-wrap: anywhere; }
+  #tableKegiatan td:nth-child(3n+2) { padding-right: 4px; }
+  #tableKegiatan td::before { font-size: 11px; }
+  #tableKegiatan td.item, #tableKegiatan td.aksi, #tableKegiatan td.empty-state { grid-column: 1 / -1; }
+  #tableKegiatan td.aksi { flex-direction: row; align-items: center; }
+  #tableKegiatan td[data-label="Status"] { order: 1; } #tableKegiatan td[data-label="PIC"] { order: 2; } #tableKegiatan td[data-label="Deadline"] { order: 3; }
+  #tableKegiatan td[data-label="Estimasi"] { order: 4; } #tableKegiatan td[data-label="Actual"] { order: 5; } #tableKegiatan td[data-label="Selisih"] { order: 6; }
+  #tableKegiatan td[data-label="Kategori"] { order: 7; grid-column: span 2; } #tableKegiatan td[data-label="Tipe"] { order: 8; }
+  #tableKegiatan td.item { order: 0; } #tableKegiatan td.aksi { order: 9; }
 }
+
+/* Tombol Filter + panel (waktu, kategori, tipe, PIC, status, dana) */
+.filter-btn { display: inline-flex; align-items: center; gap: 6px; }
+.filter-btn.aktif { border-color: var(--accent); color: var(--accent); }
+.fbadge { background: var(--accent); color: #fff; border-radius: 10px; padding: 0 7px; font-size: 11px; line-height: 18px; }
+.filter-panel { display: flex; flex-wrap: wrap; gap: 8px; width: 100%; }
+.filter-panel[hidden] { display: none; }
+
+/* Bar Urungkan (approve / reject ditunda beberapa detik) */
+.urung-bar { position: fixed; left: 50%; bottom: 20px; transform: translate(-50%, 150%); opacity: 0; z-index: 9000; display: flex; align-items: center; gap: 14px;
+  background: #1d1f1e; color: #fff; padding: 10px 10px 10px 16px; border-radius: 12px; font-size: 14px; max-width: calc(100% - 32px); box-shadow: 0 8px 24px rgba(0,0,0,.25);
+  transition: transform .25s cubic-bezier(.2, .8, .2, 1), opacity .2s ease; pointer-events: none; }
+.urung-bar.show { transform: translate(-50%, 0); opacity: 1; pointer-events: auto; }
+.urung-bar span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.urung-bar button { flex: none; background: none; border: 1px solid rgba(255,255,255,.4); color: #fff; border-radius: 8px; padding: 6px 12px; font-weight: 600; cursor: pointer; }
 
 /* ---------- rasa: respons ketukan, transisi, fokus ----------
    Hanya transform / opacity / warna supaya ringan di HP. Mode "kurangi gerakan" mematikan semuanya. */

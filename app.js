@@ -125,6 +125,20 @@ function clearErrors(root) {
 
 // Notifikasi kecil di bawah layar (hilang sendiri). Dipakai setelah simpan, karena popup ditutup.
 let toastTimer = null;
+// Bar "Urungkan" di bawah layar: aksi baru benar-benar dikirim setelah waktunya habis (dipakai approve / reject).
+function zUrungkan(msg, onUndo, ms) {
+  let el = $('urungBar');
+  if (!el) { el = document.createElement('div'); el.id = 'urungBar'; el.className = 'urung-bar'; el.setAttribute('role', 'status'); document.body.appendChild(el); }
+  el.textContent = '';
+  const sp = document.createElement('span'); sp.textContent = msg;
+  const b = document.createElement('button'); b.type = 'button'; b.textContent = 'Urungkan';
+  b.onclick = () => { el.classList.remove('show'); clearTimeout(el._t); onUndo(); };
+  el.append(sp, b);
+  el.classList.add('show');
+  clearTimeout(el._t);
+  el._t = setTimeout(() => el.classList.remove('show'), ms);
+}
+
 function toast(msg, kind) {
   const el = $('toast');
   el.textContent = msg;
@@ -449,7 +463,7 @@ async function load(fresh) {
     if (json.ok === false) throw new Error(json.error || 'Gagal');
     applyPayload(json);
     zApi.cacheWrite(json);
-    setSync('Terakhir ambil data: ' + new Date().toLocaleString('id-ID') + ' · Apps Script: ' + backendVersi, false);
+    setSync('Diperbarui ' + new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }), false);
   } catch (err) {
     if (/Masuk lewat Hub/.test(err.message)) {
       setSync('Belum masuk lewat Hub.', false);   // layar "Masuk lewat Hub" sudah menjelaskan; tidak perlu toast galat

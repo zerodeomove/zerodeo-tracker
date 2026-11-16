@@ -41,12 +41,44 @@ function updateStatus(row, newStatus) {
   const nama = namaBaris(row) || 'baris ' + row;
   const est = r ? fmtRupiah(r['Estimasi (Rp)']) : '-';
   const verb = newStatus === 'Approved' ? 'Approve' : 'Reject';
-  if (!confirm(verb + ' "' + nama + '"' + (est !== '-' ? ' (' + est + ')' : '') + '?')) return;
-  enqueueSave({
-    label: verb + ': ' + nama,
-    payload: { action: 'update_status', row: row, status: newStatus },
-    rows: [row], restore: null
+  if (tundaKeputusan[row]) return;
+  // Tanpa pop-up "Yakin?": langsung tampil "akan di-approve" + Urungkan 6 detik, baru dikirim ke server.
+  const t = { verb: verb, job: { label: verb + ': ' + nama, payload: { action: 'update_status', row: row, status: newStatus }, rows: [row], restore: null } };
+  t.timer = setTimeout(() => kirimKeputusan(row), KEPUTUSAN_TUNDA_MS);
+  tundaKeputusan[row] = t;
+  renderTable();
+  zUrungkan(verb + ' "' + nama + '"' + (est !== '-' ? ' (' + est + ')' : ''), () => batalKeputusan(row), KEPUTUSAN_TUNDA_MS);
+}
+const KEPUTUSAN_TUNDA_MS = 6000;
+const tundaKeputusan = {};   // nomor baris -> { verb, job, timer }
+function kirimKeputusan(row) {
+  const t = tundaKeputusan[row]; if (!t) return;
+  clearTimeout(t.timer); delete tundaKeputusan[row];
+  enqueueSave(t.job);
+}
+function batalKeputusan(row) {
+  const t = tundaKeputusan[row]; if (!t) return;
+  clearTimeout(t.timer); delete tundaKeputusan[row];
+  const bar = $('urungBar'); if (bar) bar.classList.remove('show');
+  renderTable();
+  toast('Dibatalkan, belum ada yang berubah.');
+}
+window.addEventListener('pagehide', () => {
+  Object.keys(tundaKeputusan).forEach((row) => {
+    const t = tundaKeputusan[row]; clearTimeout(t.timer); delete tundaKeputusan[row];
+    try { zApi.kirimSaatTutup(t.job.payload); } catch (e) { /* abaikan */ }
   });
+});
+
+// Panel Filter (waktu, kategori, tipe, PIC, status, dana): satu tombol, menampilkan jumlah filter aktif.
+function toggleFilter(buka) {
+  const p = $('filterPanel'), b = $('filterBtn');
+  const on = buka === undefined ? p.hidden : !!buka;
+  p.hidden = !on; b.setAttribute('aria-expanded', String(on));
+}
+function resetFilter() {
+  ['filterPeriode', 'filterKategori', 'filterTipe', 'filterPic', 'filterStatus', 'filterDana'].forEach((id) => { if ($(id)) $(id).value = ''; });
+  renderTable();
 }
 
 // Boleh memutuskan kegiatan ini? (hanya untuk menampilkan tombol; server tetap memeriksa)
@@ -288,6 +320,10 @@ function renderTable() {
   const periode = $('filterPeriode').value;
   const search = $('searchBox').value.trim().toLowerCase();
   $('noNotaChip').style.display = noNotaOnly ? '' : 'none';
+  const nFilter = [periode, kat, tipe, pic, status, dana].filter(Boolean).length;
+  $('filterBadge').hidden = !nFilter; $('filterBadge').textContent = nFilter;
+  $('filterBtn').classList.toggle('aktif', !!nFilter);
+  $('filterReset').hidden = !nFilter;
 
   let hidden = 0;
   const rows = kegiatanData.filter((r) => {
@@ -323,7 +359,9 @@ function renderTable() {
     const deadlineSoon = deadlineAktif(r) && days !== null && days <= 3;
     let aksi = '';
     const editBtn = (backendEdit && canEditRow(r)) ? `<button class="aksi-btn edit" onclick="openEdit(${rowNo})">Edit</button>` : '';
-    if (pend.has(rowNo)) {
+    if (tundaKeputusan[rowNo]) {
+      aksi = `<span class="pending-note">akan di-${tundaKeputusan[rowNo].verb === 'Approve' ? 'approve' : 'reject'}…</span> <button class="aksi-btn" onclick="batalKeputusan(${rowNo})">Urungkan</button>`;
+    } else if (pend.has(rowNo)) {
       aksi = '<span class="pending-note">menyimpan…</span>';
     } else if (r['Status'] === 'Diajukan') {
       aksi = canDecide(r)

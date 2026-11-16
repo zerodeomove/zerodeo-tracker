@@ -50,7 +50,7 @@
     a.href = HUB_URL; a.textContent = 'Buka Hub';
   }
 
-  async function call(method, body, query) {
+  async function call(method, body, query, keepalive) {
     const token = lsGet(TOKEN_KEY);
     const legacy = lsGet(LEGACY_KEY);
     const headers = {};
@@ -59,6 +59,7 @@
     else { showLoginHub('Buka Zerodeo dari Hub supaya kami tahu siapa kamu. Login cukup sekali di Hub.'); throw new Error('Masuk lewat Hub dulu.'); }
 
     const opts = { method: method, headers: headers };
+    if (keepalive) opts.keepalive = true;   // tetap terkirim walau halaman sedang ditutup
     if (body) { headers['Content-Type'] = 'application/json'; opts.body = JSON.stringify(body); }
     const res = await fetch(API + (query || ''), opts);
     if (res.status === 401) {
@@ -96,6 +97,7 @@
     // fresh = true: lewati cache data di Apps Script (dipakai tombol Refresh)
     get: function (fresh) { return call('GET', null, fresh ? '?fresh=1' : ''); },
     post: function (b) { return call('POST', b); },
+    kirimSaatTutup: function (b) { return call('POST', b, '', true); },
     me: claims,          // {uid, peran, exp} atau null (untuk tampilan saja)
     logout: function () { lsDel(TOKEN_KEY); lsDel(LEGACY_KEY); lsDel(CACHE_KEY); location.href = HUB_URL; },
     cacheRead: cacheRead,

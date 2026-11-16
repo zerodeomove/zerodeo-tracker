@@ -17,7 +17,7 @@ function mktDate(s) {
 // handler kegiatan dan membuat baris sampah. Jadi popup/aksi ditahan dulu.
 function mktReady() {
   if (M.ada) return true;
-  alert('Modul marketing belum aktif di Apps Script (hook di Code.gs belum dipasang atau belum Deploy -> New version).');
+  toast('Modul marketing belum aktif di Apps Script (Deploy → New version).', 'err');
   return false;
 }
 
@@ -264,7 +264,7 @@ async function setStrategiStatus(id, status) {
     if (!j.ok) throw new Error(j.error || 'Gagal');
     load();
   } catch (e) {
-    alert('Gagal ubah status: ' + e.message);
+    toast('Gagal ubah status: ' + e.message, 'err');
     load();
   }
 }
