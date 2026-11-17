@@ -482,7 +482,7 @@
 <div class="modal-overlay" id="m-urgent">
   <div class="modal-box wide">
     <h3>Perlu ditransfer</h3>
-    <div class="hint">Sudah di-approve, tinggal ditransfer. Klik <b>Tandai Ditransfer</b> setelah uangnya dikirim.</div>
+    <div class="hint">Sudah di-approve, tinggal ditransfer. Klik <b>Catat transfer</b> setelah uangnya dikirim (bisa DP dulu, pelunasan menyusul).</div>
     <div class="scroll">
       <table>
         <thead><tr><th>Item Kegiatan</th><th>PIC</th><th>Estimasi</th><th>Deadline</th><th></th></tr></thead>
@@ -505,7 +505,15 @@
 <!-- ================= POPUP: Tandai ditransfer ================= -->
 <div class="modal-overlay" id="transferModal">
   <div class="modal-box">
-    <h3>Tandai Ditransfer</h3>
+    <h3>Catat transfer</h3>
+    <div class="tf-info" id="tf-info"></div>
+    <label>Keterangan
+      <select id="tf-ket">
+        <option value="Lunas">Lunas (sekali bayar)</option>
+        <option value="DP">DP (masih ada sisa)</option>
+        <option value="Termin">Termin (masih ada sisa)</option>
+        <option value="Pelunasan">Pelunasan</option>
+      </select></label>
     <label>PIC Transaksi
       <select id="tf-pic"><option value="">Pilih PIC…</option></select></label>
     <label>Nominal Transfer (Rp)

@@ -368,10 +368,18 @@ function botBaca_(uid, peran, q) {
       if (q.belum_nota && !(r['Status'] === 'Selesai' && !adaNota(r))) return false;
       if (teks && ((r['Item Kegiatan'] || '') + ' ' + (r['Project/Brand'] || '') + ' ' + (r['Catatan'] || '')).toLowerCase().indexOf(teks) === -1) return false;
       return true;
-    }).map(function (r) {
-      return { id: r['ID'], item: r['Item Kegiatan'], project: r['Project/Brand'] || '', pic: nama(r['PIC']), status: r['Status'],
-        deadline: r['Deadline Kegiatan'] || '', estimasi: Number(r['Estimasi (Rp)']) || 0, actual: Number(r['Actual (Rp)']) || 0,
-        transfer: Number(r['Nominal Transfer (Rp)']) || 0, nota: adaNota(r), dana: r['Dana'] || '', kategori: r['Kategori'] || '' };
+    });
+    var riwayatTf = {};
+    try { riwayatTf = getTransferData_(); } catch (err) { riwayatTf = {}; }
+    list = list.map(function (r) {
+      var est = Number(r['Estimasi (Rp)']) || 0, tf = Number(r['Nominal Transfer (Rp)']) || 0;
+      var sebagian = tf > 0 && ['Ditransfer', 'Selesai', 'Dibatalkan'].indexOf(String(r['Status'])) === -1;
+      var o = { id: r['ID'], item: r['Item Kegiatan'], project: r['Project/Brand'] || '', pic: nama(r['PIC']), status: sebagian ? r['Status'] + ' · ditransfer sebagian' : r['Status'],
+        deadline: r['Deadline Kegiatan'] || '', estimasi: est, actual: Number(r['Actual (Rp)']) || 0,
+        transfer: tf, nota: adaNota(r), dana: r['Dana'] || '', kategori: r['Kategori'] || '', catatan: String(r['Catatan'] || '').slice(0, 200) };
+      if (sebagian) o.sisa_transfer = Math.max(0, est - tf);
+      if (riwayatTf[String(r['ID'])]) o.riwayat_transfer = riwayatTf[String(r['ID'])].map(function (t) { return t.ket + ' ' + t.tgl + ' Rp' + t.nominal; });
+      return o;
     });
     return potong(list);
   }
@@ -505,7 +513,7 @@ function botNative_(a) {
     var row = baris();
     if (!row) return { error: 'Kegiatan dengan ID "' + String(a.id || '') + '" tidak ditemukan.' };
     if (j === 'putuskan') return { action: 'update_status', row: row, status: a.status };
-    if (j === 'tandai_transfer') return { action: 'mark_transferred', row: row, nominalTransfer: a.nominal, picTransaksi: a.pic_transaksi, tglTransfer: a.tanggal || '' };
+    if (j === 'tandai_transfer') return { action: 'mark_transferred', row: row, nominalTransfer: a.nominal, picTransaksi: a.pic_transaksi, tglTransfer: a.tanggal || '', keterangan: a.keterangan || '' };
     // foto/PDF nota dari Telegram (diteruskan Hub sebagai base64) disimpan ke Drive persis seperti dari dashboard
     var foto = botFotoNota_(a);
     if (foto.error) return foto;

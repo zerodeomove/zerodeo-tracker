@@ -477,3 +477,15 @@ tbody tr { transition: background-color .15s ease; }
 .keg-chips .chip .sub { display: block; font-size: 12px; }
 .biaya-est { color: var(--text-muted); }
 .link-keg { border: 1px solid var(--border); background: var(--surface); color: var(--accent-dark); border-radius: 6px; padding: 3px 8px; font: inherit; font-size: 12px; cursor: pointer; white-space: nowrap; }
+
+/* transfer bertahap (DP / termin / pelunasan) */
+.badge.sebagian { background: var(--amber-bg); color: var(--amber); }
+.tf-info { font-size: 12px; color: var(--text-muted); margin-top: 6px; }
+.tf-info b { color: var(--text); }
+.tf-bar { height: 6px; border-radius: 999px; background: #EEEDE8; overflow: hidden; margin: 2px 0 4px; max-width: 220px; }
+.tf-bar i { display: block; height: 100%; background: var(--purple); border-radius: 999px; }
+.tf-riwayat { list-style: none; padding: 0; margin: 8px 0 4px; border-top: 1px solid var(--border); }
+.tf-riwayat li { display: flex; justify-content: space-between; gap: 8px; padding: 6px 0; border-bottom: 1px dashed var(--border); color: var(--text); }
+.tf-riwayat li span { color: var(--text-muted); white-space: nowrap; }
+.modal-err.warn { background: var(--amber-bg); color: #7a5a06; }
+.modal-err.warn { padding: 8px 10px; border-radius: 8px; }

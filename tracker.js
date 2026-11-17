@@ -22,6 +22,16 @@ let backendBaru = false;
 // Dana bulk: transfer besar yang dipakai untuk banyak kebutuhan (tab "dana" di Sheet).
 // Kebutuhan tertaut lewat kolom "Dana" dan tidak punya Nominal Transfer sendiri.
 let danaList = [];
+let transferRiwayat = {};   // { "<ID kegiatan>": [ {ket, nominal, tgl, pic} ] } — transfer bertahap (DP / termin / pelunasan)
+// Transfer bertahap: Nominal Transfer = jumlah semua transfer. Sebagian = sudah ada transfer tapi belum lunas (status belum Ditransfer).
+function tfSudah(r) { return Number(r['Nominal Transfer (Rp)']) || 0; }
+function tfSebagian(r) { return tfSudah(r) > 0 && ['Ditransfer', 'Selesai', 'Dibatalkan'].indexOf(r['Status']) === -1; }
+function tfSisa(r) { return Math.max(0, (Number(r['Estimasi (Rp)']) || 0) - tfSudah(r)); }
+function tfInfoHtml(r) {
+  if (!tfSebagian(r)) return '';
+  const est = Number(r['Estimasi (Rp)']) || 0, pct = est ? Math.min(100, Math.round(tfSudah(r) / est * 100)) : 0;
+  return `<div class="tf-info"><div class="tf-bar"><i style="width:${pct}%"></i></div>Ditransfer <b>${fmtRupiah(tfSudah(r))}</b>${est ? ' dari ' + fmtRupiah(est) + ' · sisa <b>' + fmtRupiah(tfSisa(r)) + '</b>' : ''}</div>`;
+}
 let backendDana = false;
 // Apps Script versi baru mengerti edit / batalkan / pulihkan / edit dana (doGet mengirim edit: true).
 let backendEdit = false;
@@ -199,7 +209,7 @@ function renderUrgentCard() {
          <div class="card-sub">Perlu reimburse: pengeluaran melebihi dana, selisihnya ditalangi dulu.</div>` + rbHtml.replace(/Perlu reimburse [^(]*\((\d+) dana\) →/, 'Lihat $1 dana →');
     return;
   }
-  const total = items.reduce((sum, r) => sum + (Number(r['Estimasi (Rp)']) || 0), 0);
+  const total = items.reduce((sum, r) => sum + (tfSebagian(r) ? tfSisa(r) : (Number(r['Estimasi (Rp)']) || 0)), 0);
   const withDeadline = items.find((r) => r['Deadline Kegiatan']);
   const days = withDeadline ? daysUntil(withDeadline['Deadline Kegiatan']) : null;
   $('urgentCard').innerHTML =
@@ -219,11 +229,11 @@ function renderUrgentList() {
     const days = daysUntil(r['Deadline Kegiatan']);
     const soon = days !== null && days <= 3;
     return `<tr>
-      <td class="item">${zEsc(r['Item Kegiatan'] || '-')}</td>
+      <td class="item">${zEsc(r['Item Kegiatan'] || '-')}${tfSebagian(r) ? '<div class="sub">sisa pelunasan</div>' : ''}</td>
       <td>${zEsc(picNama(r['PIC']) || '-')}</td>
-      <td class="num">${fmtRupiah(r['Estimasi (Rp)'])}</td>
+      <td class="num">${fmtRupiah(tfSebagian(r) ? tfSisa(r) : r['Estimasi (Rp)'])}</td>
       <td class="${soon ? 'deadline-soon' : ''}">${zEsc(fmtDate(r['Deadline Kegiatan']))}${days === null ? '' : ' (' + dayLabel(days) + ')'}</td>
-      <td><button class="aksi-btn approve" onclick="openTransferModal(${Number(r['_row'])})">Tandai Ditransfer</button>${bayarDanaBtn(Number(r['_row']))}</td>
+      <td><button class="aksi-btn approve" onclick="openTransferModal(${Number(r['_row'])})">Catat transfer</button>${tfSebagian(r) ? '' : bayarDanaBtn(Number(r['_row']))}</td>
     </tr>`;
   }).join('');
   renderUrgentBulk();
@@ -371,16 +381,16 @@ function renderTable() {
     } else if (r['Status'] === 'Ditransfer') {
       aksi = `<button class="aksi-btn approve" onclick="openComplete(${rowNo})">Lengkapi</button>`;
     } else if (r['Status'] !== 'Selesai' && r['Status'] !== 'Dibatalkan' && !r['Dana'] && (r['Jalur'] === 'Fixed' || r['Status'] === 'Approved')) {
-      aksi = `<button class="aksi-btn approve" onclick="openTransferModal(${rowNo})">Tandai Ditransfer</button>` +
-        (r['Status'] !== 'Ditolak' ? bayarDanaBtn(rowNo) : '');
+      aksi = `<button class="aksi-btn approve" onclick="openTransferModal(${rowNo})">Catat transfer</button>` +
+        (r['Status'] !== 'Ditolak' && !tfSebagian(r) ? bayarDanaBtn(rowNo) : '');
     }
     if (!pend.has(rowNo)) aksi += editBtn;
     return `<tr>
-      <td class="item">${zEsc(r['Item Kegiatan'] || '-')}${/^https?:\/\//i.test(r['Nota/Bukti'] || '') ? ` <a class="nota-link" href="${zEsc(r['Nota/Bukti'])}" data-item="${zEsc(r['Item Kegiatan'] || '')}" onclick="return openNota(this)" target="_blank" rel="noopener noreferrer" title="Lihat nota">📎</a>` : ''}<div class="sub">${r['Tanggal Dicatat'] ? 'dicatat ' + zEsc(fmtDate(r['Tanggal Dicatat'])) : ''}${r['Tanggal Dicatat'] && r['Dana'] ? ' · ' : ''}${r['Dana'] ? 'Dana: ' + zEsc(r['Dana']) : ''}</div></td>
+      <td class="item">${zEsc(r['Item Kegiatan'] || '-')}${/^https?:\/\//i.test(r['Nota/Bukti'] || '') ? ` <a class="nota-link" href="${zEsc(r['Nota/Bukti'])}" data-item="${zEsc(r['Item Kegiatan'] || '')}" onclick="return openNota(this)" target="_blank" rel="noopener noreferrer" title="Lihat nota">📎</a>` : ''}<div class="sub">${r['Tanggal Dicatat'] ? 'dicatat ' + zEsc(fmtDate(r['Tanggal Dicatat'])) : ''}${r['Tanggal Dicatat'] && r['Dana'] ? ' · ' : ''}${r['Dana'] ? 'Dana: ' + zEsc(r['Dana']) : ''}</div>${tfInfoHtml(r)}</td>
       <td data-label="Kategori">${zEsc(r['Kategori'] || '-')}</td>
       <td data-label="Tipe">${zEsc(r['Tipe'] || '-')}</td>
       <td data-label="PIC">${zEsc(picNama(r['PIC']) || '-')}</td>
-      <td data-label="Status"><span class="badge ${statusClass}">${zEsc(r['Status'] || 'Draft')}</span></td>
+      <td data-label="Status">${tfSebagian(r) ? '<span class="badge sebagian">Ditransfer sebagian</span>' : `<span class="badge ${statusClass}">${zEsc(r['Status'] || 'Draft')}</span>`}</td>
       <td data-label="Deadline" class="${deadlineSoon ? 'deadline-soon' : ''}">${zEsc(fmtDate(r['Deadline Kegiatan']))}</td>
       <td data-label="Estimasi" class="num">${fmtRupiah(r['Estimasi (Rp)'])}</td>
       <td data-label="Actual" class="num">${fmtRupiah(r['Actual (Rp)'])}</td>
@@ -393,15 +403,25 @@ function renderTable() {
 // ---------- popup: tandai ditransfer ----------
 let transferRow = null;
 
+let tfLebihOk = false;   // peringatan "melebihi estimasi" sudah dilihat: klik Simpan berikutnya tetap menyimpan
 function openTransferModal(row) {
   transferRow = row;
+  tfLebihOk = false;
+  const r = kegiatanData.find((x) => Number(x['_row']) === Number(row)) || {};
+  const sebagian = tfSebagian(r), est = Number(r['Estimasi (Rp)']) || 0;
   $('tf-pic').innerHTML = '<option value="">Pilih PIC…</option>' +
     picOptionsHtml();
-  $('tf-nominal').value = '';
+  $('tf-nominal').value = sebagian && tfSisa(r) ? tfSisa(r) : '';
   $('tf-tanggal').value = todayStr();
+  $('tf-ket').value = sebagian ? 'Pelunasan' : 'Lunas';
+  const riw = transferRiwayat[String(r['ID'] || '')] || [];
+  $('tf-info').innerHTML = zEsc(r['Item Kegiatan'] || '') + (est ? ' · estimasi ' + fmtRupiah(est) : '') +
+    (riw.length ? '<ul class="tf-riwayat">' + riw.map((t) => `<li>${zEsc(t.ket)} · ${zEsc(fmtDate(t.tgl))} · ${zEsc(picNama(t.pic) || t.pic)} <span>${fmtRupiah(t.nominal)}</span></li>`).join('') + '</ul>' : '') +
+    (sebagian ? '<div class="sub">Sudah ditransfer ' + fmtRupiah(tfSudah(r)) + ' · sisa ' + fmtRupiah(tfSisa(r)) + '</div>' : '');
+  $('tf-submit').textContent = 'Simpan';
   const errEl = $('tf-err');
   errEl.textContent = '';
-  errEl.classList.remove('show');
+  errEl.classList.remove('show', 'warn');
   openModal('transferModal');
 }
 
@@ -424,12 +444,25 @@ function submitTransfer() {
   }
   const row = transferRow;
   const nama = namaBaris(row) || 'Kegiatan';
+  const ket = $('tf-ket').value || 'Lunas';
+  const r = kegiatanData.find((x) => Number(x['_row']) === Number(row)) || {};
+  const est = Number(r['Estimasi (Rp)']) || 0, total = tfSudah(r) + Number(nominal);
+  if (est > 0 && total > est && !tfLebihOk) {
+    // hanya peringatan: klik sekali lagi tetap menyimpan
+    tfLebihOk = true;
+    errEl.innerHTML = '⚠️ Total transfer jadi <b>' + fmtRupiah(total) + '</b>, lebih <b>' + fmtRupiah(total - est) + '</b> dari estimasi ' + fmtRupiah(est) + '. Klik <b>Tetap simpan</b> kalau memang begitu.';
+    errEl.classList.add('show', 'warn');
+    $('tf-submit').textContent = 'Tetap simpan';
+    return;
+  }
+  const sebagian = ket === 'DP' || ket === 'Termin';
   enqueueSave({
-    label: 'Ditransfer: ' + nama,
-    payload: { action: 'mark_transferred', row: row, picTransaksi: pic, nominalTransfer: Number(nominal), tglTransfer: tanggal },
+    label: (sebagian ? ket + ': ' : 'Ditransfer: ') + nama,
+    payload: { action: 'mark_transferred', row: row, picTransaksi: pic, nominalTransfer: Number(nominal), tglTransfer: tanggal, keterangan: ket },
     rows: [row],
-    okMsg: 'Ditransfer: ' + nama + '. Sekarang tinggal Lengkapi dengan Actual.',
-    restore: () => { openTransferModal(row); $('tf-pic').value = pic; $('tf-nominal').value = nominal; $('tf-tanggal').value = tanggal; }
+    okMsg: sebagian ? ket + ' ' + fmtRupiah(nominal) + ' dicatat: ' + nama + (est ? ' · sisa ' + fmtRupiah(Math.max(0, est - total)) : '') + '.'
+      : 'Ditransfer: ' + nama + '. Sekarang tinggal Lengkapi dengan Actual.',
+    restore: () => { openTransferModal(row); $('tf-pic').value = pic; $('tf-nominal').value = nominal; $('tf-tanggal').value = tanggal; $('tf-ket').value = ket; }
   });
   closeTransferModal();
 }

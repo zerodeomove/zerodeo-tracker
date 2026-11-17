@@ -27,7 +27,7 @@
 // Penanda versi kode. Ubah setiap kali Code.gs diedit; tampil di dashboard (baris "Terakhir ambil data")
 // supaya kelihatan versi mana yang sebenarnya melayani dashboard (beda dengan isi editor kalau
 // belum Deploy -> New version).
-var KODE_VERSI = '2026-11-13 bot-foto';
+var KODE_VERSI = '2026-11-17 transfer-bertahap';
 
 var HEADER_ROW = 4;
 // BUKAN batas jumlah kegiatan. Ini hanya sampai baris mana template di Sheet disiapkan
@@ -851,6 +851,7 @@ function buildPayload_() {
   // jalan. Dashboard menganggap fitur itu belum tersedia kalau kuncinya tidak ada.
   try { payload.kategori = getKategoriList(); } catch (err) { payload.kategori_error = String(err.message); }
   try { payload.dana = getDanaData_(); } catch (err) { payload.dana_error = String(err.message); }
+  try { payload.transfer = getTransferData_(); payload.transferBertahap = true; } catch (err) { payload.transfer_error = String(err.message); }
   payload.versi = KODE_VERSI;
   payload.reimburse = true;   // penanda: backend ini mengerti reimburse_dana
   payload.fotoBatch = true;   // penanda: Isi Actual sekaligus menerima foto/PDF per baris
@@ -1183,12 +1184,52 @@ function handleMarkTransferred(data) {
 
   var tglTransfer = data.tglTransfer ? new Date(data.tglTransfer) : new Date();
 
-  sheet.getRange(row, COL.PIC_TRANSAKSI).setValue(picTransaksi);
-  sheet.getRange(row, COL.NOMINAL_TRANSFER).setValue(nominal).setNumberFormat(CURR_FORMAT);
-  sheet.getRange(row, COL.TGL_TRANSFER).setValue(tglTransfer).setNumberFormat(DATE_FORMAT);
-  sheet.getRange(row, COL.STATUS).setValue('Ditransfer');
+  // Transfer bertahap: DP / Termin = sebagian (status tetap, bisa dicatat lagi); Lunas / Pelunasan = selesai ditransfer.
+  // Nominal Transfer di tab kegiatan = JUMLAH semua transfer (rumus ringkasan & saldo tetap benar); rinciannya di tab "transfer".
+  var ket = TRANSFER_KET.indexOf(String(data.keterangan || '')) !== -1 ? String(data.keterangan) : 'Lunas';   // tanpa keterangan = sekali bayar (perilaku lama)
+  var sebagian = ket === 'DP' || ket === 'Termin';
+  var sebelumnya = Number(sheet.getRange(row, COL.NOMINAL_TRANSFER).getValue()) || 0;
+  var total = sebelumnya + nominal;
+  var estimasi = Number(sheet.getRange(row, COL.ESTIMASI).getValue()) || 0;
 
-  return jsonResponse({ ok: true, row: row });
+  sheet.getRange(row, COL.PIC_TRANSAKSI).setValue(picTransaksi);
+  sheet.getRange(row, COL.NOMINAL_TRANSFER).setValue(total).setNumberFormat(CURR_FORMAT);
+  sheet.getRange(row, COL.TGL_TRANSFER).setValue(tglTransfer).setNumberFormat(DATE_FORMAT);
+  if (!sebagian) sheet.getRange(row, COL.STATUS).setValue('Ditransfer');
+  try {
+    transferSheet_(true).appendRow([new Date(), String(sheet.getRange(row, COL.ID).getValue() || ''), String(sheet.getRange(row, COL.ITEM).getValue() || ''),
+      ket, nominal, tglTransfer, picTransaksi, CURRENT_WHO_ ? CURRENT_WHO_.uid : '']);
+  } catch (err) { /* riwayat gagal dicatat: transfernya tetap tersimpan di tab kegiatan */ }
+
+  return jsonResponse({ ok: true, row: row, keterangan: ket, sebagian: sebagian, total_transfer: total,
+    sisa: Math.max(0, estimasi - total), lebih: estimasi > 0 ? Math.max(0, total - estimasi) : 0 });
+}
+
+// ---- Transfer bertahap: riwayat tiap transfer (DP, termin, pelunasan) per kegiatan ----
+var TAB_TRANSFER = 'transfer';
+var TRANSFER_HEADER = ['Dicatat', 'ID Kegiatan', 'Item Kegiatan', 'Keterangan', 'Nominal (Rp)', 'Tgl Transfer', 'PIC Transaksi', 'Oleh'];
+var TRANSFER_KET = ['Lunas', 'DP', 'Termin', 'Pelunasan'];
+
+function transferSheet_(buat) {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var sh = ss.getSheetByName(TAB_TRANSFER);
+  if (!sh && buat) { sh = ss.insertSheet(TAB_TRANSFER); sh.appendRow(TRANSFER_HEADER); }
+  return sh;
+}
+
+// { "<ID kegiatan>": [ { ket, nominal, tgl "yyyy-MM-dd", pic } ] } — urut seperti dicatat.
+function getTransferData_() {
+  var sh = transferSheet_(false);
+  var out = {};
+  if (!sh || sh.getLastRow() < 2) return out;
+  var tz = Session.getScriptTimeZone();
+  sh.getRange(2, 1, sh.getLastRow() - 1, TRANSFER_HEADER.length).getValues().forEach(function (r) {
+    var id = String(r[1] || '');
+    if (!id) return;
+    (out[id] = out[id] || []).push({ ket: String(r[3] || ''), nominal: Number(r[4]) || 0,
+      tgl: r[5] instanceof Date ? Utilities.formatDate(r[5], tz, 'yyyy-MM-dd') : String(r[5] || ''), pic: String(r[6] || '') });
+  });
+  return out;
 }
 
 // Bayar dari dana: tautkan kegiatan yang SUDAH ada (pengajuan yang di-approve, atau jalur
