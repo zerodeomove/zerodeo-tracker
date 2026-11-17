@@ -378,7 +378,7 @@ function botBaca_(uid, peran, q) {
         deadline: r['Deadline Kegiatan'] || '', estimasi: est, actual: Number(r['Actual (Rp)']) || 0,
         transfer: tf, nota: adaNota(r), dana: r['Dana'] || '', kategori: r['Kategori'] || '', catatan: String(r['Catatan'] || '').slice(0, 200) };
       if (sebagian) o.sisa_transfer = Math.max(0, est - tf);
-      if (riwayatTf[String(r['ID'])]) o.riwayat_transfer = riwayatTf[String(r['ID'])].map(function (t) { return t.ket + ' ' + t.tgl + ' Rp' + t.nominal; });
+      if (riwayatTf[String(r['ID'])]) o.riwayat_transfer = riwayatTf[String(r['ID'])].map(function (t) { return t.ket + ' ' + t.tgl + ' Rp' + t.nominal + (t.bukti ? ' (bukti: ' + t.bukti + ')' : ' (tanpa bukti)'); });
       return o;
     });
     return potong(list);
@@ -513,10 +513,10 @@ function botNative_(a) {
     var row = baris();
     if (!row) return { error: 'Kegiatan dengan ID "' + String(a.id || '') + '" tidak ditemukan.' };
     if (j === 'putuskan') return { action: 'update_status', row: row, status: a.status };
-    if (j === 'tandai_transfer') return { action: 'mark_transferred', row: row, nominalTransfer: a.nominal, picTransaksi: a.pic_transaksi, tglTransfer: a.tanggal || '', keterangan: a.keterangan || '' };
-    // foto/PDF nota dari Telegram (diteruskan Hub sebagai base64) disimpan ke Drive persis seperti dari dashboard
+    // foto/PDF nota / bukti transfer dari Telegram (diteruskan Hub sebagai base64) disimpan ke Drive persis seperti dari dashboard
     var foto = botFotoNota_(a);
     if (foto.error) return foto;
+    if (j === 'tandai_transfer') return Object.assign({ action: 'mark_transferred', row: row, nominalTransfer: a.nominal, picTransaksi: a.pic_transaksi, tglTransfer: a.tanggal || '', keterangan: a.keterangan || '' }, foto);
     if (j === 'lengkapi') return Object.assign({ action: 'complete_kegiatan', row: row, actual: a.actual }, foto);
     if (j === 'batalkan_kegiatan') return { action: 'cancel_kegiatan', row: row, alasan: a.alasan || '' };
     if (j === 'pulihkan_kegiatan') return { action: 'restore_kegiatan', row: row };

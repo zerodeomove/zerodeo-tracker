@@ -407,7 +407,7 @@ function renderTable() {
 // ---------- popup: tandai ditransfer ----------
 let transferRow = null;
 
-let tfLebihOk = false;   // peringatan "melebihi estimasi" sudah dilihat: klik Simpan berikutnya tetap menyimpan
+let tfLebihOk = false, tfBukti = null;   // tfBukti: {base64, mime, kb} bukti transfer yang dipilih   // peringatan "melebihi estimasi" sudah dilihat: klik Simpan berikutnya tetap menyimpan
 function openTransferModal(row) {
   transferRow = row;
   tfLebihOk = false;
@@ -420,10 +420,11 @@ function openTransferModal(row) {
   $('tf-ket').value = sebagian ? 'Pelunasan' : 'Lunas';
   const riw = transferRiwayat[String(r['ID'] || '')] || [];
   $('tf-info').innerHTML = zEsc(r['Item Kegiatan'] || '') + (est ? ' · estimasi ' + fmtRupiah(est) : '') +
-    (riw.length ? '<ul class="tf-riwayat">' + riw.map((t) => `<li>${zEsc(t.ket)} · ${zEsc(fmtDate(t.tgl))} · ${zEsc(picNama(t.pic) || t.pic)} <span>${fmtRupiah(t.nominal)}</span></li>`).join('') + '</ul>' : '') +
+    (riw.length ? '<ul class="tf-riwayat">' + riw.map((t) => `<li>${zEsc(t.ket)} · ${zEsc(fmtDate(t.tgl))} · ${zEsc(picNama(t.pic) || t.pic)}${/^https:\/\/(drive|docs)\.google\.com\//.test(t.bukti || '') ? ` <a href="${zEsc(t.bukti)}" target="_blank" rel="noopener noreferrer" title="Lihat bukti transfer">📎</a>` : ''} <span>${fmtRupiah(t.nominal)}</span></li>`).join('') + '</ul>' : '') +
     (sebagian ? '<div class="sub">Sudah ditransfer ' + fmtRupiah(tfSudah(r)) + ' · sisa ' + fmtRupiah(tfSisa(r)) + '</div>' : '') +
     (r['Status'] !== 'Approved' && r['Jalur'] !== 'Fixed' ? '<div class="tf-acc">Belum di-approve (status ' + zEsc(r['Status'] || 'Draft') + '). Karena uangnya sudah ditransfer, kegiatan ini <b>dianggap acc</b> dan dicatat di Catatan.</div>' : '');
   $('tf-submit').textContent = 'Simpan';
+  tfBukti = null; $('tf-bukti').value = ''; $('tf-bukti-info').textContent = '';
   const errEl = $('tf-err');
   errEl.textContent = '';
   errEl.classList.remove('show', 'warn');
@@ -463,7 +464,8 @@ function submitTransfer() {
   const sebagian = ket === 'DP' || ket === 'Termin';
   enqueueSave({
     label: (sebagian ? ket + ': ' : 'Ditransfer: ') + nama,
-    payload: { action: 'mark_transferred', row: row, picTransaksi: pic, nominalTransfer: Number(nominal), tglTransfer: tanggal, keterangan: ket },
+    payload: Object.assign({ action: 'mark_transferred', row: row, picTransaksi: pic, nominalTransfer: Number(nominal), tglTransfer: tanggal, keterangan: ket },
+      tfBukti ? { photoBase64: tfBukti.base64, photoMime: tfBukti.mime } : {}),
     rows: [row],
     okMsg: sebagian ? ket + ' ' + fmtRupiah(nominal) + ' dicatat: ' + nama + (est ? ' · sisa ' + fmtRupiah(Math.max(0, est - total)) : '') + '.'
       : 'Ditransfer: ' + nama + '. Sekarang tinggal Lengkapi dengan Actual.',
@@ -1192,6 +1194,14 @@ function compressImage(file) {
     reader.readAsDataURL(file);
   });
 }
+
+$('tf-bukti').addEventListener('change', async () => {
+  const file = $('tf-bukti').files[0];
+  tfBukti = null; $('tf-bukti-info').textContent = '';
+  if (!file) return;
+  try { tfBukti = await compressImage(file); $('tf-bukti-info').textContent = '📎 ' + (tfBukti.name || 'bukti') + ' · ' + tfBukti.kb + ' KB, ikut tersimpan ke Drive'; }
+  catch (err) { $('tf-bukti').value = ''; $('tf-bukti-info').textContent = '⚠️ ' + err.message; }
+});
 
 $('c-photo').addEventListener('change', async () => {
   const file = $('c-photo').files[0];

@@ -27,7 +27,7 @@
 // Penanda versi kode. Ubah setiap kali Code.gs diedit; tampil di dashboard (baris "Terakhir ambil data")
 // supaya kelihatan versi mana yang sebenarnya melayani dashboard (beda dengan isi editor kalau
 // belum Deploy -> New version).
-var KODE_VERSI = '2026-11-17 transfer-acc';
+var KODE_VERSI = '2026-11-17 bukti-transfer';
 
 var HEADER_ROW = 4;
 // BUKAN batas jumlah kegiatan. Ini hanya sampai baris mana template di Sheet disiapkan
@@ -1204,18 +1204,24 @@ function handleMarkTransferred(data) {
     noteCell.setValue(existingNote ? (existingNote + ' | ' + stamp) : stamp);
   }
   sheet.getRange(row, COL.STATUS).setValue(sebagian ? (accOtomatis ? 'Approved' : currentStatus) : 'Ditransfer');
+  // bukti transfer (foto/PDF) ke folder Drive yang sama dengan nota; gagal unggah tidak menggagalkan catatan transfer
+  var bukti = '', buktiGagal = '';
+  if (data.photoBase64) {
+    try { bukti = saveNotaPhoto_('Bukti transfer ' + ket + ' - ' + String(sheet.getRange(row, COL.ITEM).getValue() || ''), data.photoBase64, data.photoMime); }
+    catch (err) { buktiGagal = String(err.message || err); }
+  }
   try {
     transferSheet_(true).appendRow([new Date(), String(sheet.getRange(row, COL.ID).getValue() || ''), String(sheet.getRange(row, COL.ITEM).getValue() || ''),
-      ket, nominal, tglTransfer, picTransaksi, CURRENT_WHO_ ? CURRENT_WHO_.uid : '']);
+      ket, nominal, tglTransfer, picTransaksi, CURRENT_WHO_ ? CURRENT_WHO_.uid : '', bukti]);
   } catch (err) { /* riwayat gagal dicatat: transfernya tetap tersimpan di tab kegiatan */ }
 
-  return jsonResponse({ ok: true, row: row, keterangan: ket, sebagian: sebagian, acc_otomatis: accOtomatis, total_transfer: total,
+  return jsonResponse({ ok: true, row: row, keterangan: ket, sebagian: sebagian, acc_otomatis: accOtomatis, bukti: bukti || undefined, bukti_gagal: buktiGagal || undefined, total_transfer: total,
     sisa: Math.max(0, estimasi - total), lebih: estimasi > 0 ? Math.max(0, total - estimasi) : 0 });
 }
 
 // ---- Transfer bertahap: riwayat tiap transfer (DP, termin, pelunasan) per kegiatan ----
 var TAB_TRANSFER = 'transfer';
-var TRANSFER_HEADER = ['Dicatat', 'ID Kegiatan', 'Item Kegiatan', 'Keterangan', 'Nominal (Rp)', 'Tgl Transfer', 'PIC Transaksi', 'Oleh'];
+var TRANSFER_HEADER = ['Dicatat', 'ID Kegiatan', 'Item Kegiatan', 'Keterangan', 'Nominal (Rp)', 'Tgl Transfer', 'PIC Transaksi', 'Oleh', 'Bukti Transfer'];
 var TRANSFER_KET = ['Lunas', 'DP', 'Termin', 'Pelunasan'];
 
 function transferSheet_(buat) {
@@ -1235,7 +1241,8 @@ function getTransferData_() {
     var id = String(r[1] || '');
     if (!id) return;
     (out[id] = out[id] || []).push({ ket: String(r[3] || ''), nominal: Number(r[4]) || 0,
-      tgl: r[5] instanceof Date ? Utilities.formatDate(r[5], tz, 'yyyy-MM-dd') : String(r[5] || ''), pic: String(r[6] || '') });
+      tgl: r[5] instanceof Date ? Utilities.formatDate(r[5], tz, 'yyyy-MM-dd') : String(r[5] || ''), pic: String(r[6] || ''),
+      bukti: /^https:\/\/(drive|docs)\.google\.com\//.test(String(r[8] || '')) ? String(r[8]) : '' });
   });
   return out;
 }

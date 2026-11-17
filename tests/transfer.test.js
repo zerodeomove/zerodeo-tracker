@@ -88,7 +88,19 @@ tf(10, 500000, 'DP');
 vm.runInContext("sheetToObjects = function (sh) { var h = sh.rows[3]; return sh.rows.slice(4).map(function (r, i) { var o = { _row: i + 5 }; h.forEach(function (k, j) { o[k] = r[j]; }); return o; }); };", ctx);
 const b = ctx.botBaca_('lenno', 'admin', { jenis: 'kegiatan', teks: 'kaos' });
 const kaos = b.data[0];
-assert.strictEqual(kaos.status, 'Approved · ditransfer sebagian'); assert.strictEqual(kaos.sisa_transfer, 1500000); assert(/^DP 2026-11-13 Rp500000$/.test(kaos.riwayat_transfer[0]), kaos.riwayat_transfer[0]);
+assert.strictEqual(kaos.status, 'Approved · ditransfer sebagian'); assert.strictEqual(kaos.sisa_transfer, 1500000); assert(/^DP 2026-11-13 Rp500000 \(tanpa bukti\)$/.test(kaos.riwayat_transfer[0]), kaos.riwayat_transfer[0]);
 ok('bot: kegiatan yang dibayar sebagian terbaca "ditransfer sebagian" + sisa + riwayat transfernya');
+
+// bukti transfer (foto/PDF) ikut tersimpan per transfer
+vm.runInContext("saveNotaPhoto_ = function (nama, b64, mime) { if (b64 === 'rusak') throw new Error('Folder nota tidak bisa dibuka.'); return 'https://drive.google.com/file/d/BUKTI/view#' + encodeURIComponent(nama); };", ctx);
+sheets.kegiatan.rows.push(baris('Stiker kedua', 1000000, 'Approved', 'Pengajuan', 'k-stiker2'));
+r = JSON.parse(ctx.handleMarkTransferred({ row: 11, nominalTransfer: 500000, picTransaksi: 'lenno', keterangan: 'DP', photoBase64: 'aGFsbw==', photoMime: 'image/jpeg' }).text);
+assert.strictEqual(r.ok, true); assert(/^https:\/\/drive\.google\.com\/file\/d\/BUKTI/.test(r.bukti) && /Bukti%20transfer%20DP%20-%20Stiker%20kedua/.test(r.bukti));
+const tfRow = sheets.transfer.rows[sheets.transfer.rows.length - 1];
+assert.strictEqual(tfRow[8], r.bukti); assert.strictEqual(ctx.getTransferData_()['k-stiker2'][0].bukti, r.bukti); ok('bukti transfer: disimpan ke Drive ("Bukti transfer DP - <item>"), link tercatat di riwayat transfer');
+r = JSON.parse(ctx.handleMarkTransferred({ row: 11, nominalTransfer: 500000, picTransaksi: 'lenno', keterangan: 'Pelunasan', photoBase64: 'rusak' }).text);
+assert.strictEqual(r.ok, true); assert(/Folder nota/.test(r.bukti_gagal)); assert.strictEqual(keg(11)[10], 'Ditransfer'); ok('unggah bukti gagal: transfernya tetap tercatat, alasannya dikabarkan');
+const nat = ctx.botNative_({ jenis: 'tandai_transfer', id: 'k-stiker2', nominal: 1, pic_transaksi: 'lenno', keterangan: 'DP', photoBase64: 'aGFsbw==', photoMime: 'image/jpeg' });
+assert.strictEqual(nat.action, 'mark_transferred'); assert.strictEqual(nat.photoBase64, 'aGFsbw=='); assert.strictEqual(nat.keterangan, 'DP'); ok('bot: foto yang dikirim ke Telegram ikut diteruskan sebagai bukti transfer');
 
 console.log('\n' + n + ' pemeriksaan lolos');
