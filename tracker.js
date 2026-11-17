@@ -27,10 +27,15 @@ let transferRiwayat = {};   // { "<ID kegiatan>": [ {ket, nominal, tgl, pic} ] }
 function tfSudah(r) { return Number(r['Nominal Transfer (Rp)']) || 0; }
 function tfSebagian(r) { return tfSudah(r) > 0 && ['Ditransfer', 'Selesai', 'Dibatalkan'].indexOf(r['Status']) === -1; }
 function tfSisa(r) { return Math.max(0, (Number(r['Estimasi (Rp)']) || 0) - tfSudah(r)); }
+// Link bukti transfer (📎 DP, 📎 Pelunasan, …) untuk kartu kegiatan; kosong kalau belum ada bukti.
+function tfBuktiHtml(r) {
+  const riw = (transferRiwayat[String(r['ID'] || '')] || []).filter((t) => /^https:\/\/(drive|docs)\.google\.com\//.test(t.bukti || ''));
+  return riw.length ? `<div class="tf-bukti-list">Bukti transfer: ${riw.map((t) => `<a href="${zEsc(t.bukti)}" target="_blank" rel="noopener noreferrer">📎 ${zEsc(t.ket)}</a>`).join(' ')}</div>` : '';
+}
 function tfInfoHtml(r) {
-  if (!tfSebagian(r)) return '';
+  if (!tfSebagian(r)) return tfBuktiHtml(r);
   const est = Number(r['Estimasi (Rp)']) || 0, pct = est ? Math.min(100, Math.round(tfSudah(r) / est * 100)) : 0;
-  return `<div class="tf-info"><div class="tf-bar"><i style="width:${pct}%"></i></div>Ditransfer <b>${fmtRupiah(tfSudah(r))}</b>${est ? ' dari ' + fmtRupiah(est) + ' · sisa <b>' + fmtRupiah(tfSisa(r)) + '</b>' : ''}</div>`;
+  return `<div class="tf-info"><div class="tf-bar"><i style="width:${pct}%"></i></div>Ditransfer <b>${fmtRupiah(tfSudah(r))}</b>${est ? ' dari ' + fmtRupiah(est) + ' · sisa <b>' + fmtRupiah(tfSisa(r)) + '</b>' : ''}</div>` + tfBuktiHtml(r);
 }
 let backendDana = false;
 // Apps Script versi baru mengerti edit / batalkan / pulihkan / edit dana (doGet mengirim edit: true).
