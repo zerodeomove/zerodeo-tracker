@@ -508,7 +508,7 @@ function botFotoNota_(a) {
 function botNative_(a) {
   var baris = function () { var r = botBarisKegiatan_(a.id); return r ? r : null; };
   var j = String(a.jenis || '');
-  var perluBaris = { putuskan: 'update_status', tandai_transfer: 'mark_transferred', lengkapi: 'complete_kegiatan', ubah_kegiatan: 'edit_kegiatan', batalkan_kegiatan: 'cancel_kegiatan', pulihkan_kegiatan: 'restore_kegiatan' };
+  var perluBaris = { putuskan: 'update_status', tandai_transfer: 'mark_transferred', tempel_bukti: 'attach_transfer_proof', lengkapi: 'complete_kegiatan', ubah_kegiatan: 'edit_kegiatan', batalkan_kegiatan: 'cancel_kegiatan', pulihkan_kegiatan: 'restore_kegiatan' };
   if (perluBaris[j]) {
     var row = baris();
     if (!row) return { error: 'Kegiatan dengan ID "' + String(a.id || '') + '" tidak ditemukan.' };
@@ -516,6 +516,7 @@ function botNative_(a) {
     // foto/PDF nota / bukti transfer dari Telegram (diteruskan Hub sebagai base64) disimpan ke Drive persis seperti dari dashboard
     var foto = botFotoNota_(a);
     if (foto.error) return foto;
+    if (j === 'tempel_bukti') return foto.photoBase64 ? Object.assign({ action: 'attach_transfer_proof', row: row, keterangan: a.keterangan || '', ganti: a.ganti === true }, foto) : { error: 'Foto / PDF bukti transfernya tidak ikut. Kirim fotonya lagi bersama perintahnya.' };
     if (j === 'tandai_transfer') return Object.assign({ action: 'mark_transferred', row: row, nominalTransfer: a.nominal, picTransaksi: a.pic_transaksi, tglTransfer: a.tanggal || '', keterangan: a.keterangan || '' }, foto);
     if (j === 'lengkapi') return Object.assign({ action: 'complete_kegiatan', row: row, actual: a.actual }, foto);
     if (j === 'batalkan_kegiatan') return { action: 'cancel_kegiatan', row: row, alasan: a.alasan || '' };

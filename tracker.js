@@ -420,7 +420,7 @@ function openTransferModal(row) {
   $('tf-ket').value = sebagian ? 'Pelunasan' : 'Lunas';
   const riw = transferRiwayat[String(r['ID'] || '')] || [];
   $('tf-info').innerHTML = zEsc(r['Item Kegiatan'] || '') + (est ? ' · estimasi ' + fmtRupiah(est) : '') +
-    (riw.length ? '<ul class="tf-riwayat">' + riw.map((t) => `<li>${zEsc(t.ket)} · ${zEsc(fmtDate(t.tgl))} · ${zEsc(picNama(t.pic) || t.pic)}${/^https:\/\/(drive|docs)\.google\.com\//.test(t.bukti || '') ? ` <a href="${zEsc(t.bukti)}" target="_blank" rel="noopener noreferrer" title="Lihat bukti transfer">📎</a>` : ''} <span>${fmtRupiah(t.nominal)}</span></li>`).join('') + '</ul>' : '') +
+    (riw.length ? '<ul class="tf-riwayat">' + riw.map((t, i) => `<li>${zEsc(t.ket)} · ${zEsc(fmtDate(t.tgl))} · ${zEsc(picNama(t.pic) || t.pic)}${/^https:\/\/(drive|docs)\.google\.com\//.test(t.bukti || '') ? ` <a href="${zEsc(t.bukti)}" target="_blank" rel="noopener noreferrer" title="Lihat bukti transfer">📎</a>` : ` <button type="button" class="tf-tempel" onclick="tempelBukti(${Number(row)}, ${i})">📎 Tambah bukti</button>`} <span>${fmtRupiah(t.nominal)}</span></li>`).join('') + '</ul>' : '') +
     (sebagian ? '<div class="sub">Sudah ditransfer ' + fmtRupiah(tfSudah(r)) + ' · sisa ' + fmtRupiah(tfSisa(r)) + '</div>' : '') +
     (r['Status'] !== 'Approved' && r['Jalur'] !== 'Fixed' ? '<div class="tf-acc">Belum di-approve (status ' + zEsc(r['Status'] || 'Draft') + '). Karena uangnya sudah ditransfer, kegiatan ini <b>dianggap acc</b> dan dicatat di Catatan.</div>' : '');
   $('tf-submit').textContent = 'Simpan';
@@ -1194,6 +1194,25 @@ function compressImage(file) {
     reader.readAsDataURL(file);
   });
 }
+
+// Tempel bukti ke transfer yang sudah tercatat (tidak menambah nominal): pilih file, langsung dikirim.
+let tempelTarget = null;
+function tempelBukti(row, index) { tempelTarget = { row, index }; $('tf-tempel-file').value = ''; $('tf-tempel-file').click(); }
+$('tf-tempel-file').addEventListener('change', async () => {
+  const file = $('tf-tempel-file').files[0];
+  if (!file || !tempelTarget) return;
+  const { row, index } = tempelTarget;
+  let f;
+  try { f = await compressImage(file); } catch (err) { toast('⚠️ ' + err.message); return; }
+  const nama = namaBaris(row) || 'Kegiatan';
+  enqueueSave({
+    label: 'Bukti transfer: ' + nama,
+    payload: { action: 'attach_transfer_proof', row: row, index: index, photoBase64: f.base64, photoMime: f.mime },
+    rows: [row],
+    okMsg: 'Bukti transfer tersimpan: ' + nama + '.'
+  });
+  closeTransferModal();
+});
 
 $('tf-bukti').addEventListener('change', async () => {
   const file = $('tf-bukti').files[0];

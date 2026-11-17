@@ -103,4 +103,27 @@ assert.strictEqual(r.ok, true); assert(/Folder nota/.test(r.bukti_gagal)); asser
 const nat = ctx.botNative_({ jenis: 'tandai_transfer', id: 'k-stiker2', nominal: 1, pic_transaksi: 'lenno', keterangan: 'DP', photoBase64: 'aGFsbw==', photoMime: 'image/jpeg' });
 assert.strictEqual(nat.action, 'mark_transferred'); assert.strictEqual(nat.photoBase64, 'aGFsbw=='); assert.strictEqual(nat.keterangan, 'DP'); ok('bot: foto yang dikirim ke Telegram ikut diteruskan sebagai bukti transfer');
 
+// tempel bukti ke transfer yang sudah tercatat (tidak menambah nominal)
+const tempel = (o) => JSON.parse(ctx.handleAttachTransferProof(Object.assign({ photoBase64: 'aGFsbw==', photoMime: 'image/jpeg' }, o)).text);
+const totalSebelum = keg(5)[12];
+r = tempel({ row: 5 });
+assert.strictEqual(r.ok, false); assert(/Ada beberapa transfer: DP .*Pelunasan/.test(r.error), r.error); ok('tempel bukti: ada DP dan pelunasan tanpa bukti → ditanya yang mana');
+r = tempel({ row: 5, keterangan: 'dp' });
+assert.strictEqual(r.ok, true); assert(/Bukti%20transfer%20DP%20-%20Stiker%20Zerodeo/.test(r.bukti)); assert.strictEqual(keg(5)[12], totalSebelum);
+assert.strictEqual(ctx.getTransferData_()['k-stiker'][0].bukti, r.bukti); ok('tempel bukti ke DP: tersimpan di riwayat DP, Nominal Transfer TIDAK bertambah');
+r = tempel({ row: 5, keterangan: 'DP' });
+assert.strictEqual(r.ok, false); assert(/sudah punya bukti/.test(r.error)); ok('DP sudah punya bukti: ditanya dulu (ganti?)');
+assert.strictEqual(tempel({ row: 5, keterangan: 'DP', ganti: true }).ok, true); ok('ganti=true: bukti lama diganti');
+r = tempel({ row: 5 });
+assert.strictEqual(r.ok, true); assert(/Pelunasan/.test(r.transfer)); ok('tanpa keterangan: otomatis ke satu-satunya transfer yang belum punya bukti (Pelunasan)');
+r = tempel({ row: 5, index: 0, ganti: true });
+assert.strictEqual(r.ok, true); assert(/^DP/.test(r.transfer)); ok('dari web: pilih lewat urutan riwayat (index)');
+assert.strictEqual(tempel({ row: 6, photoBase64: '' }).ok, false); ok('tanpa foto: ditolak');
+sheets.kegiatan.rows.push(baris('Belum dibayar', 100000, 'Approved', 'Pengajuan', 'k-belum'));
+r = tempel({ row: sheets.kegiatan.rows.length });
+assert.strictEqual(r.ok, false); assert(/Belum ada transfer tercatat/.test(r.error)); ok('kegiatan tanpa transfer: diarahkan catat transfer dulu');
+const nat2 = ctx.botNative_({ jenis: 'tempel_bukti', id: 'k-stiker', keterangan: 'DP', photoBase64: 'aGFsbw==', photoMime: 'image/jpeg' });
+assert.strictEqual(nat2.action, 'attach_transfer_proof'); assert.strictEqual(nat2.keterangan, 'DP');
+assert(/tidak ikut/.test(ctx.botNative_({ jenis: 'tempel_bukti', id: 'k-stiker' }).error)); ok('bot: tempel_bukti diteruskan dengan fotonya; tanpa foto ditolak');
+
 console.log('\n' + n + ' pemeriksaan lolos');

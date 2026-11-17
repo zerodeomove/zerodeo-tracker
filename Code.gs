@@ -27,7 +27,7 @@
 // Penanda versi kode. Ubah setiap kali Code.gs diedit; tampil di dashboard (baris "Terakhir ambil data")
 // supaya kelihatan versi mana yang sebenarnya melayani dashboard (beda dengan isi editor kalau
 // belum Deploy -> New version).
-var KODE_VERSI = '2026-11-17 bukti-transfer';
+var KODE_VERSI = '2026-11-17 tempel-bukti';
 
 var HEADER_ROW = 4;
 // BUKAN batas jumlah kegiatan. Ini hanya sampai baris mana template di Sheet disiapkan
@@ -928,6 +928,9 @@ function routePost_(data) {
     if (data.action === 'mark_transferred') {
       return handleMarkTransferred(data);
     }
+    if (data.action === 'attach_transfer_proof') {
+      return handleAttachTransferProof(data);
+    }
     if (data.action === 'add_dana') {
       return handleAddDana(data);
     }
@@ -1217,6 +1220,40 @@ function handleMarkTransferred(data) {
 
   return jsonResponse({ ok: true, row: row, keterangan: ket, sebagian: sebagian, acc_otomatis: accOtomatis, bukti: bukti || undefined, bukti_gagal: buktiGagal || undefined, total_transfer: total,
     sisa: Math.max(0, estimasi - total), lebih: estimasi > 0 ? Math.max(0, total - estimasi) : 0 });
+}
+
+// Tempel bukti transfer ke transfer yang SUDAH tercatat (tidak menambah nominal). Transfer dipilih lewat index (urutan riwayat,
+// dari web) atau keterangan (DP / Termin / Pelunasan / Lunas, dari bot). Kalau ada beberapa yang cocok: diminta memilih.
+function handleAttachTransferProof(data) {
+  var row = Number(data.row);
+  if (!row || row < HEADER_ROW + 1 || row > lastKegiatanRow_()) return jsonResponse({ ok: false, error: 'Baris tidak valid.' });
+  if (!data.photoBase64) return jsonResponse({ ok: false, error: 'Foto / PDF bukti transfernya tidak ikut terkirim.' });
+  var keg = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('kegiatan');
+  var id = String(keg.getRange(row, COL.ID).getValue() || ''), item = String(keg.getRange(row, COL.ITEM).getValue() || '');
+  var sh = transferSheet_(false);
+  var daftar = [];   // { baris (di tab transfer), ket, nominal, tgl, bukti }
+  if (sh && sh.getLastRow() >= 2) {
+    sh.getRange(2, 1, sh.getLastRow() - 1, TRANSFER_HEADER.length).getValues().forEach(function (r, i) {
+      if (String(r[1] || '') === id) daftar.push({ baris: i + 2, ket: String(r[3] || ''), nominal: Number(r[4]) || 0, tgl: r[5], bukti: String(r[8] || '') });
+    });
+  }
+  if (!daftar.length) return jsonResponse({ ok: false, error: 'Belum ada transfer tercatat untuk "' + item + '". Catat transfernya dulu (bisa sekalian lampirkan buktinya).' });
+  var pilih;
+  if (data.index !== undefined && data.index !== null && data.index !== '') pilih = daftar[Number(data.index)] ? [daftar[Number(data.index)]] : [];
+  else {
+    pilih = data.keterangan ? daftar.filter(function (t) { return t.ket.toLowerCase() === String(data.keterangan).toLowerCase(); }) : daftar;
+    var tanpaBukti = pilih.filter(function (t) { return !t.bukti; });
+    if (pilih.length > 1 && tanpaBukti.length === 1) pilih = tanpaBukti;   // yang belum punya bukti, kalau cuma satu
+  }
+  var tz = Session.getScriptTimeZone();
+  var label = function (t) { return t.ket + ' ' + (t.tgl instanceof Date ? Utilities.formatDate(t.tgl, tz, 'd MMM') : String(t.tgl || '')) + ' ' + fmtRp_(t.nominal); };
+  if (!pilih.length) return jsonResponse({ ok: false, error: 'Transfer itu tidak ditemukan. Yang tercatat: ' + daftar.map(label).join('; ') + '.' });
+  if (pilih.length > 1) return jsonResponse({ ok: false, error: 'Ada beberapa transfer: ' + pilih.map(label).join('; ') + '. Bukti ini untuk yang mana (DP / Termin / Pelunasan)?' });
+  var t = pilih[0];
+  if (t.bukti && data.ganti !== true) return jsonResponse({ ok: false, error: 'Transfer ' + label(t) + ' sudah punya bukti. Kalau mau diganti, bilang "ganti buktinya".' });
+  var url = saveNotaPhoto_('Bukti transfer ' + t.ket + ' - ' + item, data.photoBase64, data.photoMime);
+  sh.getRange(t.baris, 9).setValue(url);
+  return jsonResponse({ ok: true, row: row, bukti: url, transfer: label(t), message: 'Bukti transfer ' + label(t) + ' tersimpan.' });
 }
 
 // ---- Transfer bertahap: riwayat tiap transfer (DP, termin, pelunasan) per kegiatan ----
