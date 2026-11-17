@@ -378,11 +378,15 @@ function renderTable() {
         ? `<button class="aksi-btn approve" onclick="updateStatus(${rowNo}, 'Approved')">Approve</button>
          <button class="aksi-btn reject" onclick="updateStatus(${rowNo}, 'Ditolak')">Reject</button>`
         : `<span class="pending-note">${!myRole() ? 'masuk lewat Hub untuk approve' : isOwnRow(r) ? 'menunggu approver lain' : 'menunggu approver'}</span>`;
+      if (!r['Dana']) aksi += ` <button class="aksi-btn" onclick="openTransferModal(${rowNo})" title="Uangnya sudah ditransfer duluan? Catat di sini, dianggap acc">Sudah ditransfer?</button>`;
     } else if (r['Status'] === 'Ditransfer') {
       aksi = `<button class="aksi-btn approve" onclick="openComplete(${rowNo})">Lengkapi</button>`;
-    } else if (r['Status'] !== 'Selesai' && r['Status'] !== 'Dibatalkan' && !r['Dana'] && (r['Jalur'] === 'Fixed' || r['Status'] === 'Approved')) {
+    } else if (r['Status'] !== 'Selesai' && r['Status'] !== 'Dibatalkan' && r['Status'] !== 'Ditolak' && !r['Dana'] && (r['Jalur'] === 'Fixed' || r['Status'] === 'Approved')) {
       aksi = `<button class="aksi-btn approve" onclick="openTransferModal(${rowNo})">Catat transfer</button>` +
-        (r['Status'] !== 'Ditolak' && !tfSebagian(r) ? bayarDanaBtn(rowNo) : '');
+        (!tfSebagian(r) ? bayarDanaBtn(rowNo) : '');
+    } else if (['Draft', 'Siap Ajukan', 'Revisi'].indexOf(r['Status'] || 'Draft') !== -1 && !r['Dana']) {
+      // uang sudah keluar duluan sebelum diajukan / di-approve: tetap bisa dicatat, dianggap acc
+      aksi = `<button class="aksi-btn" onclick="openTransferModal(${rowNo})" title="Uangnya sudah ditransfer duluan? Catat di sini, dianggap acc">Sudah ditransfer?</button>`;
     }
     if (!pend.has(rowNo)) aksi += editBtn;
     return `<tr>
@@ -417,7 +421,8 @@ function openTransferModal(row) {
   const riw = transferRiwayat[String(r['ID'] || '')] || [];
   $('tf-info').innerHTML = zEsc(r['Item Kegiatan'] || '') + (est ? ' · estimasi ' + fmtRupiah(est) : '') +
     (riw.length ? '<ul class="tf-riwayat">' + riw.map((t) => `<li>${zEsc(t.ket)} · ${zEsc(fmtDate(t.tgl))} · ${zEsc(picNama(t.pic) || t.pic)} <span>${fmtRupiah(t.nominal)}</span></li>`).join('') + '</ul>' : '') +
-    (sebagian ? '<div class="sub">Sudah ditransfer ' + fmtRupiah(tfSudah(r)) + ' · sisa ' + fmtRupiah(tfSisa(r)) + '</div>' : '');
+    (sebagian ? '<div class="sub">Sudah ditransfer ' + fmtRupiah(tfSudah(r)) + ' · sisa ' + fmtRupiah(tfSisa(r)) + '</div>' : '') +
+    (r['Status'] !== 'Approved' && r['Jalur'] !== 'Fixed' ? '<div class="tf-acc">Belum di-approve (status ' + zEsc(r['Status'] || 'Draft') + '). Karena uangnya sudah ditransfer, kegiatan ini <b>dianggap acc</b> dan dicatat di Catatan.</div>' : '');
   $('tf-submit').textContent = 'Simpan';
   const errEl = $('tf-err');
   errEl.textContent = '';

@@ -78,7 +78,7 @@ function isDecider() { const r = myRole(); return r === 'approver' || r === 'adm
 function isOwnRow(r) { const me = myUid(); return !!me && String(r['PIC'] || '').split(',').some((p) => picKey(p).toLowerCase() === me); }
 const TIPE_LIST = ['Capex', 'Opex'];
 // Harus sama dengan KODE_VERSI di Code.gs. Kalau Apps Script yang melayani berbeda, muncul peringatan.
-const EXPECTED_VERSI = '2026-11-17 transfer-bertahap';
+const EXPECTED_VERSI = '2026-11-17 transfer-acc';
 
 function fmtRupiah(n) {
   if (n === null || n === undefined || n === '' || isNaN(n)) return '-';

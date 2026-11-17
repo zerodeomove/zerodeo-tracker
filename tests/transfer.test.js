@@ -71,9 +71,20 @@ tf(7, 600000, 'DP');
 r = tf(7, 650000, 'Pelunasan');
 assert.strictEqual(r.ok, true); assert.strictEqual(r.lebih, 250000); assert.strictEqual(keg(7)[12], 1250000); ok('total melebihi estimasi: tetap tersimpan, server memberi tahu kelebihannya (+250.000)');
 
+// sudah ditransfer duluan padahal belum di-approve: tetap dicatat, dianggap acc, jejaknya di Catatan
+sheets.kegiatan.rows.push(baris('Percetakan stiker', 13447406, 'Siap Ajukan', 'Pengajuan', 'k-cetak'));
+r = tf(8, 6723703, 'DP');
+assert.strictEqual(r.ok, true); assert.strictEqual(r.acc_otomatis, true); assert.strictEqual(keg(8)[10], 'Approved');
+assert(/Ditransfer sebelum di-approve, dianggap acc \(dicatat oleh Lenno/.test(keg(8)[17]), keg(8)[17]); ok('belum di-approve (Siap Ajukan) tapi sudah DP: dicatat, status jadi Approved (dianggap acc), jejak di Catatan');
+r = tf(8, 6723703, 'Pelunasan');
+assert.strictEqual(r.acc_otomatis, false); assert.strictEqual(keg(8)[10], 'Ditransfer'); ok('pelunasan berikutnya: lanjut normal sampai Ditransfer');
+sheets.kegiatan.rows.push(baris('Banner ditolak', 500000, 'Ditolak', 'Pengajuan', 'k-tolak'));
+r = tf(9, 500000);
+assert.strictEqual(r.ok, false); assert(/Ditolak/.test(r.error)); ok('kegiatan Ditolak: transfer tidak bisa dicatat (salah catat)');
+
 // bot membaca: sisa transfer + riwayat
 sheets.kegiatan.rows.push(baris('Kaos event', 2000000, 'Approved', 'Pengajuan', 'k-kaos'));
-tf(8, 500000, 'DP');
+tf(10, 500000, 'DP');
 vm.runInContext("sheetToObjects = function (sh) { var h = sh.rows[3]; return sh.rows.slice(4).map(function (r, i) { var o = { _row: i + 5 }; h.forEach(function (k, j) { o[k] = r[j]; }); return o; }); };", ctx);
 const b = ctx.botBaca_('lenno', 'admin', { jenis: 'kegiatan', teks: 'kaos' });
 const kaos = b.data[0];

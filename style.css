@@ -489,3 +489,4 @@ tbody tr { transition: background-color .15s ease; }
 .tf-riwayat li span { color: var(--text-muted); white-space: nowrap; }
 .modal-err.warn { background: var(--amber-bg); color: #7a5a06; }
 .modal-err.warn { padding: 8px 10px; border-radius: 8px; }
+.tf-acc { margin-top: 8px; background: var(--amber-bg); color: #7a5a06; border-radius: 8px; padding: 8px 10px; font-size: 12px; line-height: 1.4; }

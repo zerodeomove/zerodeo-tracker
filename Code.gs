@@ -27,7 +27,7 @@
 // Penanda versi kode. Ubah setiap kali Code.gs diedit; tampil di dashboard (baris "Terakhir ambil data")
 // supaya kelihatan versi mana yang sebenarnya melayani dashboard (beda dengan isi editor kalau
 // belum Deploy -> New version).
-var KODE_VERSI = '2026-11-17 transfer-bertahap';
+var KODE_VERSI = '2026-11-17 transfer-acc';
 
 var HEADER_ROW = 4;
 // BUKAN batas jumlah kegiatan. Ini hanya sampai baris mana template di Sheet disiapkan
@@ -1176,9 +1176,11 @@ function handleMarkTransferred(data) {
     return jsonResponse({ ok: false, error: 'Baris ini dibayar dari dana "' + linkedDana + '", jadi tidak perlu ditandai ditransfer sendiri (nanti uangnya terhitung dua kali). Tinggal Lengkapi dengan Actual.' });
   }
 
-  var isFixedEligible = jalur === 'Fixed' && currentStatus !== 'Ditransfer' && currentStatus !== 'Selesai';
-  var isApprovedEligible = currentStatus === 'Approved';
-  if (!isFixedEligible && !isApprovedEligible) {
+  // Uang yang sudah keluar selalu boleh dicatat (data harus sesuai kenyataan), walau tombol approve belum sempat ditekan:
+  // kegiatan itu dianggap acc dan jejaknya ditulis di Catatan. Yang tidak boleh dibayar: Ditolak / Dibatalkan; Ditransfer / Selesai sudah lunas.
+  var bolehDicatat = ['Ditolak', STATUS_BATAL, 'Ditransfer', 'Selesai'].indexOf(String(currentStatus)) === -1;
+  var accOtomatis = bolehDicatat && currentStatus !== 'Approved' && jalur !== 'Fixed';
+  if (!bolehDicatat) {
     return jsonResponse({ ok: false, error: 'Baris ini statusnya "' + currentStatus + '" (Jalur ' + jalur + ') — belum bisa ditandai Ditransfer.' });
   }
 
@@ -1195,13 +1197,19 @@ function handleMarkTransferred(data) {
   sheet.getRange(row, COL.PIC_TRANSAKSI).setValue(picTransaksi);
   sheet.getRange(row, COL.NOMINAL_TRANSFER).setValue(total).setNumberFormat(CURR_FORMAT);
   sheet.getRange(row, COL.TGL_TRANSFER).setValue(tglTransfer).setNumberFormat(DATE_FORMAT);
-  if (!sebagian) sheet.getRange(row, COL.STATUS).setValue('Ditransfer');
+  if (accOtomatis) {
+    var noteCell = sheet.getRange(row, COL.CATATAN), existingNote = noteCell.getValue();
+    var stamp = 'Ditransfer sebelum di-approve, dianggap acc (dicatat oleh ' + (CURRENT_WHO_ ? picNama_(CURRENT_WHO_.uid) : '?') + ', ' +
+      Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'dd-MMM-yy HH:mm') + ')';
+    noteCell.setValue(existingNote ? (existingNote + ' | ' + stamp) : stamp);
+  }
+  sheet.getRange(row, COL.STATUS).setValue(sebagian ? (accOtomatis ? 'Approved' : currentStatus) : 'Ditransfer');
   try {
     transferSheet_(true).appendRow([new Date(), String(sheet.getRange(row, COL.ID).getValue() || ''), String(sheet.getRange(row, COL.ITEM).getValue() || ''),
       ket, nominal, tglTransfer, picTransaksi, CURRENT_WHO_ ? CURRENT_WHO_.uid : '']);
   } catch (err) { /* riwayat gagal dicatat: transfernya tetap tersimpan di tab kegiatan */ }
 
-  return jsonResponse({ ok: true, row: row, keterangan: ket, sebagian: sebagian, total_transfer: total,
+  return jsonResponse({ ok: true, row: row, keterangan: ket, sebagian: sebagian, acc_otomatis: accOtomatis, total_transfer: total,
     sisa: Math.max(0, estimasi - total), lebih: estimasi > 0 ? Math.max(0, total - estimasi) : 0 });
 }
 
