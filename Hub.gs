@@ -327,7 +327,7 @@ function handlePending_(data) {
 // BOT TELEGRAM HUB: baca data atas nama satu orang. Dipanggil Hub (token servis, sama seperti "pending"); Hub sudah memeriksa
 // orang itu punya akses Zerodeo dan mengirim perannya. Di sini peran itu diterapkan lagi: peran marketing tidak menerima
 // kegiatan, dana, atau angka uang apa pun. Hanya membaca, tidak ada yang diubah.
-//   jenis: ringkasan | kegiatan | strategi | hasil_event | pengingat
+//   jenis: ringkasan | kegiatan | transfer_global | strategi | hasil_event | pengingat
 // ============================================================
 var BOT_BACA_MAKS = 40;
 function handleBotBaca_(data) {
@@ -382,6 +382,38 @@ function botBaca_(uid, peran, q) {
       return o;
     });
     return potong(list);
+  }
+  if (jenis === 'transfer_global') {
+    // Untuk Budget WBA di Hub: semua uang yang keluar dari Zerodeo (ringkas, tanpa detail kegiatan) + angka bulan ini.
+    // kunci tetap per transfer, dipakai Hub untuk mencatat koreksi kantong tanpa mengubah data Zerodeo.
+    if (!uang) throw new Error('Peran marketing tidak bisa melihat angka Budgeting.');
+    var tz = Session.getScriptTimeZone();
+    var bulan = /^\d{4}-\d{2}$/.test(String(q.bulan || '')) ? String(q.bulan) : Utilities.formatDate(new Date(), tz, 'yyyy-MM');
+    var riw = {};
+    try { riw = getTransferData_(); } catch (err) { riw = {}; }
+    var keluar = [], rk = { bulan: bulan, rencana: 0, ditransfer: 0, sisa_pelunasan: 0, menunggu_approve: 0, belum_nota: 0 };
+    kegiatan().forEach(function (r) {
+      var st = String(r['Status'] || ''), id = String(r['ID'] || '');
+      if (st === 'Dibatalkan') return;
+      var est = Number(r['Estimasi (Rp)']) || 0, tf = Number(r['Nominal Transfer (Rp)']) || 0;
+      if (st !== 'Ditolak' && String(r['Tanggal Dicatat'] || '').slice(0, 7) === bulan) rk.rencana += est;
+      if (st === 'Diajukan') rk.menunggu_approve++;
+      if (tf > 0 && ['Ditransfer', 'Selesai'].indexOf(st) === -1) rk.sisa_pelunasan += Math.max(0, est - tf);
+      if (st === 'Selesai' && !adaNota(r)) rk.belum_nota++;
+      if (r['Dana']) return;   // dibayar dari dana bulk: uangnya dihitung lewat dana (di bawah)
+      var list = riw[id] || [];
+      if (list.length) list.forEach(function (t, i) { keluar.push({ kunci: 'zd:t:' + id + ':' + i, item: String(r['Item Kegiatan'] || ''), ket: t.ket, tgl: t.tgl, nominal: t.nominal }); });
+      else if (tf > 0 && r['Tgl Transfer']) keluar.push({ kunci: 'zd:k:' + id, item: String(r['Item Kegiatan'] || ''), ket: 'Lunas', tgl: String(r['Tgl Transfer']).slice(0, 10), nominal: tf });
+    });
+    try {
+      readDana_().forEach(function (d) {
+        var n = Number(d['Nominal (Rp)']) || 0;
+        if (n > 0 && d['Tgl Transfer']) keluar.push({ kunci: 'zd:d:' + d['Nama Dana'], item: 'Dana: ' + d['Nama Dana'], ket: 'Dana bulk', tgl: String(d['Tgl Transfer']).slice(0, 10), nominal: n });
+      });
+    } catch (err) { /* tab dana belum ada */ }
+    keluar.forEach(function (t) { if (String(t.tgl).slice(0, 7) === bulan) rk.ditransfer += t.nominal; });
+    keluar.sort(function (a, b) { return String(b.tgl).localeCompare(String(a.tgl)); });
+    return { rekap: rk, keluar: keluar };
   }
   if (jenis === 'strategi') {
     var st = mkt_readTab_('strategi').filter(function (r) {
