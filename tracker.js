@@ -98,26 +98,25 @@ function resetFilter() {
 
 // Boleh memutuskan kegiatan ini? (hanya untuk menampilkan tombol; server tetap memeriksa)
 // approver: kegiatan siapa pun kecuali miliknya; admin: hanya kegiatan milik approver (dan bukan miliknya sendiri).
-function ownerIsApprover(r) {
-  return String(r['PIC'] || '').split(',').some((p) => { const t = TIM.find((x) => x.id === picKey(p).toLowerCase()); return !!t && t.peran === 'approver'; });
-}
+// Budget WBA: yang memutuskan = approver brand kegiatan itu (Pengaturan Brand); kalau belum diatur, peran approver di Hub.
 function canDecide(r) {
   if (isOwnRow(r)) return false;
-  const role = myRole();
-  if (role === 'approver') return true;
-  if (role === 'admin') return ownerIsApprover(r);
+  const dec = deciderIds(adaBrand() ? cariBrand(brandOf(r)) : null);
+  if (dec.indexOf(myUid()) !== -1) return true;
+  if (myRole() === 'admin') return ownerIdsOf(r).some((o) => dec.indexOf(o) !== -1);
   return false;
 }
 // Boleh mengubah/membatalkan/memulihkan? Uang sudah diputuskan: hanya approver/admin. Selain itu: PIC-nya, atau approver/admin.
 function canEditRow(r) {
   const status = r['Status'] || 'Draft';
   const decided = KEPUTUSAN_STATUSES.indexOf(status === 'Dibatalkan' ? priorStatusOf(r) : status) !== -1;
-  if (isDecider()) return true;
+  if (isDeciderFor(r)) return true;
   return !decided && isOwnRow(r);
 }
 
 // ---------- render ----------
 function renderTracker() {
+  renderBrandBar();
   populateFilters();
   renderCards();
   renderTable();
@@ -382,7 +381,7 @@ function renderTable() {
       aksi = canDecide(r)
         ? `<button class="aksi-btn approve" onclick="updateStatus(${rowNo}, 'Approved')">Approve</button>
          <button class="aksi-btn reject" onclick="updateStatus(${rowNo}, 'Ditolak')">Reject</button>`
-        : `<span class="pending-note">${!myRole() ? 'masuk lewat Hub untuk approve' : isOwnRow(r) ? 'menunggu approver lain' : 'menunggu approver'}</span>`;
+        : `<span class="pending-note">${!myRole() ? 'masuk lewat Hub untuk approve' : isOwnRow(r) ? 'menunggu approver lain' : 'menunggu approver' + (adaBrand() && namaDecider(r) ? ' (' + zEsc(namaDecider(r)) + ')' : '')}</span>`;
       if (!r['Dana']) aksi += ` <button class="aksi-btn" onclick="openTransferModal(${rowNo})" title="Uangnya sudah ditransfer duluan? Catat di sini, dianggap acc">Sudah ditransfer?</button>`;
     } else if (r['Status'] === 'Ditransfer') {
       aksi = `<button class="aksi-btn approve" onclick="openComplete(${rowNo})">Lengkapi</button>`;
@@ -395,7 +394,7 @@ function renderTable() {
     }
     if (!pend.has(rowNo)) aksi += editBtn;
     return `<tr>
-      <td class="item">${zEsc(r['Item Kegiatan'] || '-')}${/^https?:\/\//i.test(r['Nota/Bukti'] || '') ? ` <a class="nota-link" href="${zEsc(r['Nota/Bukti'])}" data-item="${zEsc(r['Item Kegiatan'] || '')}" onclick="return openNota(this)" target="_blank" rel="noopener noreferrer" title="Lihat nota">📎</a>` : ''}<div class="sub">${r['Tanggal Dicatat'] ? 'dicatat ' + zEsc(fmtDate(r['Tanggal Dicatat'])) : ''}${r['Tanggal Dicatat'] && r['Dana'] ? ' · ' : ''}${r['Dana'] ? 'Dana: ' + zEsc(r['Dana']) : ''}</div>${tfInfoHtml(r)}</td>
+      <td class="item">${zEsc(r['Item Kegiatan'] || '-')}${/^https?:\/\//i.test(r['Nota/Bukti'] || '') ? ` <a class="nota-link" href="${zEsc(r['Nota/Bukti'])}" data-item="${zEsc(r['Item Kegiatan'] || '')}" onclick="return openNota(this)" target="_blank" rel="noopener noreferrer" title="Lihat nota">📎</a>` : ''}<div class="sub">${adaBrand() && !brandPilih && brandSaya().length > 1 ? '<span class="brand-tag">' + zEsc(brandOf(r)) + '</span> ' : ''}${r['Tanggal Dicatat'] ? 'dicatat ' + zEsc(fmtDate(r['Tanggal Dicatat'])) : ''}${r['Tanggal Dicatat'] && r['Dana'] ? ' · ' : ''}${r['Dana'] ? 'Dana: ' + zEsc(r['Dana']) : ''}</div>${tfInfoHtml(r)}</td>
       <td data-label="Kategori">${zEsc(r['Kategori'] || '-')}</td>
       <td data-label="Tipe">${zEsc(r['Tipe'] || '-')}</td>
       <td data-label="PIC">${zEsc(picNama(r['PIC']) || '-')}</td>
@@ -423,9 +422,10 @@ function openTransferModal(row) {
   $('tf-nominal').value = sebagian && tfSisa(r) ? tfSisa(r) : '';
   $('tf-tanggal').value = todayStr();
   $('tf-ket').value = sebagian ? 'Pelunasan' : 'Lunas';
+  fillSumberTransfer(r);
   const riw = transferRiwayat[String(r['ID'] || '')] || [];
   $('tf-info').innerHTML = zEsc(r['Item Kegiatan'] || '') + (est ? ' · estimasi ' + fmtRupiah(est) : '') +
-    (riw.length ? '<ul class="tf-riwayat">' + riw.map((t, i) => `<li>${zEsc(t.ket)} · ${zEsc(fmtDate(t.tgl))} · ${zEsc(picNama(t.pic) || t.pic)}${/^https:\/\/(drive|docs)\.google\.com\//.test(t.bukti || '') ? ` <a href="${zEsc(t.bukti)}" target="_blank" rel="noopener noreferrer" title="Lihat bukti transfer">📎</a>` : ` <button type="button" class="tf-tempel" onclick="tempelBukti(${Number(row)}, ${i})">📎 Tambah bukti</button>`} <span>${fmtRupiah(t.nominal)}</span></li>`).join('') + '</ul>' : '') +
+    (riw.length ? '<ul class="tf-riwayat">' + riw.map((t, i) => `<li>${zEsc(t.ket)} · ${zEsc(fmtDate(t.tgl))} · ${zEsc(picNama(t.pic) || t.pic)}${t.sumber ? ' · dari ' + zEsc(t.sumber) : ''}${/^https:\/\/(drive|docs)\.google\.com\//.test(t.bukti || '') ? ` <a href="${zEsc(t.bukti)}" target="_blank" rel="noopener noreferrer" title="Lihat bukti transfer">📎</a>` : ` <button type="button" class="tf-tempel" onclick="tempelBukti(${Number(row)}, ${i})">📎 Tambah bukti</button>`} <span>${fmtRupiah(t.nominal)}</span></li>`).join('') + '</ul>' : '') +
     (sebagian ? '<div class="sub">Sudah ditransfer ' + fmtRupiah(tfSudah(r)) + ' · sisa ' + fmtRupiah(tfSisa(r)) + '</div>' : '') +
     (r['Status'] !== 'Approved' && r['Jalur'] !== 'Fixed' ? '<div class="tf-acc">Belum di-approve (status ' + zEsc(r['Status'] || 'Draft') + '). Karena uangnya sudah ditransfer, kegiatan ini <b>dianggap acc</b> dan dicatat di Catatan.</div>' : '');
   $('tf-submit').textContent = 'Simpan';
@@ -457,6 +457,12 @@ function submitTransfer() {
   const nama = namaBaris(row) || 'Kegiatan';
   const ket = $('tf-ket').value || 'Lunas';
   const r = kegiatanData.find((x) => Number(x['_row']) === Number(row)) || {};
+  const sumber = sumberTransferDipilih(r);
+  if (!sumber.ok) {
+    errEl.textContent = 'Pilih "Dibayar dari" dulu (uangnya keluar dari mana).';
+    errEl.classList.add('show');
+    return;
+  }
   const est = Number(r['Estimasi (Rp)']) || 0, total = tfSudah(r) + Number(nominal);
   if (est > 0 && total > est && !tfLebihOk) {
     // hanya peringatan: klik sekali lagi tetap menyimpan
@@ -470,11 +476,12 @@ function submitTransfer() {
   enqueueSave({
     label: (sebagian ? ket + ': ' : 'Ditransfer: ') + nama,
     payload: Object.assign({ action: 'mark_transferred', row: row, picTransaksi: pic, nominalTransfer: Number(nominal), tglTransfer: tanggal, keterangan: ket },
+      sumber.nilai ? { sumberDana: sumber.nilai } : {},
       tfBukti ? { photoBase64: tfBukti.base64, photoMime: tfBukti.mime } : {}),
     rows: [row],
     okMsg: sebagian ? ket + ' ' + fmtRupiah(nominal) + ' dicatat: ' + nama + (est ? ' · sisa ' + fmtRupiah(Math.max(0, est - total)) : '') + '.'
       : 'Ditransfer: ' + nama + '. Sekarang tinggal Lengkapi dengan Actual.',
-    restore: () => { openTransferModal(row); $('tf-pic').value = pic; $('tf-nominal').value = nominal; $('tf-tanggal').value = tanggal; $('tf-ket').value = ket; }
+    restore: () => { openTransferModal(row); $('tf-pic').value = pic; $('tf-nominal').value = nominal; $('tf-tanggal').value = tanggal; $('tf-ket').value = ket; if (sumber.nilai) $('tf-sumber').value = sumber.nilai; }
   });
   closeTransferModal();
 }
@@ -490,7 +497,7 @@ function fmtDanaRp(n) {
 function danaStats() {
   return danaList.map((d) => {
     const nama = d['Nama Dana'];
-    const linked = kegiatanData.filter((r) => r['Dana'] === nama && r['Status'] !== 'Dibatalkan');
+    const linked = (semuaKegiatan.length ? semuaKegiatan : kegiatanData).filter((r) => r['Dana'] === nama && r['Status'] !== 'Dibatalkan');   // dana bulk lintas brand
     const terpakai = linked.reduce((s, r) => s + (Number(r['Actual (Rp)']) || 0), 0);
     const rencana = linked
       .filter((r) => !(Number(r['Actual (Rp)']) > 0) && r['Status'] !== 'Selesai')
@@ -967,6 +974,7 @@ function openKegiatan() {
   setMsg($('k-msg'), '', '');
   fillKategori();
   fillDana();
+  fillBrandForm();
   // PIC bawaan = kamu sendiri (kalau kamu ada di daftar tim)
   const me = myUid();
   if (me && TIM.some((t) => t.id === me)) $('k-pic').value = me;
@@ -987,6 +995,7 @@ function validateKegiatan() {
   const arsip = backendBaru && $('k-arsip').checked;
   let valid = true;
   const need = (field, bad) => { if (bad) { $('err-k-' + field).classList.add('show'); valid = false; } };
+  need('brand', adaBrand() && !$('k-brand').value);
   need('item', !$('k-item').value.trim());
   need('kategori', !chosenKategori());
   need('tipe', !$('k-tipe').value);
@@ -1031,6 +1040,7 @@ $('kegiatanForm').addEventListener('submit', (e) => {
   const arsip = backendBaru && $('k-arsip').checked;
   const payload = {
     item: $('k-item').value.trim(),
+    brand: adaBrand() ? $('k-brand').value : undefined,
     kategori: chosenKategori(),
     tipe: $('k-tipe').value,
     jalur: $('k-jalur').value,
@@ -1060,7 +1070,7 @@ $('kegiatanForm').addEventListener('submit', (e) => {
   const snap = snapshotForm($('kegiatanForm'));
   const photoK = arsip ? photos.k : null;
   enqueueSave({
-    label: payload.item + (arsip ? ' (data lama)' : '') + (photoK ? ' (+ foto nota)' : '') + (dana ? ' — dari dana "' + dana + '"' : ''),
+    label: (payload.brand && brandSaya().length > 1 ? payload.brand + ': ' : '') + payload.item + (arsip ? ' (data lama)' : '') + (photoK ? ' (+ foto nota)' : '') + (dana ? ' — dari dana "' + dana + '"' : ''),
     payload: payload, rows: [], expectNota: !!photoK,
     restore: () => { openKegiatan(); restoreForm(snap); photos.k = photoK; showPhoto('k'); syncKegiatanForm(); }
   });
@@ -1321,7 +1331,7 @@ function openEdit(row) {
   $('ed-kategori').innerHTML = kats.map((k) => `<option value="${zEsc(k)}">${zEsc(k)}</option>`).join('');
 
   editOrig = {
-    item: r['Item Kegiatan'] || '', kategori: r['Kategori'] || '', tipe: r['Tipe'] || 'Opex', pic: picKey(r['PIC'] || ''),
+    brand: adaBrand() ? brandOf(r) : '', item: r['Item Kegiatan'] || '', kategori: r['Kategori'] || '', tipe: r['Tipe'] || 'Opex', pic: picKey(r['PIC'] || ''),
     estimasi: String(r['Estimasi (Rp)'] === null || r['Estimasi (Rp)'] === undefined ? '' : r['Estimasi (Rp)']),
     deadline: String(r['Deadline Kegiatan'] || '').slice(0, 10),
     nominal: String(r['Nominal Transfer (Rp)'] === null || r['Nominal Transfer (Rp)'] === undefined ? '' : r['Nominal Transfer (Rp)']),
@@ -1332,6 +1342,7 @@ function openEdit(row) {
   $('editForm').reset();
   clearErrors($('editForm'));
   setMsg($('ed-msg'), '', '');
+  fillBrandEdit(r);
   $('ed-item').value = editOrig.item;
   $('ed-kategori').value = editOrig.kategori;
   $('ed-kategoriNew').value = '';
@@ -1377,7 +1388,7 @@ $('editForm').addEventListener('submit', (e) => {
   const o = editOrig;
   const kat = $('ed-kategoriNew').value.trim() || $('ed-kategori').value;
   const cur = {
-    item: $('ed-item').value.trim(), kategori: kat, tipe: $('ed-tipe').value, pic: $('ed-pic').value,
+    brand: adaBrand() ? $('ed-brand').value : '', item: $('ed-item').value.trim(), kategori: kat, tipe: $('ed-tipe').value, pic: $('ed-pic').value,
     estimasi: $('ed-estimasi').value.trim(), deadline: $('ed-deadline').value
   };
   const sel = $('ed-sel-box').style.display !== 'none';
@@ -1398,7 +1409,7 @@ $('editForm').addEventListener('submit', (e) => {
   if (sel && cur.nota && !/^https?:\/\/\S+$/i.test(cur.nota)) bad('err-ed-nota');
   if (!ok) return;
 
-  const map = { item: 'item', kategori: 'kategori', tipe: 'tipe', pic: 'pic', estimasi: 'estimasi', deadline: 'deadline',
+  const map = { brand: 'brand', item: 'item', kategori: 'kategori', tipe: 'tipe', pic: 'pic', estimasi: 'estimasi', deadline: 'deadline',
     nominal: 'nominalTransfer', pictrans: 'picTransaksi', tgltf: 'tglTransfer', actual: 'actual', nota: 'nota' };
   const num = { estimasi: 1, nominal: 1, actual: 1 };
   const payload = { action: 'edit_kegiatan', row: row };
@@ -1552,6 +1563,18 @@ function renderRekap() {
     : '<tr><td colspan="4" class="empty">Tidak ada data.</td></tr>';
   $('rk-kategori').innerHTML = tbl(rekapGroup(rows, (r) => r['Kategori'] || ''), '(tanpa kategori)');
   $('rk-dana').innerHTML = tbl(rekapGroup(rows, (r) => r['Dana'] || ''), 'Transfer langsung (bukan dari dana)');
+  // Budget WBA: per brand + uangnya keluar dari mana (menurut tanggal transfer di periode ini)
+  const wba = $('rk-wba');
+  if (wba) {
+    wba.hidden = !adaBrand();
+    if (adaBrand()) {
+      const rk = rekapBulanWeb(kegiatanData, periode);
+      const br = Object.keys(rk.perBrand).sort((a, b) => rk.perBrand[b].ditransfer - rk.perBrand[a].ditransfer);
+      const sm = Object.keys(rk.perSumber).sort((a, b) => rk.perSumber[b] - rk.perSumber[a]);
+      $('rk-brand').innerHTML = br.length ? br.map((k) => `<tr><td>${zEsc(k)}</td><td class="num">${fmtDanaRp(rk.perBrand[k].rencana)}</td><td class="num">${fmtDanaRp(rk.perBrand[k].ditransfer)}</td></tr>`).join('') : '<tr><td colspan="3" class="empty">Tidak ada data.</td></tr>';
+      $('rk-sumber').innerHTML = sm.length ? sm.map((k) => `<tr><td>${zEsc(k)}</td><td class="num">${fmtDanaRp(rk.perSumber[k])}</td></tr>`).join('') : '<tr><td colspan="2" class="empty">Tidak ada transfer.</td></tr>';
+    }
+  }
 }
 
 // SheetJS dimuat saat dibutuhkan saja (tidak memperlambat halaman).
@@ -1600,8 +1623,9 @@ async function downloadRekap() {
     const wb = XLSX.utils.book_new();
 
     XLSX.utils.book_append_sheet(wb, xlSheet([
-      ['Rekap Zerodeo — Budgeting'],
+      [adaBrand() ? 'Rekap Budget WBA' : 'Rekap Zerodeo — Budgeting'],
       ['Periode', label],
+      ['Brand', brandPilih || 'Semua brand'],
       ['Dibuat', new Date().toLocaleString('id-ID')],
       [],
       ['Jumlah kegiatan', t.n],
@@ -1627,6 +1651,15 @@ async function downloadRekap() {
         .concat([['TOTAL', t.n, t.est, t.act, t.sel]]),
       [2, 3, 4], [28, 16, 16, 16, 16]), 'Per Kategori');
 
+    if (adaBrand()) {
+      const rk = rekapBulanWeb(rekapRows(''), periode);
+      XLSX.utils.book_append_sheet(wb, xlSheet(
+        [['Brand', 'Rencana (estimasi)', 'Ditransfer']].concat(Object.keys(rk.perBrand).map((k) => [k, rk.perBrand[k].rencana, rk.perBrand[k].ditransfer])),
+        [1, 2], [24, 18, 18]), 'Per Brand');
+      XLSX.utils.book_append_sheet(wb, xlSheet(
+        [['Dibayar dari', 'Ditransfer']].concat(Object.keys(rk.perSumber).map((k) => [k, rk.perSumber[k]])),
+        [1], [32, 18]), 'Dibayar Dari');
+    }
     const posisi = {};
     danaStats().forEach((d) => { posisi[d.nama] = d; });
     const dn = rekapGroup(rows, (r) => r['Dana'] || '').sort((a, b) => b.act - a.act);
@@ -1640,25 +1673,25 @@ async function downloadRekap() {
       [2, 3, 4, 5, 6, 7], [32, 16, 18, 16, 16, 14, 16, 16]), 'Per Dana');
 
     XLSX.utils.book_append_sheet(wb, xlSheet(
-      [['Tgl dicatat', 'Item', 'Kategori', 'Tipe', 'PIC', 'Status', 'Jalur', 'Dana', 'Estimasi', 'Nominal transfer',
+      [['Tgl dicatat', 'Brand', 'Item', 'Kategori', 'Tipe', 'PIC', 'Status', 'Jalur', 'Dana', 'Estimasi', 'Nominal transfer',
         'Actual', 'Selisih', 'Tgl transfer', 'Nota', 'Catatan']]
         .concat(rows.map((r) => {
           const act = Number(r['Actual (Rp)']) || 0;
           const est = Number(r['Estimasi (Rp)']) || 0;
-          return [xlDate(r['Tanggal Dicatat']), r['Item Kegiatan'] || '', r['Kategori'] || '', r['Tipe'] || '', picNama(r['PIC']) || '',
+          return [xlDate(r['Tanggal Dicatat']), brandOf(r), r['Item Kegiatan'] || '', r['Kategori'] || '', r['Tipe'] || '', picNama(r['PIC']) || '',
             r['Status'] || '', r['Jalur'] || '', r['Dana'] || '', est, Number(r['Nominal Transfer (Rp)']) || '',
             act || '', act ? act - est : '', xlDate(r['Tgl Transfer']), hasNota(r) ? r['Nota/Bukti'] : '', r['Catatan'] || ''];
         })),
-      [8, 9, 10, 11], [11, 34, 22, 8, 10, 11, 10, 22, 14, 15, 14, 13, 11, 40, 40]), 'Detail');
+      [9, 10, 11, 12], [11, 14, 34, 22, 8, 10, 11, 10, 22, 14, 15, 14, 13, 11, 40, 40]), 'Detail');
     // link nota bisa diklik di Excel
     const det = wb.Sheets['Detail'];
     rows.forEach((r, i) => {
       if (!hasNota(r)) return;
-      const cell = det[XLSX.utils.encode_cell({ r: i + 1, c: 13 })];
+      const cell = det[XLSX.utils.encode_cell({ r: i + 1, c: 14 })];
       if (cell) { cell.l = { Target: r['Nota/Bukti'] }; cell.v = 'Buka nota'; }
     });
 
-    XLSX.writeFile(wb, 'Rekap Zerodeo - ' + label + '.xlsx');
+    XLSX.writeFile(wb, (adaBrand() ? 'Rekap Budget WBA - ' + (brandPilih || 'Semua brand') + ' - ' : 'Rekap Zerodeo - ') + label + '.xlsx');
     setMsg($('rk-msg'), 'File Excel diunduh.', 'ok');
   } catch (err) {
     setMsg($('rk-msg'), err.message, 'err');

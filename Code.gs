@@ -27,7 +27,7 @@
 // Penanda versi kode. Ubah setiap kali Code.gs diedit; tampil di dashboard (baris "Terakhir ambil data")
 // supaya kelihatan versi mana yang sebenarnya melayani dashboard (beda dengan isi editor kalau
 // belum Deploy -> New version).
-var KODE_VERSI = '2026-11-17 tempel-bukti';
+var KODE_VERSI = '2026-11-18 budget-wba';
 
 var HEADER_ROW = 4;
 // BUKAN batas jumlah kegiatan. Ini hanya sampai baris mana template di Sheet disiapkan
@@ -811,12 +811,13 @@ function serveData_(fresh) {
   if (!fresh) {
     var cached = cacheGet_();
     if (cached) {
-      return ContentService.createTextOutput(cached).setMimeType(ContentService.MimeType.JSON);
+      return ContentService.createTextOutput(saringPayloadBrand_(cached)).setMimeType(ContentService.MimeType.JSON);
     }
   }
   var text = JSON.stringify(buildPayload_());
   cachePut_(text);
-  return ContentService.createTextOutput(text).setMimeType(ContentService.MimeType.JSON);
+  // cache berisi semua brand; tiap orang hanya menerima brand yang dia pegang
+  return ContentService.createTextOutput(saringPayloadBrand_(text)).setMimeType(ContentService.MimeType.JSON);
 }
 
 // Isi untuk peran marketing: hanya modul Marketing + daftar nama tim. Tidak ada kegiatan, dana, plafon, kategori, atau rekap.
@@ -852,6 +853,7 @@ function buildPayload_() {
   try { payload.kategori = getKategoriList(); } catch (err) { payload.kategori_error = String(err.message); }
   try { payload.dana = getDanaData_(); } catch (err) { payload.dana_error = String(err.message); }
   try { payload.transfer = getTransferData_(); payload.transferBertahap = true; } catch (err) { payload.transfer_error = String(err.message); }
+  try { payload.brand = getBrandData_(); } catch (err) { payload.brand_error = String(err.message); }
   payload.versi = KODE_VERSI;
   payload.reimburse = true;   // penanda: backend ini mengerti reimburse_dana
   payload.fotoBatch = true;   // penanda: Isi Actual sekaligus menerima foto/PDF per baris
@@ -876,6 +878,7 @@ function doPost(e) {
     var data = JSON.parse(e.postData.contents);
     CURRENT_WHO_ = null;
     TIM_MEMO_ = null;
+    BRAND_MEMO_ = null;
 
     // Titik merah: Hub memanggil dengan token servis bertanda tangan (bukan SHARED_SECRET) dan hanya boleh action ini.
     if (data.action === 'pending') return handlePending_(data);
@@ -918,6 +921,11 @@ function routePost_(data) {
     // Aksi modul marketing (Marketing.gs). Return null = bukan aksi marketing.
     var mres = mkt_handlePost(data);
     if (mres) return jsonResponse(mres);
+
+    if (data.action === 'simpan_brand') return handleSimpanBrand(data);
+    // baris kegiatan brand yang tidak dia pegang: ditolak, sama seperti tidak terlihat di dashboard
+    var bukanBrandnya = cekBarisTerlihat_(data);
+    if (bukanBrandnya) return jsonResponse({ ok: false, error: bukanBrandnya });
 
     if (data.action === 'update_status') {
       return handleUpdateStatus(data);
@@ -994,6 +1002,11 @@ function handleAddKegiatan(data) {
 
   if (data.pic && !isKnownPic_(data.pic)) return jsonResponse({ ok: false, error: 'PIC tidak dikenali.' });
 
+  // Brand (Budget WBA): wajib brand yang dikenal dan dipegang pengaju. Tanpa brand = Zerodeo (dashboard / bot lama).
+  var brand = findBrand_(data.brand ? data.brand : 'Zerodeo');
+  if (!brand) return jsonResponse({ ok: false, error: 'Brand "' + cleanText_(data.brand, 40) + '" tidak dikenal. Pilihannya: ' + readBrand_().map(function (b) { return b.nama; }).join(', ') + '.' });
+  if (CURRENT_WHO_ && !brandTerlihat_(brand, CURRENT_WHO_.uid, CURRENT_WHO_.peran)) return jsonResponse({ ok: false, error: 'Kamu tidak memegang brand ' + brand.nama + '. Minta admin menambahkanmu di Pengaturan Brand.' });
+
   var lock = LockService.getScriptLock();
   if (!lock.tryLock(15000)) return jsonResponse({ ok: false, error: 'Server sedang sibuk, coba lagi sebentar.' });
   try {
@@ -1023,7 +1036,7 @@ function handleAddKegiatan(data) {
     var vals = {};
     vals[COL.TGL_DICATAT] = arsip && tglTf ? tglTf : new Date();   // data lama: tanggal bayar
     vals[COL.DEADLINE] = data.deadline ? new Date(data.deadline) : '';
-    vals[COL.PROJECT] = 'Zerodeo';
+    vals[COL.PROJECT] = brand.nama;
     vals[COL.ITEM] = safeText_(cleanText_(data.item, 200));
     vals[COL.KATEGORI] = kat;
     vals[COL.TIPE] = data.tipe || '';
@@ -1051,7 +1064,7 @@ function handleAddKegiatan(data) {
     ensureIdColumn_(sheet);
     sheet.getRange(targetRow, COL.ID).setValue(newKegiatanId_());
 
-    return jsonResponse({ ok: true, row: targetRow, nota: (arsip && data.photoBase64) ? nota : undefined });
+    return jsonResponse({ ok: true, row: targetRow, brand: brand.nama, nota: (arsip && data.photoBase64) ? nota : undefined });
   } finally {
     lock.releaseLock();
   }
@@ -1061,8 +1074,7 @@ function handleAddKegiatan(data) {
 // milik sendiri. Row diambil dari field "_row" yang doGet sisipkan ke tiap objek kegiatan, jadi
 // dashboard tinggal kirim balik nomor itu tanpa perlu cari lagi.
 function handleUpdateStatus(data) {
-  var denied = checkDecider_();
-  if (denied) return jsonResponse({ ok: false, error: denied });
+  if (!CURRENT_WHO_) return jsonResponse({ ok: false, error: 'Masuk lewat Hub dulu supaya kami tahu siapa kamu.' });
   var row = Number(data.row);
   if (!row || row < HEADER_ROW + 1 || row > lastKegiatanRow_()) {
     return jsonResponse({ ok: false, error: 'Baris tidak valid.' });
@@ -1079,7 +1091,7 @@ function handleUpdateStatus(data) {
     return jsonResponse({ ok: false, error: 'Baris ini statusnya sudah "' + currentStatus + '", bukan "Diajukan" lagi — mungkin sudah diproses orang lain.' });
   }
   // Tidak ada yang memutuskan kegiatannya sendiri; approver memutuskan semua, admin hanya kegiatan milik approver.
-  var denyRow = checkCanDecideRow_(sheet.getRange(row, COL.PIC).getValue());
+  var denyRow = checkCanDecideRow_(sheet.getRange(row, COL.PIC).getValue(), sheet.getRange(row, COL.PROJECT).getValue());
   if (denyRow) return jsonResponse({ ok: false, error: denyRow });
 
   sheet.getRange(row, COL.STATUS).setValue(data.status);
@@ -1188,6 +1200,10 @@ function handleMarkTransferred(data) {
   }
 
   var tglTransfer = data.tglTransfer ? new Date(data.tglTransfer) : new Date();
+  // "Dibayar dari" (sumber dana brand ini, opsional)
+  var sumberDana = '';
+  try { sumberDana = sumberDanaBrand_(sheet.getRange(row, COL.PROJECT).getValue(), data.sumberDana); }
+  catch (err) { return jsonResponse({ ok: false, error: err.message }); }
 
   // Transfer bertahap: DP / Termin = sebagian (status tetap, bisa dicatat lagi); Lunas / Pelunasan = selesai ditransfer.
   // Nominal Transfer di tab kegiatan = JUMLAH semua transfer (rumus ringkasan & saldo tetap benar); rinciannya di tab "transfer".
@@ -1215,10 +1231,10 @@ function handleMarkTransferred(data) {
   }
   try {
     transferSheet_(true).appendRow([new Date(), String(sheet.getRange(row, COL.ID).getValue() || ''), String(sheet.getRange(row, COL.ITEM).getValue() || ''),
-      ket, nominal, tglTransfer, picTransaksi, CURRENT_WHO_ ? CURRENT_WHO_.uid : '', bukti]);
+      ket, nominal, tglTransfer, picTransaksi, CURRENT_WHO_ ? CURRENT_WHO_.uid : '', bukti, sumberDana]);
   } catch (err) { /* riwayat gagal dicatat: transfernya tetap tersimpan di tab kegiatan */ }
 
-  return jsonResponse({ ok: true, row: row, keterangan: ket, sebagian: sebagian, acc_otomatis: accOtomatis, bukti: bukti || undefined, bukti_gagal: buktiGagal || undefined, total_transfer: total,
+  return jsonResponse({ ok: true, row: row, keterangan: ket, sumber_dana: sumberDana || undefined, sebagian: sebagian, acc_otomatis: accOtomatis, bukti: bukti || undefined, bukti_gagal: buktiGagal || undefined, total_transfer: total,
     sisa: Math.max(0, estimasi - total), lebih: estimasi > 0 ? Math.max(0, total - estimasi) : 0 });
 }
 
@@ -1258,13 +1274,15 @@ function handleAttachTransferProof(data) {
 
 // ---- Transfer bertahap: riwayat tiap transfer (DP, termin, pelunasan) per kegiatan ----
 var TAB_TRANSFER = 'transfer';
-var TRANSFER_HEADER = ['Dicatat', 'ID Kegiatan', 'Item Kegiatan', 'Keterangan', 'Nominal (Rp)', 'Tgl Transfer', 'PIC Transaksi', 'Oleh', 'Bukti Transfer'];
+var TRANSFER_HEADER = ['Dicatat', 'ID Kegiatan', 'Item Kegiatan', 'Keterangan', 'Nominal (Rp)', 'Tgl Transfer', 'PIC Transaksi', 'Oleh', 'Bukti Transfer', 'Dibayar Dari'];
 var TRANSFER_KET = ['Lunas', 'DP', 'Termin', 'Pelunasan'];
 
 function transferSheet_(buat) {
   var ss = SpreadsheetApp.getActiveSpreadsheet();
   var sh = ss.getSheetByName(TAB_TRANSFER);
   if (!sh && buat) { sh = ss.insertSheet(TAB_TRANSFER); sh.appendRow(TRANSFER_HEADER); }
+  // tab lama (sebelum "Dibayar Dari"): judul kolomnya dilengkapi
+  if (sh && buat && String(sh.getRange(1, TRANSFER_HEADER.length).getValue() || '') === '') sh.getRange(1, TRANSFER_HEADER.length).setValue(TRANSFER_HEADER[TRANSFER_HEADER.length - 1]);
   return sh;
 }
 
@@ -1279,7 +1297,239 @@ function getTransferData_() {
     if (!id) return;
     (out[id] = out[id] || []).push({ ket: String(r[3] || ''), nominal: Number(r[4]) || 0,
       tgl: r[5] instanceof Date ? Utilities.formatDate(r[5], tz, 'yyyy-MM-dd') : String(r[5] || ''), pic: String(r[6] || ''),
-      bukti: /^https:\/\/(drive|docs)\.google\.com\//.test(String(r[8] || '')) ? String(r[8]) : '' });
+      bukti: /^https:\/\/(drive|docs)\.google\.com\//.test(String(r[8] || '')) ? String(r[8]) : '', sumber: String(r[9] || '') });
+  });
+  return out;
+}
+
+// ============================================================
+// BRAND (Budget WBA): satu dashboard budgeting untuk beberapa brand (Zerodeo, Depot, Retail Online, Kimia Kita, ...).
+// Brand tiap kegiatan disimpan di kolom "Project/Brand"; kosong = Zerodeo (data lama).
+// Pengaturan per brand di tab "brand" (hanya admin yang mengubah, lewat dashboard: Pengaturan Brand):
+//   Anggota     : ID orang yang memegang brand ini (lihat + ajukan). Kosong = semua orang yang punya akses Budget.
+//   Approver    : ID yang memutuskan kegiatan brand ini. Kosong = peran "approver" di Hub (seperti sebelumnya).
+//   Sumber Dana : pilihan "Dibayar dari" saat mencatat transfer (rekening / kas), diisi sendiri.
+// Akses ke app tetap diatur di Hub (Kelola Tim). Admin memegang semua brand.
+// ============================================================
+var BRAND_TAB = 'brand';
+var BRAND_HEADERS = ['Brand', 'Anggota', 'Approver', 'Sumber Dana', 'Diubah', 'Oleh'];
+var BRAND_DEFAULT = ['Zerodeo', 'Depot', 'Retail Online', 'Kimia Kita'];
+var BRAND_MAKS = 20;
+var BRAND_MEMO_ = null;
+
+function daftarKoma_(v, max) {
+  var out = [];
+  String(v === undefined || v === null ? '' : v).split(',').forEach(function (x) {
+    var s = cleanText_(x, max || 60);
+    if (s && out.map(function (o) { return o.toLowerCase(); }).indexOf(s.toLowerCase()) === -1) out.push(s);
+  });
+  return out;
+}
+
+function readBrand_() {
+  if (BRAND_MEMO_) return BRAND_MEMO_;
+  var sh = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(BRAND_TAB);
+  var out = [];
+  if (sh && sh.getLastRow() >= 2) {
+    sh.getRange(2, 1, sh.getLastRow() - 1, 4).getValues().forEach(function (r) {
+      var nama = cleanText_(r[0], 40);
+      if (!nama || findBrandIn_(out, nama)) return;
+      out.push({ nama: nama,
+        anggota: daftarKoma_(r[1], 30).map(function (x) { return x.toLowerCase(); }),
+        approver: daftarKoma_(r[2], 30).map(function (x) { return x.toLowerCase(); }),
+        sumber: daftarKoma_(r[3], 60) });
+    });
+  }
+  if (!out.length) out = BRAND_DEFAULT.map(function (n) { return { nama: n, anggota: [], approver: [], sumber: [] }; });
+  BRAND_MEMO_ = out;
+  return out;
+}
+
+function findBrandIn_(list, nama) {
+  var k = String(nama || '').trim().toLowerCase();
+  for (var i = 0; i < list.length; i++) if (list[i].nama.toLowerCase() === k) return list[i];
+  return null;
+}
+function findBrand_(nama) { return findBrandIn_(readBrand_(), nama); }
+
+// Isi sel Project/Brand -> nama brand (kosong = Zerodeo, data lama).
+function brandNamaRow_(v) { return cleanText_(v, 40) || 'Zerodeo'; }
+
+// Yang memutuskan kegiatan brand ini: approver brand; kalau belum diatur, peran approver di Hub.
+function deciderIds_(b, tim) {
+  if (b && b.approver.length) return b.approver.slice();
+  return (tim || readTim_()).filter(function (t) { return t.peran === 'approver'; }).map(function (t) { return t.id; });
+}
+
+// Boleh melihat / mengajukan di brand ini? Admin: semua. Anggota kosong: semua. Selain itu anggota atau approver brand itu.
+function brandTerlihat_(b, uid, peran) {
+  if (peran === 'admin' || !b) return true;
+  if (!b.anggota.length) return true;
+  return b.anggota.indexOf(uid) !== -1 || b.approver.indexOf(uid) !== -1;
+}
+
+// Kegiatan terlihat oleh uid: miliknya sendiri, atau brandnya dia pegang.
+function kegiatanTerlihat_(r, uid, peran, tim) {
+  if (ownerIds_(r['PIC'], tim).indexOf(uid) !== -1) return true;
+  return brandTerlihat_(findBrand_(brandNamaRow_(r['Project/Brand'])), uid, peran);
+}
+
+// Payload dashboard (bisa dari cache bersama) disaring per orang: hanya kegiatan brand yang dia pegang.
+function saringPayloadBrand_(text) {
+  if (!CURRENT_WHO_ || CURRENT_WHO_.peran === 'admin') return text;
+  if (!readBrand_().some(function (b) { return b.anggota.length; })) return text;   // belum ada brand yang dibatasi
+  var p;
+  try { p = JSON.parse(text); } catch (e) { return text; }
+  if (!Array.isArray(p.kegiatan)) return text;
+  var tim = readTim_(), uid = CURRENT_WHO_.uid, peran = CURRENT_WHO_.peran, ids = {};
+  p.kegiatan = p.kegiatan.filter(function (r) {
+    var ok = kegiatanTerlihat_(r, uid, peran, tim);
+    if (ok) ids[String(r['ID'] || '')] = true;
+    return ok;
+  });
+  if (p.transfer && typeof p.transfer === 'object') {
+    var t = {};
+    Object.keys(p.transfer).forEach(function (k) { if (ids[k]) t[k] = p.transfer[k]; });
+    p.transfer = t;
+  }
+  return JSON.stringify(p);
+}
+
+// Aksi tulis pada baris kegiatan yang brandnya tidak dia pegang ditolak (sama seperti tidak terlihat di dashboard).
+function cekBarisTerlihat_(data) {
+  if (!CURRENT_WHO_ || CURRENT_WHO_.peran === 'admin') return '';
+  var sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('kegiatan');
+  if (!sheet) return '';
+  var rows = [];
+  if (data.row) rows.push(Number(data.row));
+  if (Array.isArray(data.rows)) data.rows.forEach(function (r) { rows.push(Number(r)); });
+  if (Array.isArray(data.items)) data.items.forEach(function (it) { if (it && it.row) rows.push(Number(it.row)); });
+  var last = sheet.getLastRow(), tim = readTim_();
+  for (var i = 0; i < rows.length; i++) {
+    var r = rows[i];
+    if (!r || r <= HEADER_ROW || r > last) continue;   // nomor baris salah: ditolak oleh aksinya sendiri
+    var obj = { 'PIC': sheet.getRange(r, COL.PIC).getValue(), 'Project/Brand': sheet.getRange(r, COL.PROJECT).getValue() };
+    if (!kegiatanTerlihat_(obj, CURRENT_WHO_.uid, CURRENT_WHO_.peran, tim)) return 'Kegiatan ini milik brand ' + brandNamaRow_(obj['Project/Brand']) + ', yang tidak kamu pegang.';
+  }
+  return '';
+}
+
+// Untuk dashboard: daftar brand + pengaturannya (nama, bukan rahasia).
+function getBrandData_() {
+  return readBrand_().map(function (b) { return { nama: b.nama, anggota: b.anggota, approver: b.approver, sumber: b.sumber }; });
+}
+
+// Simpan Pengaturan Brand (khusus admin). data.brand = [{ nama, lama?, anggota[], approver[], sumber[] }] = daftar lengkap.
+// "lama" = nama sebelumnya kalau diganti nama: kegiatan brand itu ikut diganti. Brand yang masih punya kegiatan tidak bisa dihapus.
+function handleSimpanBrand(data) {
+  if (!CURRENT_WHO_ || CURRENT_WHO_.peran !== 'admin') return jsonResponse({ ok: false, error: 'Hanya admin yang boleh mengubah Pengaturan Brand.' });
+  if (!Array.isArray(data.brand) || !data.brand.length) return jsonResponse({ ok: false, error: 'Daftar brand kosong.' });
+  if (data.brand.length > BRAND_MAKS) return jsonResponse({ ok: false, error: 'Maksimal ' + BRAND_MAKS + ' brand.' });
+  var tim = readTim_();
+  var baru = [], ganti = {};
+  for (var i = 0; i < data.brand.length; i++) {
+    var b = data.brand[i] || {};
+    var nama = cleanText_(b.nama, 40);
+    if (!nama) return jsonResponse({ ok: false, error: 'Nama brand ke-' + (i + 1) + ' kosong.' });
+    if (/^[=+\-@]/.test(nama) || /,/.test(nama)) return jsonResponse({ ok: false, error: 'Nama brand "' + nama + '" tidak boleh diawali = + - @ atau berisi koma.' });
+    if (findBrandIn_(baru, nama)) return jsonResponse({ ok: false, error: 'Brand "' + nama + '" dobel.' });
+    var orang = function (list, label) {
+      var out = [];
+      (Array.isArray(list) ? list : daftarKoma_(list, 30)).forEach(function (x) {
+        var id = normalizePic_(x, tim);
+        if (!id) throw new Error(label + ' brand ' + nama + ': "' + cleanText_(x, 30) + '" tidak ada di daftar tim.');
+        if (out.indexOf(id) === -1) out.push(id);
+      });
+      return out;
+    };
+    var anggota, approver;
+    try { anggota = orang(b.anggota, 'Anggota'); approver = orang(b.approver, 'Approver'); }
+    catch (err) { return jsonResponse({ ok: false, error: err.message }); }
+    var sumber = daftarKoma_((Array.isArray(b.sumber) ? b.sumber : [b.sumber]).join(','), 60).filter(function (x) { return !/^[=+\-@]/.test(x); }).slice(0, 20);
+    baru.push({ nama: nama, anggota: anggota, approver: approver, sumber: sumber });
+    var lama = cleanText_(b.lama, 40);
+    if (lama && lama.toLowerCase() !== nama.toLowerCase()) ganti[lama.toLowerCase()] = nama;
+  }
+  var lock = LockService.getScriptLock();
+  if (!lock.tryLock(15000)) return jsonResponse({ ok: false, error: 'Server sedang sibuk, coba lagi sebentar.' });
+  try {
+    var ss = SpreadsheetApp.getActiveSpreadsheet();
+    var keg = ss.getSheetByName('kegiatan');
+    var last = keg ? keg.getLastRow() : 0;
+    var col = [];
+    if (keg && last > HEADER_ROW) col = keg.getRange(HEADER_ROW + 1, COL.PROJECT, last - HEADER_ROW, 2).getValues();   // brand + item
+    // brand yang dihapus tapi masih punya kegiatan: ditolak
+    var dipakai = {};
+    col.forEach(function (r) { if (String(r[1] || '').trim()) dipakai[brandNamaRow_(r[0]).toLowerCase()] = brandNamaRow_(r[0]); });
+    var hilang = Object.keys(dipakai).filter(function (k) { return !findBrandIn_(baru, ganti[k] || k); });
+    if (hilang.length) return jsonResponse({ ok: false, error: 'Brand ' + hilang.map(function (k) { return dipakai[k]; }).join(', ') + ' masih punya kegiatan, jadi tidak bisa dihapus (ganti nama boleh).' });
+    // ganti nama: kegiatan ikut
+    var nGanti = 0;
+    if (Object.keys(ganti).length && col.length) {
+      var vals = col.map(function (r) {
+        var k = brandNamaRow_(r[0]).toLowerCase();
+        if (String(r[1] || '').trim() && ganti[k]) { nGanti++; return [ganti[k]]; }
+        return [r[0]];
+      });
+      if (nGanti) keg.getRange(HEADER_ROW + 1, COL.PROJECT, vals.length, 1).setValues(vals);
+    }
+    var sh = ss.getSheetByName(BRAND_TAB);
+    if (!sh) {
+      sh = ss.insertSheet(BRAND_TAB);
+      try { sh.setFrozenRows(1); } catch (e) { /* abaikan */ }
+    }
+    sh.clear();
+    var stamp = new Date(), oleh = CURRENT_WHO_.uid;
+    var rows = [BRAND_HEADERS].concat(baru.map(function (b) { return [b.nama, b.anggota.join(', '), b.approver.join(', '), b.sumber.join(', '), stamp, oleh]; }));
+    sh.getRange(1, 1, rows.length, BRAND_HEADERS.length).setValues(rows);
+    try { sh.getRange(1, 1, 1, BRAND_HEADERS.length).setFontWeight('bold'); } catch (e) { /* abaikan */ }
+    BRAND_MEMO_ = null;
+    try { if (keg) setColumnDropdown_(keg, COL.PROJECT, baru.map(function (b) { return b.nama; })); } catch (e) { /* abaikan */ }
+    return jsonResponse({ ok: true, brand: getBrandData_(), diganti: nGanti });
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+// Sumber dana yang dipilih saat catat transfer -> nama resmi di brand itu, '' kalau tidak diisi. Melempar Error kalau tidak dikenal.
+function sumberDanaBrand_(brandValue, raw) {
+  var s = cleanText_(raw, 60);
+  if (!s) return '';
+  var b = findBrand_(brandNamaRow_(brandValue));
+  var list = b ? b.sumber : [];
+  for (var i = 0; i < list.length; i++) if (list[i].toLowerCase() === s.toLowerCase()) return list[i];
+  throw new Error('Sumber dana "' + s + '" tidak ada di brand ' + brandNamaRow_(brandValue) + '. ' +
+    (list.length ? 'Pilihannya: ' + list.join(', ') + '.' : 'Brand ini belum punya sumber dana (atur di Pengaturan Brand).'));
+}
+
+// ============================================================
+// REKAP per bulan (Budget WBA): rencana, sudah ditransfer, sisa pelunasan, belum nota; per brand dan per sumber dana.
+// "Ditransfer" mengikuti tanggal transfer (tab transfer; data lama tanpa riwayat: Tgl Transfer + Nominal Transfer di kegiatan).
+// ============================================================
+function rekapBulan_(rows, transfer, bulan, brand) {
+  var out = { bulan: bulan, brand: brand || 'Semua', rencana: 0, ditransfer: 0, sisa_pelunasan: 0, belum_nota: 0, per_brand: {}, per_sumber: {} };
+  var tambah = function (obj, k, field, n) { obj[k] = obj[k] || { rencana: 0, ditransfer: 0 }; obj[k][field] += n; };
+  rows.forEach(function (r) {
+    var b = brandNamaRow_(r['Project/Brand']);
+    if (brand && b.toLowerCase() !== String(brand).toLowerCase()) return;
+    var st = String(r['Status'] || '');
+    if (st === 'Dibatalkan') return;
+    var est = Number(r['Estimasi (Rp)']) || 0, tf = Number(r['Nominal Transfer (Rp)']) || 0;
+    if (st !== 'Ditolak' && String(r['Tanggal Dicatat'] || '').slice(0, 7) === bulan) { out.rencana += est; tambah(out.per_brand, b, 'rencana', est); }
+    if (tf > 0 && ['Ditransfer', 'Selesai'].indexOf(st) === -1) out.sisa_pelunasan += Math.max(0, est - tf);
+    if (st === 'Selesai' && !/^https?:\/\//i.test(String(r['Nota/Bukti'] || ''))) out.belum_nota++;
+    var riw = transfer[String(r['ID'] || '')] || [];
+    if (riw.length) {
+      riw.forEach(function (t) {
+        if (String(t.tgl || '').slice(0, 7) !== bulan) return;
+        out.ditransfer += t.nominal; tambah(out.per_brand, b, 'ditransfer', t.nominal);
+        var s = t.sumber || '(belum diisi)';
+        out.per_sumber[s] = (out.per_sumber[s] || 0) + t.nominal;
+      });
+    } else if (tf > 0 && String(r['Tgl Transfer'] || '').slice(0, 7) === bulan) {
+      out.ditransfer += tf; tambah(out.per_brand, b, 'ditransfer', tf);
+      out.per_sumber['(belum diisi)'] = (out.per_sumber['(belum diisi)'] || 0) + tf;
+    }
   });
   return out;
 }
@@ -1471,7 +1721,7 @@ function handleEditKegiatan(data) {
     if (ld.error) return jsonResponse({ ok: false, error: ld.error });
     var sheet = ld.sheet, status = ld.status;
     if (status === STATUS_BATAL) return jsonResponse({ ok: false, error: 'Kegiatan ini sudah dibatalkan. Pulihkan dulu kalau mau diedit.' });
-    var pe = checkCanEditRow_(sheet.getRange(row, COL.PIC).getValue(), status);
+    var pe = checkCanEditRow_(sheet.getRange(row, COL.PIC).getValue(), status, sheet.getRange(row, COL.PROJECT).getValue());
     if (pe) return jsonResponse({ ok: false, error: pe });
     var danaLinked = String(sheet.getRange(row, COL.DANA).getValue() || '').trim() !== '';
     var sudahTf = status === 'Ditransfer' || status === 'Selesai';
@@ -1490,6 +1740,13 @@ function handleEditKegiatan(data) {
       var item = cleanText_(data.item, 200);
       if (!item) return jsonResponse({ ok: false, error: 'Item kegiatan wajib diisi.' });
       add(COL.ITEM, safeText_(item), null, 'Item', 'txt');
+    }
+    if (has('brand')) {
+      var bEd = findBrand_(data.brand);
+      if (!bEd) return jsonResponse({ ok: false, error: 'Brand "' + cleanText_(data.brand, 40) + '" tidak dikenal.' });
+      if (!brandTerlihat_(bEd, CURRENT_WHO_.uid, CURRENT_WHO_.peran)) return jsonResponse({ ok: false, error: 'Kamu tidak memegang brand ' + bEd.nama + '.' });
+      var lamaB = brandNamaRow_(sheet.getRange(row, COL.PROJECT).getValue());
+      if (lamaB.toLowerCase() !== bEd.nama.toLowerCase()) add(COL.PROJECT, bEd.nama, null, 'Brand', 'txt');
     }
     if (has('kategori')) {
       var kat = cleanKategori_(data.kategori);
@@ -1582,7 +1839,7 @@ function handleCancelKegiatan(data) {
     var ld = loadEditableRow_(row);
     if (ld.error) return jsonResponse({ ok: false, error: ld.error });
     if (ld.status === STATUS_BATAL) return jsonResponse({ ok: false, error: 'Kegiatan ini sudah dibatalkan.' });
-    var pe = checkCanEditRow_(ld.sheet.getRange(row, COL.PIC).getValue(), ld.status);
+    var pe = checkCanEditRow_(ld.sheet.getRange(row, COL.PIC).getValue(), ld.status, ld.sheet.getRange(row, COL.PROJECT).getValue());
     if (pe) return jsonResponse({ ok: false, error: pe });
     var alasan = cleanText_(data.alasan, 150).replace(/"/g, "'");
     ld.sheet.getRange(row, COL.STATUS).setValue(STATUS_BATAL);
@@ -1606,7 +1863,7 @@ function handleRestoreKegiatan(data) {
     while ((m = re.exec(catatan)) !== null) {
       if (STATUS_LIST.indexOf(m[1]) !== -1 && m[1] !== STATUS_BATAL) target = m[1];
     }
-    var pe = checkCanEditRow_(ld.sheet.getRange(row, COL.PIC).getValue(), target);
+    var pe = checkCanEditRow_(ld.sheet.getRange(row, COL.PIC).getValue(), target, ld.sheet.getRange(row, COL.PROJECT).getValue());
     if (pe) return jsonResponse({ ok: false, error: pe });
     ld.sheet.getRange(row, COL.STATUS).setValue(target);
     appendCatatan_(ld.sheet, row, 'Dipulihkan ke "' + target + '" (' + stampNow_() + ')');

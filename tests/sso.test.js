@@ -103,7 +103,7 @@ const rowOf = (i) => H + 1 + i;
   let r = post(env, { action: 'update_status', row: rowOf(0), status: 'Approved' });
   assert.strictEqual(r.ok, false); assert(/Masuk lewat Hub/.test(r.error)); ok('approve tanpa identitas (jalur kode tim) -> ditolak');
   r = post(env, Object.assign({ action: 'update_status', row: rowOf(0), status: 'Approved' }, as('yanuar', 'anggota')));
-  assert(/approver atau admin/.test(r.error)); ok('approve oleh anggota -> ditolak');
+  assert(/approver brand ini \(Lemon\)/.test(r.error)); ok('approve oleh anggota -> ditolak, disebut siapa approvernya');
   r = post(env, Object.assign({ action: 'update_status', row: rowOf(0), status: 'Approved', pin: '1234' }, as('lemon', 'approver')));
   assert.strictEqual(r.ok, true); assert.strictEqual(env.sheets.kegiatan.rows[rowOf(0) - 1][10], 'Approved'); ok('approve oleh approver -> berhasil, tanpa PIN');
   assert(/Approved oleh Lemon/.test(env.sheets.kegiatan.rows[rowOf(0) - 1][17])); ok('catatan kegiatan menyebut nama pemutus (bukan "Lemon" tetap)');
@@ -407,7 +407,7 @@ const rowOf = (i) => H + 1 + i;
   vm.runInContext("sheetToObjects = function () { return []; }; getKategoriList = function () { return []; }; getDanaData_ = function () { return []; }; mkt_getData = function () { return {}; };", env.ctx);
   const p = env.ctx.buildPayload_();
   assert(Array.isArray(p.tim) && p.tim.length === 6 && p.tim[0].id === 'lenno'); ok('payload dashboard membawa daftar tim (id, nama, peran)');
-  assert.strictEqual(p.versi, '2026-11-17 tempel-bukti'); ok('versi kode ikut naik');
+  assert.strictEqual(p.versi, '2026-11-18 budget-wba'); ok('versi kode ikut naik');
   const appJs = require('fs').readFileSync(require('path').join(__dirname, '..', 'app.js'), 'utf8');
   assert.strictEqual(/const EXPECTED_VERSI = '([^']+)'/.exec(appJs)[1], p.versi); ok('EXPECTED_VERSI di app.js sama dengan KODE_VERSI di Code.gs (tidak ada banner versi palsu)');
 }
@@ -564,7 +564,7 @@ const PENV = { APPS_SCRIPT_URL: 'https://script.google.com/macros/s/ABC/exec', S
   const status = (id) => env.sheets.kegiatan.rows.find((r) => r[19] === id)[10];
   assert.strictEqual(aksi('lemon', 'approver', { jenis: 'putuskan', id: 'k-aaaaaaaaaa', status: 'Approved' }, hubToken(SECRET, { uid: 'lemon', peran: 'approver' })).error, 'unauthorized'); ok('bot_aksi: token pengguna (bukan servis) ditolak');
   let r = aksi('yanuar', 'anggota', { jenis: 'putuskan', id: 'k-aaaaaaaaaa', status: 'Approved' });
-  assert(/approver atau admin/.test(r.error)); assert.strictEqual(status('k-aaaaaaaaaa'), 'Diajukan'); ok('bot_aksi putuskan: anggota ditolak, sama dengan dashboard');
+  assert(/approver brand ini/.test(r.error)); assert.strictEqual(status('k-aaaaaaaaaa'), 'Diajukan'); ok('bot_aksi putuskan: anggota ditolak, sama dengan dashboard');
   r = aksi('lemon', 'approver', { jenis: 'putuskan', id: 'k-bbbbbbbbbb', status: 'Approved' });
   assert(/kegiatanmu sendiri/.test(r.error)); ok('bot_aksi putuskan: approver tidak bisa meng-approve kegiatannya sendiri');
   r = aksi('lemon', 'approver', { jenis: 'putuskan', id: 'k-aaaaaaaaaa', status: 'Approved' });
