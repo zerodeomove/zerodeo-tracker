@@ -493,39 +493,3 @@ tbody tr { transition: background-color .15s ease; }
 .tf-tempel { border: 1px dashed var(--border); background: var(--surface); color: var(--accent); border-radius: 6px; padding: 2px 7px; font-size: 11.5px; cursor: pointer; margin-left: 4px; }
 .tf-bukti-list { font-size: 12px; color: var(--text-muted); margin-top: 4px; }
 .tf-bukti-list a { color: var(--accent-dark); text-decoration: none; margin-right: 8px; white-space: nowrap; }
-
-/* ===== Budget WBA: pilihan brand, ringkasan bulan ini, Pengaturan Brand ===== */
-.brand-bar { display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap; margin: 0 0 10px; }
-.bchips { display: flex; gap: 6px; flex-wrap: wrap; min-width: 0; }
-.bchip { border: 1px solid var(--border); background: var(--surface); color: var(--text); border-radius: 999px; padding: 6px 13px; font: inherit; font-size: 13px; cursor: pointer; }
-.bchip.on { border-color: var(--accent); background: var(--accent-light); color: var(--accent-dark); font-weight: 600; }
-.bset { font-size: 12.5px; }
-.brand-bulan { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 12px 14px; margin-bottom: 12px; }
-.bb-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 8px; }
-.bb-head h2 { font-size: 12px; text-transform: uppercase; letter-spacing: .05em; color: var(--text-muted); margin: 0; }
-.bb-btns { display: flex; gap: 6px; flex-wrap: wrap; }
-.bb-btns .btn { font-size: 12.5px; padding: 6px 10px; }
-.bb-tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 8px; }
-.bb-tiles > div { background: var(--bg); border-radius: 8px; padding: 8px 10px; min-width: 0; }
-.bb-tiles b { display: block; font-size: 15px; overflow-wrap: anywhere; }
-.bb-tiles span { font-size: 11.5px; color: var(--text-muted); }
-.bb-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 6px 18px; margin-top: 10px; }
-.bb-title { font-size: 11px; text-transform: uppercase; letter-spacing: .05em; color: var(--text-muted); margin: 4px 0; }
-.bb-row { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 2px 8px; padding: 6px 0; border-top: 1px solid var(--border); font-size: 13px; }
-.bb-row[onclick] { cursor: pointer; }
-.bb-row .v { white-space: nowrap; font-weight: 600; }
-.bb-row .v small { font-weight: 400; color: var(--text-muted); }
-.bb-row .muted { color: var(--text-muted); font-style: italic; }
-.bb-bar { flex-basis: 100%; height: 5px; border-radius: 999px; background: var(--bg); overflow: hidden; }
-.bb-bar i { display: block; height: 100%; background: var(--accent); border-radius: 999px; }
-.brand-tag { display: inline-block; font-size: 11px; font-weight: 600; padding: 1px 7px; border-radius: 5px; background: var(--accent-light); color: var(--accent-dark); }
-.bs-card { border: 1px solid var(--border); border-radius: 10px; padding: 10px 12px; margin: 10px 0; }
-.bs-top { display: flex; gap: 8px; align-items: center; }
-.bs-top input { font-weight: 700; flex: 1; min-width: 0; }
-.bs-x { border: 0; background: transparent; color: var(--red); font-size: 16px; cursor: pointer; }
-.bs-row { margin-top: 8px; }
-.bs-k { font-size: 12px; color: var(--text-muted); margin-bottom: 4px; }
-.bs-chips { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
-.bs-chips .tag { display: inline-flex; align-items: center; gap: 4px; border: 1px solid var(--border); border-radius: 999px; padding: 3px 4px 3px 10px; font-size: 12.5px; }
-.bs-chips .tag button { border: 0; background: transparent; cursor: pointer; color: var(--text-muted); font-size: 14px; line-height: 1; }
-.bs-chips .bs-add { flex: 1; min-width: 180px; font-size: 13px; }

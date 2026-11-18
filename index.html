@@ -56,8 +56,6 @@
 
   <!-- ================= TRACKER ================= -->
   <section class="panel" id="panel-tracker">
-    <div class="brand-bar" id="brandBar" hidden></div>
-    <div class="brand-bulan" id="brandBulan" hidden></div>
     <div class="cards">
       <div class="card clickable" onclick="filterMenungguApprove()" title="Klik buat lihat yang menunggu approve">
         <h2>Menunggu Approve</h2>
@@ -200,11 +198,6 @@
         <input type="checkbox" id="k-arsip">
         <span><b>Data lama</b> — kegiatan ini sudah selesai sebelum dashboard dipakai</span></label>
 
-      <label id="k-brand-wrap" style="display:none">Brand
-        <select id="k-brand" onchange="updateBrandHint()"></select>
-        <span class="hint" id="k-brand-hint"></span>
-        <span class="field-error" id="err-k-brand">Pilih brand-nya.</span></label>
-
       <label>Item kegiatan
         <input type="text" id="k-item" placeholder="Contoh: sewa rak display Malang">
         <span class="field-error" id="err-k-item">Wajib diisi.</span></label>
@@ -291,8 +284,6 @@
     <div class="hint" id="ed-sub"></div>
     <form id="editForm" novalidate>
       <div class="estack" id="ed-fields">
-        <label id="ed-brand-wrap" style="display:none">Brand
-          <select id="ed-brand"></select></label>
         <label>Item kegiatan
           <input type="text" id="ed-item">
           <span class="field-error" id="err-ed-item">Wajib diisi.</span></label>
@@ -395,37 +386,11 @@
         <div class="scroll"><table><thead><tr><th>Dana</th><th>Kegiatan</th><th>Estimasi</th><th>Actual</th></tr></thead><tbody id="rk-dana"></tbody></table></div>
       </div>
     </div>
-    <div class="rekap-grid" id="rk-wba" hidden>
-      <div>
-        <div class="rekap-title">Per brand</div>
-        <div class="scroll"><table><thead><tr><th>Brand</th><th>Rencana</th><th>Ditransfer</th></tr></thead><tbody id="rk-brand"></tbody></table></div>
-      </div>
-      <div>
-        <div class="rekap-title">Dibayar dari (menurut tanggal transfer)</div>
-        <div class="scroll"><table><thead><tr><th>Sumber dana</th><th>Ditransfer</th></tr></thead><tbody id="rk-sumber"></tbody></table></div>
-      </div>
-    </div>
     <div class="hint">Kegiatan Dibatalkan tidak dihitung. Periode menurut tanggal dicatat (data lama = tanggal bayar). File Excel berisi lembar Ringkasan, Per Bulan, Per Kategori, Per Dana, dan Detail (dengan link nota).</div>
     <div class="msg" id="rk-msg"></div>
     <div class="modal-actions">
       <button type="button" class="btn-cancel" onclick="closeModal('m-rekap')">Tutup</button>
-      <button type="button" class="btn-cancel" onclick="laporanPdf($('rk-periode').value)">📄 PDF</button>
       <button type="button" class="btn-submit" id="rk-download" onclick="downloadRekap()">Unduh Excel</button>
-    </div>
-  </div>
-</div>
-
-<!-- ================= POPUP: Pengaturan Brand (admin) ================= -->
-<div class="modal-overlay" id="m-brandset">
-  <div class="modal-box wide">
-    <h3>Pengaturan Brand</h3>
-    <div class="hint">Atur siapa yang memegang tiap brand, siapa approver-nya, dan pilihan "Dibayar dari". Akses ke Budget sendiri tetap diatur di Hub (Kelola Tim). Admin memegang semua brand. Jalur Fixed dan transfer yang dicatat duluan tetap bisa melewati approve.</div>
-    <div id="bs-list"></div>
-    <button type="button" class="btn ghost" onclick="bsTambahBrand()">+ Brand baru</button>
-    <div class="msg" id="bs-msg"></div>
-    <div class="modal-actions">
-      <button type="button" class="btn-cancel" onclick="closeModal('m-brandset')">Tutup</button>
-      <button type="button" class="btn-submit" id="bs-submit" onclick="simpanBrandSet()">Simpan</button>
     </div>
   </div>
 </div>
@@ -549,8 +514,6 @@
         <option value="Termin">Termin (masih ada sisa)</option>
         <option value="Pelunasan">Pelunasan</option>
       </select></label>
-    <label id="tf-sumber-wrap" style="display:none">Dibayar dari
-      <select id="tf-sumber"></select></label>
     <label>PIC Transaksi
       <select id="tf-pic"><option value="">Pilih PIC…</option></select></label>
     <label>Nominal Transfer (Rp)
@@ -727,7 +690,6 @@
 <script src="common.js"></script>
 <script src="app.js"></script>
 <script src="tracker.js"></script>
-<script src="brand.js"></script>
 <script src="marketing.js"></script>
 <script>boot();</script>
 </body>
