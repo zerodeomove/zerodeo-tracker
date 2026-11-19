@@ -528,6 +528,10 @@ tbody tr { transition: background-color .15s ease; }
 .sd-var select { flex: 1; min-width: 0; margin: 0; }
 .sd-var input { flex: 0 0 78px; margin: 0; }
 .sd-var button { flex: 0 0 auto; border: 1px solid var(--border); background: var(--surface); border-radius: 8px; width: 34px; height: 34px; cursor: pointer; color: var(--text-muted); }
+.sd-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.sd-chips button { border: 1px solid var(--border); background: var(--surface); border-radius: 999px; padding: 6px 12px; font: inherit; font-size: 13px; cursor: pointer; color: var(--text); }
+.sd-chips button.on { background: var(--accent); border-color: var(--accent); color: #fff; }
+.sd-chips button.on::before { content: '✓ '; }
 .sd-addvar { padding: 6px 12px; font-size: 13px; }
 .sd-vprog { display: grid; gap: 6px; margin: 4px 0 10px; }
 .sd-vprog .v { font-size: 12.5px; }

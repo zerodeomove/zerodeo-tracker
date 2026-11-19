@@ -457,7 +457,14 @@ function seed_sampel_(b) {
   var q = String(b['Qty'] === undefined ? '' : b['Qty']).split(/[;,]/).map(function (x) { return Number(String(x).trim()) || 0; });
   return ln.map(function (v, i) { return { varian: v, qty: q[i] || 0 }; });
 }
+// platform batch: string "TikTok, Instagram" atau array -> "TikTok, Instagram" (nama baku dari daftar channel)
+function seed_platform_(v) {
+  var arr = Array.isArray(v) ? v : String(v || '').split(/[,;\/]| dan /);
+  return mkt_resolveLabels_('channel', arr.map(function (x) { return String(x).trim(); }).filter(Boolean)).join(', ');
+}
 function seed_tambahKreator_(batchId, list, defPlatform, defVarian) {
+  // platform bawaan kreator hanya kalau batch cuma satu platform
+  if (String(defPlatform || '').indexOf(',') !== -1) defPlatform = '';
   var sh = seed_sheet_('seeding_kreator');
   var ada = {};
   seed_rows_('seeding_kreator').forEach(function (k) { if (String(k['Batch']) === batchId) ada[seed_akun_(k['Akun'] || k['Nama'])] = 1; });
@@ -484,7 +491,7 @@ function seed_add_(d) {
   var pic = d.pic ? normalizePic_(d.pic) : CURRENT_WHO_.uid;
   if (!pic) return { ok: false, error: 'PIC tidak dikenali.' };
   var sampel = seed_parseSampel_(d);
-  var platform = mkt_cleanLabel_(d.platform || '');
+  var platform = seed_platform_(d.platform);
   var batas = mkt_int_(d.batas) || SEED_BATAS_BAWAAN;
   var est = isMarketingOnly_() ? '' : (Math.round(Number(d.estimasi)) || '');
   var id = 'SD' + new Date().getTime().toString(36);
@@ -547,7 +554,7 @@ function seed_update_(d) {
       var sp = seed_parseSampel_(d);
       seed_set_('seeding', b._row, 'Lane', sp.lane); seed_set_('seeding', b._row, 'Qty', sp.qty); pesan.push('varian & jumlah sampel');
     }
-    if (d.platform !== undefined) { seed_set_('seeding', b._row, 'Platform', d.platform ? (mkt_resolveLabels_('channel', [d.platform])[0] || '') : ''); pesan.push('platform'); }
+    if (d.platform !== undefined) { seed_set_('seeding', b._row, 'Platform', seed_platform_(d.platform)); pesan.push('platform'); }
     if (d.pic !== undefined) { var pic = normalizePic_(d.pic); if (!pic) return { ok: false, error: 'PIC tidak dikenali.' }; seed_set_('seeding', b._row, 'PIC', pic); pesan.push('PIC ' + picNama_(pic)); }
     if (d.estimasi !== undefined && !isMarketingOnly_()) { seed_set_('seeding', b._row, 'Estimasi (Rp)', Math.round(Number(d.estimasi)) || ''); pesan.push('estimasi'); }
     if (d.batas !== undefined) { seed_set_('seeding', b._row, 'Batas Posting (hari)', mkt_int_(d.batas) || SEED_BATAS_BAWAAN); pesan.push('batas posting'); }
@@ -763,7 +770,7 @@ function mkt_aturLabel_(d) {
     sheet.getRange(e._row, 1).setValue(mkt_safe_(baru));
     var n = 0;
     if (tab === 'lane') { n += mkt_gantiDiKolom_('strategi', 'Lane', e.nama, baru); n += mkt_gantiDiKolom_('seeding', 'Lane', e.nama, baru); n += mkt_gantiDiKolom_('seeding_kreator', 'Varian', e.nama, baru); }
-    else { n += mkt_gantiDiKolom_('strategi', 'Channel', e.nama, baru); n += mkt_gantiDiKolom_('hasil_event', 'Channel', e.nama, baru); n += mkt_gantiDiKolom_('seeding', 'Platform', e.nama, baru); }
+    else { n += mkt_gantiDiKolom_('strategi', 'Channel', e.nama, baru); n += mkt_gantiDiKolom_('hasil_event', 'Channel', e.nama, baru); n += mkt_gantiDiKolom_('seeding', 'Platform', e.nama, baru); n += mkt_gantiDiKolom_('seeding_kreator', 'Platform', e.nama, baru); }
     return { ok: true, nama: baru, diganti: n, message: label + ' "' + e.nama + '" → "' + baru + '"' + (n ? ' (' + n + ' baris data ikut diganti)' : '') + '.' };
   }
   return { ok: false, error: 'Aksi tidak dikenal.' };

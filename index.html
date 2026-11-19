@@ -225,7 +225,10 @@
         <div id="sd-sampel"></div>
         <button type="button" class="btn ghost sd-addvar" onclick="sdBarisVarian()">+ Varian</button>
       </div>
-      <label>Platform utama <span class="opt">(opsional)</span><select id="sd-platform"></select></label>
+      <div class="sd-sampel-wrap">
+        <div class="lbl">Platform <span class="opt">(opsional, boleh lebih dari satu)</span></div>
+        <div class="sd-chips" id="sd-platform"></div>
+      </div>
       <div class="row2">
         <label id="sd-est-wrap">Estimasi biaya (Rp) <span class="opt">(opsional)</span><input type="number" id="sd-est" min="0" step="1000" inputmode="numeric"></label>
         <label>Ingatkan kalau belum posting setelah <input type="number" id="sd-batas" min="1" value="7" inputmode="numeric"><span class="hint">hari sejak sampel diterima</span></label>

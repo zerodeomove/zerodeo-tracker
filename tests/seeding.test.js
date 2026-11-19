@@ -118,4 +118,12 @@ ba = svc({ action: 'bot_aksi', for_uid: 'yanuar', for_peran: 'anggota', aksi: { 
 assert.strictEqual(ba.ok, true, ba.error); assert.strictEqual(e.sheets.seeding.rows.find((x) => x[0] === ba.id)[3], 'Kids Fresh'); ok('bot: ajukan seeding dengan varian + jumlah');
 post({ action: 'atur_label', jenis: 'lane', op: 'ganti', nama: 'Kids Fresh', baru: 'Kids Fresh Mini' }, 'lenno', 'admin');
 assert(e.sheets.seeding_kreator.rows.some((x) => x[13] === 'Kids Fresh Mini')); ok('ganti nama lane: varian kreator ikut ganti');
+// platform bisa banyak
+const P = post({ action: 'add_seeding', nama: 'Seeding Multi Platform', platform: ['TikTok', 'Instagram'], kreator: '@p1\n@p2 - TikTok' }, 'yanuar', 'anggota').id;
+assert.strictEqual(e.sheets.seeding.rows.find((x) => x[0] === P)[4], 'TikTok, Instagram'); ok('batch: beberapa platform');
+assert.deepStrictEqual(e.sheets.seeding_kreator.rows.filter((x) => x[1] === P).map((x) => x[4]), ['', 'TikTok']); ok('kreator: platform tidak ditebak kalau batch punya beberapa platform');
+r = post({ action: 'update_seeding', id: P, platform: 'TikTok, Instagram, YouTube' }, 'yanuar', 'anggota');
+assert.strictEqual(r.ok, true, r.error); assert.strictEqual(e.sheets.seeding.rows.find((x) => x[0] === P)[4], 'TikTok, Instagram, YouTube'); ok('ubah platform (teks dipisah koma)');
+ba = svc({ action: 'bot_aksi', for_uid: 'yanuar', for_peran: 'anggota', aksi: { jenis: 'ubah_seeding', id: P, platform: ['Instagram'] } });
+assert.strictEqual(ba.ok, true, ba.error); assert.strictEqual(e.sheets.seeding.rows.find((x) => x[0] === P)[4], 'Instagram'); ok('bot: ubah platform (array)');
 console.log('\n' + n + ' tes lolos');

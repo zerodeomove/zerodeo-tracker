@@ -64,19 +64,19 @@ function openSeeding(editId) {
   const b = editId ? M.seeding.find((x) => x.ID === editId) : null;
   sdEdit = b ? b.ID : null;
   $('seedingForm').reset(); clearErrors($('seedingForm')); setMsg($('sd-msg'), '', '');
-  const opsi = (list, cur) => '<option value="">-</option>' + list.concat(cur && list.indexOf(cur) < 0 ? [cur] : []).map((x) => '<option>' + zEsc(x) + '</option>').join('');
   $('sd-sampel').innerHTML = '';
   (b ? sdSampel(b) : []).forEach((x) => sdBarisVarian(x.varian, x.qty));
   if (!$('sd-sampel').children.length) sdBarisVarian();
   sdTotalSampel();
-  $('sd-platform').innerHTML = opsi(M.channel, b && b.Platform);
+  const plat = b ? splitList(b.Platform) : [];
+  $('sd-platform').innerHTML = M.channel.concat(plat.filter((x) => M.channel.indexOf(x) < 0)).map((x) => `<button type="button" class="${plat.indexOf(x) >= 0 ? 'on' : ''}" onclick="this.classList.toggle('on')">${zEsc(x)}</button>`).join('');
   $('sd-est-wrap').style.display = isMarketingOnly() ? 'none' : '';
   $('sd-judul').textContent = b ? 'Ubah seeding' : 'Ajukan seeding';
   $('sd-hint').textContent = b ? 'Kreator diubah / dihapus langsung di daftar kreator.' : 'Setelah di-acc approver / admin, sampel baru boleh dikirim. Daftar kreator bisa ditambah belakangan.';
   $('sd-submit').textContent = b ? 'Simpan perubahan' : 'Ajukan';
   $('sd-kreator-wrap').style.display = b ? 'none' : '';
   if (b) {
-    $('sd-nama').value = b['Nama Batch'] || ''; $('sd-produk').value = b.Produk || ''; $('sd-platform').value = b.Platform || '';
+    $('sd-nama').value = b['Nama Batch'] || ''; $('sd-produk').value = b.Produk || '';
     $('sd-est').value = b['Estimasi (Rp)'] || ''; $('sd-batas').value = b['Batas Posting (hari)'] || 7; $('sd-pic').value = picKey(b.PIC || '');
     $('sd-catatan').value = String(b.Catatan || '').split(' | ').filter((x) => !/^(Approved|Ditolak|Revisi) oleh /.test(x.trim())).join(' | ');
   } else {
@@ -97,6 +97,7 @@ function sdBarisVarian(varian, qty) {
   $('sd-sampel').appendChild(d);
   if (!varian && $('sd-sampel').children.length > 1) d.querySelector('select').focus();
 }
+function sdAmbilPlatform() { return Array.from($('sd-platform').querySelectorAll('button.on')).map((x) => x.textContent); }
 function sdAmbilSampel() {
   return Array.from($('sd-sampel').querySelectorAll('.sd-var')).map((d) => ({ varian: d.querySelector('select').value, qty: Number(d.querySelector('input').value) || 0 })).filter((x) => x.varian);
 }
@@ -112,10 +113,10 @@ $('seedingForm').addEventListener('submit', (e) => {
   if (sdEdit) {
     const b = M.seeding.find((x) => x.ID === sdEdit) || {};
     const sampelTeks = (arr) => arr.map((x) => x.varian + '=' + (x.qty || 0)).join('|');
-    const ubah = { nama, produk: $('sd-produk').value.trim(), sampel: sampelTeks(sdAmbilSampel()), platform: $('sd-platform').value, pic: $('sd-pic').value,
+    const ubah = { nama, produk: $('sd-produk').value.trim(), sampel: sampelTeks(sdAmbilSampel()), platform: sdAmbilPlatform().join(', '), pic: $('sd-pic').value,
       batas: $('sd-batas').value, catatan: $('sd-catatan').value.trim() };
     if (!isMarketingOnly()) ubah.estimasi = $('sd-est').value;
-    const lama = { nama: b['Nama Batch'] || '', produk: b.Produk || '', sampel: sampelTeks(sdSampel(b)), platform: b.Platform || '', pic: picKey(b.PIC || ''), batas: String(b['Batas Posting (hari)'] || 7),
+    const lama = { nama: b['Nama Batch'] || '', produk: b.Produk || '', sampel: sampelTeks(sdSampel(b)), platform: splitList(b.Platform).join(', '), pic: picKey(b.PIC || ''), batas: String(b['Batas Posting (hari)'] || 7),
       catatan: String(b.Catatan || '').split(' | ').filter((x) => !/^(Approved|Ditolak|Revisi) oleh /.test(x.trim())).join(' | '), estimasi: String(b['Estimasi (Rp)'] || '') };
     const payload = { action: 'update_seeding', id: sdEdit };
     Object.keys(ubah).forEach((k) => { if (String(ubah[k]) !== String(lama[k])) payload[k] = ubah[k]; });
@@ -130,7 +131,7 @@ $('seedingForm').addEventListener('submit', (e) => {
   const kreator = $('sd-kreator').value;
   enqueueSave({
     label: 'Seeding: ' + nama,
-    payload: { action: 'add_seeding', nama, produk: $('sd-produk').value.trim(), sampel: sdAmbilSampel(), platform: $('sd-platform').value,
+    payload: { action: 'add_seeding', nama, produk: $('sd-produk').value.trim(), sampel: sdAmbilSampel(), platform: sdAmbilPlatform(),
       estimasi: isMarketingOnly() ? '' : $('sd-est').value, batas: $('sd-batas').value, pic: $('sd-pic').value, kreator, catatan: $('sd-catatan').value.trim() },
     okMsg: 'Seeding "' + nama + '" diajukan. Menunggu acc approver / admin.'
   });
