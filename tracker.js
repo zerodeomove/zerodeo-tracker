@@ -58,7 +58,10 @@ function updateStatus(row, newStatus) {
   const verb = newStatus === 'Approved' ? 'Approve' : 'Reject';
   if (tundaKeputusan[row]) return;
   // Tanpa pop-up "Yakin?": langsung tampil "akan di-approve" + Urungkan 6 detik, baru dikirim ke server.
-  const t = { verb: verb, job: { label: verb + ': ' + nama, payload: { action: 'update_status', row: row, status: newStatus }, rows: [row], restore: null } };
+  const t = { verb: verb, job: { label: verb + ': ' + nama, payload: { action: 'update_status', row: row, status: newStatus }, rows: [row], restore: null,
+    // status langsung berubah di tabel; kalau server menolak, dikembalikan
+    lokal: () => { const x = kegiatanData.find((y) => y['_row'] === row); if (!x) return null; const lama = x.Status; x.Status = newStatus; return lama; },
+    balik: (lama) => { const x = kegiatanData.find((y) => y['_row'] === row); if (x && lama != null) x.Status = lama; } } };
   t.timer = setTimeout(() => kirimKeputusan(row), KEPUTUSAN_TUNDA_MS);
   tundaKeputusan[row] = t;
   renderTable();

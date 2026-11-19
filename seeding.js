@@ -124,7 +124,7 @@ $('seedingForm').addEventListener('submit', (e) => {
     const id = sdEdit; sdEdit = null;
     closeModal('m-seeding');
     if (Object.keys(payload).length === 2) { toast('Tidak ada perubahan.'); bukaSeeding(id); return; }
-    enqueueSave({ label: 'Ubah seeding: ' + nama, payload, okMsg: 'Seeding "' + nama + '" diperbarui.' });
+    enqueueSave({ label: 'Ubah seeding: ' + nama, payload, okMsg: 'Seeding "' + nama + '" diperbarui.', lokal: sdLokal(payload), balik: sdBalik });
     bukaSeeding(id);   // detail dibuka lagi; ikut diperbarui begitu data baru masuk
     return;
   }
@@ -189,7 +189,53 @@ function bukaSeeding(id) {
       <button class="btn ghost" onclick="sdTambah('${zEsc(id)}')">+ Tambah</button>` : ''}`;
   if (!$('m-seeddetail').classList.contains('show')) openModal('m-seeddetail');
 }
-function sdSimpan(payload, label, okMsg) { enqueueSave({ label, payload, okMsg }); }
+function sdSimpan(payload, label, okMsg) { enqueueSave({ label, payload, okMsg, lokal: sdLokal(payload), balik: sdBalik }); }
+// Ubahan seeding langsung tampil (sebelum Apps Script menjawab). Server tetap memeriksa aturan; kalau ditolak, dikembalikan.
+function sdBalik(snap) { if (snap) { M.seeding = snap.s; M.seeding_kreator = snap.k; } }
+function sdLokal(p) {
+  const hari = new Date().toISOString().slice(0, 10);
+  const ubah = {
+    putuskan_seeding: () => { const b = M.seeding.find((x) => x.ID === p.id); if (b) { b.Status = p.status; b['Diputuskan Oleh'] = myUid(); } },
+    update_seeding: () => {
+      const b = M.seeding.find((x) => x.ID === p.id); if (!b) return;
+      if (p.status) b.Status = p.status;
+      if (p.nama !== undefined) b['Nama Batch'] = p.nama;
+      if (p.produk !== undefined) b.Produk = p.produk;
+      if (p.platform !== undefined) b.Platform = Array.isArray(p.platform) ? p.platform.join(', ') : p.platform;
+      if (Array.isArray(p.sampel)) { b.Lane = p.sampel.map((x) => x.varian).join(', '); b.Qty = p.sampel.some((x) => x.qty) ? p.sampel.map((x) => x.qty || 0).join('; ') : ''; }
+      if (p.pic !== undefined) b.PIC = p.pic;
+      if (p.batas !== undefined) b['Batas Posting (hari)'] = p.batas;
+      if (p.kegiatan !== undefined) b.Kegiatan = (p.kegiatan || []).join(', ');
+    },
+    update_kreator: () => {
+      const k = (M.seeding_kreator || []).find((x) => x.ID === p.id); if (!k) return;
+      const b = M.seeding.find((x) => x.ID === k.Batch);
+      const st = p.status || (p.link ? 'Posting' : '');
+      if (st) {
+        k.Status = st;
+        if (st === 'Dikirim') k['Tgl Kirim'] = hari;
+        if (st === 'Diterima') k['Tgl Terima'] = hari;
+        if (st === 'Posting') k['Tgl Posting'] = hari;
+        if (b && b.Status === 'Approved' && st !== 'Rencana') b.Status = 'Jalan';
+      }
+      if (p.link) k['Link Konten'] = p.link;
+      if (p.views !== undefined && p.views !== '') k.Views = p.views;
+      if (p.akun_baru !== undefined) k.Akun = String(p.akun_baru).replace(/^@+/, '').toLowerCase();
+      if (p.nama_baru !== undefined) k.Nama = p.nama_baru;
+      if (p.platform_baru !== undefined) k.Platform = p.platform_baru;
+      if (p.varian !== undefined) k.Varian = p.varian;
+      if (p.qty !== undefined) k.Qty = p.qty;
+    },
+    hapus_kreator: () => { M.seeding_kreator = (M.seeding_kreator || []).filter((x) => x.ID !== p.id); },
+  }[p.action];
+  if (!ubah) return null;
+  return () => {
+    const snap = { s: M.seeding.map((x) => Object.assign({}, x)), k: (M.seeding_kreator || []).map((x) => Object.assign({}, x)) };
+    M.seeding = snap.s.map((x) => Object.assign({}, x)); M.seeding_kreator = snap.k.map((x) => Object.assign({}, x));
+    ubah();
+    return snap;
+  };
+}
 function sdPutus(id, status) {
   const b = M.seeding.find((x) => x.ID === id);
   let alasan = '';

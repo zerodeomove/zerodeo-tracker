@@ -157,6 +157,17 @@ const saveJobs = [];
 let saveSeq = 0;
 let saveRunning = false;
 
+// Tampilan langsung berubah: job.lokal() mengubah data di layar sebelum server menjawab dan mengembalikan "snap";
+// kalau gagal, job.balik(snap) mengembalikan tampilan seperti semula. Penyimpanan tetap berurutan di belakang.
+function zTampilUlang() {
+  if (!dataLoaded) return;
+  if (typeof renderTracker === 'function') renderTracker();
+  if (typeof renderSeeding === 'function') renderSeeding();
+}
+function zTerapLokal(job) {
+  if (!job.lokal) return;
+  try { job.snap = job.lokal(); job.dibalik = false; zTampilUlang(); } catch (e) { job.lokal = null; }
+}
 function enqueueSave(job) {
   job.id = ++saveSeq;
   job.state = 'queued';
@@ -164,6 +175,7 @@ function enqueueSave(job) {
   job.reloaded = false;
   job.rows = job.rows || [];
   saveJobs.push(job);
+  zTerapLokal(job);
   renderSaveBar();
   runSaveQueue();
 }
@@ -172,6 +184,7 @@ function failSave(job, msg) {
   job.state = 'err';
   job.error = msg;
   job.noRetry = /hanya approver|tidak boleh|Masuk lewat Hub/i.test(msg);   // ditolak karena peran/identitas: kirim ulang percuma
+  if (job.balik && job.lokal && !job.dibalik) { try { job.balik(job.snap); } catch (e) { /* muat ulang akan membetulkan */ } job.dibalik = true; zTampilUlang(); toast('Gagal: ' + job.label + '. Tampilan dikembalikan.', 'err'); }
 }
 
 async function runSaveQueue() {
@@ -207,6 +220,10 @@ async function runSaveQueue() {
   }
   // satu kali muat ulang setelah antrean habis
   const done = saveJobs.filter((j) => j.state === 'ok' && !j.reloaded);
+  // kabar Telegram (pengajuan / keputusan / transfer) dikirim server di belakang; tidak ditunggu, gagal pun tidak apa-apa
+  if (done.some((j) => !j.payload.action || ['update_status', 'mark_transferred', 'add_seeding', 'putuskan_seeding', 'update_seeding'].indexOf(j.payload.action) !== -1)) {
+    zApi.post({ action: 'kirim_kabar' }).catch(() => {});
+  }
   if (done.length) {
     await load();
     done.forEach((j) => { j.reloaded = true; });
@@ -224,6 +241,7 @@ function retrySave(id) {
   if (!job || job.state !== 'err') return;
   job.state = 'queued';
   job.error = '';
+  if (job.dibalik) zTerapLokal(job);
   renderSaveBar();
   runSaveQueue();
 }

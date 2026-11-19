@@ -253,6 +253,8 @@ function mkt_resolveLabels_(tabName, labels) {
 // POST — mengembalikan objek hasil, atau null kalau bukan aksi marketing
 // ============================================================
 function mkt_handlePost(data) {
+  // web memanggil ini di belakang setelah menyimpan: kabar Telegram yang tertunda dikirim (Hub.gs), tanpa menahan simpanannya
+  if (data && data.action === 'kirim_kabar') return typeof zKabarKirimAntre_ === 'function' ? zKabarKirimAntre_() : { ok: true, terkirim: 0 };
   var known = { add_strategi: 1, update_strategi_status: 1, add_hasil_event: 1, update_hasil_event_kegiatan: 1,
     add_seeding: 1, putuskan_seeding: 1, update_seeding: 1, add_kreator: 1, update_kreator: 1, hapus_kreator: 1, atur_label: 1 };
   if (!data || !known[data.action]) return null;

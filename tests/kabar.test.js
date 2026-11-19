@@ -14,7 +14,9 @@ Object.values(e.sheets).forEach((sh) => { sh.getMaxRows = sh.getMaxRows || (() =
 const rangeAsli = e.sheets.kegiatan.getRange; e.sheets.kegiatan.getRange = function () { const r = rangeAsli.apply(this, arguments); ['setDataValidation', 'setNumberFormat', 'setNumberFormats'].forEach((f) => { if (!r[f]) r[f] = () => r; }); return r; };
 const kabar = [];
 e.ctx.UrlFetchApp = { fetch: (url, o) => { const b = JSON.parse(o.payload); if (b.action === 'kabarApp') kabar.push(b); return { getContentText: () => JSON.stringify({ ok: true, terkirim: 1 }) }; } };
-const post = (body, uid, peran) => JSON.parse(e.ctx.doPost({ postData: { contents: JSON.stringify(Object.assign({ secret: SHARED, hub: { uid, peran } }, body)) } }).text);
+const postMentah = (body, uid, peran) => JSON.parse(e.ctx.doPost({ postData: { contents: JSON.stringify(Object.assign({ secret: SHARED, hub: { uid, peran } }, body)) } }).text);
+// web: simpan dulu (kabar hanya antre), lalu "kirim_kabar" di belakang seperti yang dilakukan app.js
+const post = (body, uid, peran) => { const n0 = kabar.length; const r = postMentah(body, uid, peran); assert.strictEqual(kabar.length, n0, 'simpanan web tidak boleh menunggu kabar'); postMentah({ action: 'kirim_kabar' }, uid, peran); return r; };
 const svc = (body) => JSON.parse(e.ctx.doPost({ postData: { contents: JSON.stringify(Object.assign({ token: hubToken(SECRET, { uid: 'hub-service', peran: 'service' }) }, body)) } }).text);
 const botAksi = (uid, peran, aksi) => svc({ action: 'bot_aksi', for_uid: uid, for_peran: peran, aksi });
 

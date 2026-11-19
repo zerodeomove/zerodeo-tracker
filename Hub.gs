@@ -703,21 +703,57 @@ function kabarSesudah_(data, out) {
         }
       }
     }
-    kirim.forEach(function (k) {
+    kirim = kirim.filter(function (k) {
       k.ke = k.ke.filter(function (id, i, arr) { return id && id !== oleh && arr.indexOf(id) === i; });
-      if (!k.ke.length) return;
-      UrlFetchApp.fetch(PropertiesService.getScriptProperties().getProperty('HUB_URL'), {
+      return k.ke.length > 0;
+    });
+    if (!kirim.length) return;
+    // dari web: ditaruh di antrean, dikirim saat web memanggil "kirim_kabar" di belakang (simpanan tidak menunggu kabar).
+    // dari bot (via telegram): langsung dikirim, sekalian antrean yang masih ada.
+    if (data.via === 'telegram' || !zKabarAntre_(kirim)) { zKabarKirim_(kirim); zKabarKirimAntre_(); }
+  } catch (err) { /* kabar gagal: aksinya tetap jalan */ }
+}
+var ZKABAR_KEY = 'zkabar:antre';
+function zKabarAntre_(list) {
+  var lock = LockService.getScriptLock();
+  if (!lock.tryLock(3000)) return false;
+  try {
+    var c = CacheService.getScriptCache(), ada = [];
+    try { ada = JSON.parse(c.get(ZKABAR_KEY) || '[]') || []; } catch (e) { ada = []; }
+    c.put(ZKABAR_KEY, JSON.stringify(ada.concat(list).slice(-50)), 21600);
+    return true;
+  } finally { lock.releaseLock(); }
+}
+function zKabarKirimAntre_() {
+  var list = [];
+  var lock = LockService.getScriptLock();
+  if (lock.tryLock(3000)) {
+    try {
+      var c = CacheService.getScriptCache();
+      try { list = JSON.parse(c.get(ZKABAR_KEY) || '[]') || []; } catch (e) { list = []; }
+      if (list.length) c.remove(ZKABAR_KEY);
+    } finally { lock.releaseLock(); }
+  }
+  zKabarKirim_(list);
+  return { ok: true, terkirim: list.length };
+}
+function zKabarKirim_(list) {
+  var url = PropertiesService.getScriptProperties().getProperty('HUB_URL');
+  if (!url || !hubSecret_()) return;
+  list.forEach(function (k) {
+    try {
+      UrlFetchApp.fetch(url, {
         method: 'post', contentType: 'text/plain', muteHttpExceptions: true, followRedirects: true,
         payload: JSON.stringify({ action: 'kabarApp', app: HUB_APP, kabar: k.kabar, ke: k.ke, data: k.data, token: makeHubToken_('zerodeo-service', 'service', 300) })
       });
-    });
-  } catch (err) { /* kabar gagal: aksinya tetap jalan */ }
+    } catch (e) { /* satu kabar gagal: lanjut yang lain */ }
+  });
 }
 
 // Dipanggil setelah aksi berhasil. Kegagalan mencatat log tidak boleh menggagalkan aksinya.
 function logAktivitas_(data, out) {
   try {
-    if (data.action === 'get_data' || data.action === 'pending') return;
+    if (data.action === 'get_data' || data.action === 'pending' || data.action === 'kirim_kabar') return;
     var res = JSON.parse(out.getContent());
     if (!res || res.ok !== true) return;
     var ids = [];
