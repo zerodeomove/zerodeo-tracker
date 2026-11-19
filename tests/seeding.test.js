@@ -126,4 +126,14 @@ r = post({ action: 'update_seeding', id: P, platform: 'TikTok, Instagram, YouTub
 assert.strictEqual(r.ok, true, r.error); assert.strictEqual(e.sheets.seeding.rows.find((x) => x[0] === P)[4], 'TikTok, Instagram, YouTube'); ok('ubah platform (teks dipisah koma)');
 ba = svc({ action: 'bot_aksi', for_uid: 'yanuar', for_peran: 'anggota', aksi: { jenis: 'ubah_seeding', id: P, platform: ['Instagram'] } });
 assert.strictEqual(ba.ok, true, ba.error); assert.strictEqual(e.sheets.seeding.rows.find((x) => x[0] === P)[4], 'Instagram'); ok('bot: ubah platform (array)');
+// acc seeding milik sendiri: approver boleh (paling atas), admin tidak
+const M1 = post({ action: 'add_seeding', nama: 'Seeding Milik Admin', pic: 'lemon', kreator: '@m1' }, 'lenno', 'admin').id;
+r = post({ action: 'putuskan_seeding', id: M1, status: 'Approved' }, 'lenno', 'admin');
+assert.strictEqual(r.ok, false); assert(/Minta approver/.test(r.error)); ok('admin tidak bisa acc seeding yang dia ajukan');
+assert(svc({ action: 'pending', for_uid: 'lemon', for_peran: 'approver' }).keys.includes('z:seed-acc:' + M1)); ok('titik merah: approver yang jadi PIC tetap dapat kunci acc');
+r = post({ action: 'putuskan_seeding', id: M1, status: 'Approved' }, 'lemon', 'approver');
+assert.strictEqual(r.ok, true, r.error); ok('approver (PIC) boleh acc seeding ajuan admin: tidak macet');
+const M2 = post({ action: 'add_seeding', nama: 'Seeding Ajuan Approver', kreator: '@m2' }, 'lemon', 'approver').id;
+r = post({ action: 'putuskan_seeding', id: M2, status: 'Approved' }, 'lemon', 'approver');
+assert.strictEqual(r.ok, true, r.error); ok('approver boleh acc seeding ajuannya sendiri (tidak ada yang lebih atas)');
 console.log('\n' + n + ' tes lolos');

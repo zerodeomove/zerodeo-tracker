@@ -504,7 +504,8 @@ function seed_putuskan_(d) {
   var b = seed_cari_(d.id);
   if (!b) return { ok: false, error: 'Batch seeding tidak ditemukan.' };
   if (!whoCanDecide_()) return { ok: false, error: 'Yang meng-acc seeding adalah approver atau admin Zerodeo.' };
-  if (seed_milik_(b)) return { ok: false, error: 'Kamu tidak boleh meng-acc seeding yang kamu ajukan / pegang sendiri. Minta approver lain.' };
+  // approver = paling atas, jadi boleh meng-acc seeding apa pun (termasuk yang dia ajukan / pegang). Admin tidak untuk miliknya sendiri.
+  if (seed_milik_(b) && CURRENT_WHO_.peran !== 'approver') return { ok: false, error: 'Kamu tidak boleh meng-acc seeding yang kamu ajukan / pegang sendiri. Minta approver.' };
   if (b['Status'] !== 'Diajukan') return { ok: false, error: 'Seeding ini statusnya "' + b['Status'] + '", bukan Diajukan lagi.' };
   var st = { approved: 'Approved', approve: 'Approved', ditolak: 'Ditolak', tolak: 'Ditolak', revisi: 'Revisi' }[String(d.status || '').toLowerCase()];
   if (!st) return { ok: false, error: 'Keputusan harus Approved, Ditolak, atau Revisi.' };
@@ -688,7 +689,7 @@ function seed_ringkas_(b, kreator, uang) {
 }
 
 // Kunci titik merah / pengingat seeding:
-//   z:seed-acc:<id>  — seeding Diajukan, kamu approver / admin (bukan pengajunya)
+//   z:seed-acc:<id>  — seeding Diajukan: approver (semua), admin (bukan yang dia ajukan / pegang)
 //   z:seed-post:<id> — seeding milikmu: ada kreator yang sudah terima sampel > batas hari tapi belum posting
 function seed_keys_(uid, peran, tim, nowMs) {
   var now = nowMs === undefined ? Date.now() : nowMs, keys = [];
@@ -696,7 +697,7 @@ function seed_keys_(uid, peran, tim, nowMs) {
   seed_rows_('seeding').forEach(function (b) {
     var id = String(b['ID'] || ''); if (!id) return;
     var milik = ownerIds_(b['PIC'], tim).indexOf(uid) !== -1 || String(b['Diajukan Oleh'] || '') === uid;
-    if (b['Status'] === 'Diajukan' && !milik && (peran === 'approver' || peran === 'admin')) keys.push('z:seed-acc:' + id);
+    if (b['Status'] === 'Diajukan' && (peran === 'approver' || (peran === 'admin' && !milik))) keys.push('z:seed-acc:' + id);
     if (milik && ['Approved', 'Jalan'].indexOf(b['Status']) !== -1) {
       var batas = (mkt_int_(b['Batas Posting (hari)']) || SEED_BATAS_BAWAAN) * 86400000;
       var telat = kreator.some(function (k) {

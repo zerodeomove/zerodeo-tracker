@@ -6,7 +6,7 @@ let sdBuka = null;   // id batch yang sedang dibuka di detail
 
 function sdKreator(id) { return (M.seeding_kreator || []).filter((k) => String(k.Batch) === String(id)); }
 function sdMilik(b) { const me = myUid(); return !!me && (String(b.PIC || '').split(',').some((p) => picKey(p) === me) || String(b['Diajukan Oleh'] || '') === me); }
-function sdBolehAcc(b) { return b.Status === 'Diajukan' && isDecider() && !sdMilik(b); }
+function sdBolehAcc(b) { return b.Status === 'Diajukan' && isDecider() && (!sdMilik(b) || myRole() === 'approver'); }   // approver paling atas: boleh acc miliknya sendiri
 function sdAkun(k) { return k.Akun ? '@' + String(k.Akun).replace(/^@+/, '') : (k.Nama || '-'); }
 // sampel batch: Lane = varian (dipisah koma), Qty = jumlah per varian (dipisah "; ")
 function sdSampel(b) {
@@ -148,7 +148,7 @@ function bukaSeeding(id) {
   if (sdBolehAcc(b)) aksiBatch.push(`<button class="btn green" onclick="sdPutus('${zEsc(id)}','Approved')">✓ Acc</button>`, `<button class="btn ghost" onclick="sdPutus('${zEsc(id)}','Revisi')">Minta revisi</button>`, `<button class="btn ghost" style="color:var(--red)" onclick="sdPutus('${zEsc(id)}','Ditolak')">Tolak</button>`);
   const bolehIsi = ['Diajukan', 'Revisi'].indexOf(b.Status) >= 0 ? (sdMilik(b) || isDecider()) : (['Approved', 'Jalan'].indexOf(b.Status) >= 0 && isDecider());
   if (bolehIsi) aksiBatch.push(`<button class="btn ghost" onclick="openSeeding('${zEsc(id)}')">✎ Ubah</button>`);
-  if (b.Status === 'Diajukan' && !sdBolehAcc(b)) aksiBatch.push(`<span class="sub">${sdMilik(b) ? 'Menunggu acc approver / admin lain.' : 'Menunggu acc approver / admin.'}</span>`);
+  if (b.Status === 'Diajukan' && !sdBolehAcc(b)) aksiBatch.push(`<span class="sub">${sdMilik(b) && myRole() === 'admin' ? 'Menunggu acc approver.' : 'Menunggu acc approver / admin.'}</span>`);
   if (b.Status === 'Revisi' && (sdMilik(b) || isDecider())) aksiBatch.push(`<button class="btn green" onclick="sdUbah('${zEsc(id)}',{status:'Diajukan'},'Diajukan lagi')">Ajukan lagi</button>`);
   if (['Approved', 'Jalan'].indexOf(b.Status) >= 0 && (sdMilik(b) || isDecider())) aksiBatch.push(`<button class="btn ghost" onclick="sdUbah('${zEsc(id)}',{status:'Selesai'},'Seeding ditandai selesai')">Tandai selesai</button>`);
   if (['Diajukan', 'Revisi', 'Approved'].indexOf(b.Status) >= 0 && (sdMilik(b) || isDecider()) || (b.Status === 'Jalan' && isDecider()))

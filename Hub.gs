@@ -698,7 +698,7 @@ function kabarSesudah_(data, out) {
         if (a === 'putuskan_seeding') { si.status = String(res.status || ''); si.alasan = String(data.alasan || '').slice(0, 200); kirim.push({ kabar: 'diputuskan', ke: pemilik, data: si }); }
         else if (String(b['Status']) === 'Diajukan') {
           si.lagi = a === 'update_seeding';
-          var dec = readTim_().filter(function (t) { return (t.peran === 'approver' || t.peran === 'admin') && pemilik.indexOf(t.id) === -1; }).map(function (t) { return t.id; });
+          var dec = readTim_().filter(function (t) { return t.peran === 'approver' || (t.peran === 'admin' && pemilik.indexOf(t.id) === -1); }).map(function (t) { return t.id; });
           kirim.push({ kabar: 'perlu_acc', ke: dec, data: si });
         }
       }
