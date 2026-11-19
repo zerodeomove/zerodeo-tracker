@@ -149,6 +149,7 @@ function renderMarketing() {
   renderPengingat();
   renderStrategi();
   renderEvents();
+  if (typeof renderSeeding === 'function') renderSeeding();
 }
 
 function fillMktFilters() {

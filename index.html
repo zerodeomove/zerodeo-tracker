@@ -125,6 +125,7 @@
     <div class="subtabs">
       <button class="subtab" data-view="strategi" onclick="showView('strategi')">Strategi</button>
       <button class="subtab" data-view="event" onclick="showView('event')">Hasil Event</button>
+      <button class="subtab" data-view="seeding" onclick="showView('seeding')">Seeding</button>
     </div>
 
     <div id="view-strategi">
@@ -185,8 +186,57 @@
         </table>
       </div>
     </div>
+    <div id="view-seeding" style="display:none">
+      <div class="toolbar">
+        <span class="sub">Bagi sampel ke kreator supaya bikin konten. Tim mengajukan, approver / admin Zerodeo yang meng-acc.</span>
+        <span class="push"><button class="btn green" onclick="openSeeding()">+ Ajukan seeding</button></span>
+      </div>
+      <div class="sd-filter" id="sdFilter"></div>
+      <div id="sdList" class="sd-list"><div class="empty">Memuat…</div></div>
+    </div>
   </section>
 
+</div>
+
+<!-- ================= POPUP: Ajukan seeding ================= -->
+<div class="modal-overlay" id="m-seeding">
+  <div class="modal-box">
+    <h3>Ajukan seeding</h3>
+    <div class="hint">Setelah di-acc approver / admin, sampel baru boleh dikirim. Daftar kreator bisa ditambah belakangan.</div>
+    <form id="seedingForm" novalidate>
+      <label>Nama batch
+        <input type="text" id="sd-nama" placeholder="mis. Seeding Vital Fresh Desember">
+        <span class="field-error" id="err-sd-nama">Wajib diisi.</span></label>
+      <label>Produk / sampel <span class="opt">(opsional)</span>
+        <input type="text" id="sd-produk" placeholder="mis. Vital Fresh 250ml, 1 botol per kreator"></label>
+      <div class="row2">
+        <label>Lane <span class="opt">(opsional)</span><select id="sd-lane"></select></label>
+        <label>Platform utama <span class="opt">(opsional)</span><select id="sd-platform"></select></label>
+      </div>
+      <div class="row2">
+        <label id="sd-est-wrap">Estimasi biaya (Rp) <span class="opt">(opsional)</span><input type="number" id="sd-est" min="0" step="1000" inputmode="numeric"></label>
+        <label>Ingatkan kalau belum posting setelah <input type="number" id="sd-batas" min="1" value="7" inputmode="numeric"><span class="hint">hari sejak sampel diterima</span></label>
+      </div>
+      <label>PIC<select id="sd-pic" data-pic><option value="">Pilih PIC…</option></select></label>
+      <label>Kreator <span class="opt">(satu per baris: @akun - platform - nama)</span>
+        <textarea id="sd-kreator" rows="5" placeholder="@rina.fit - TikTok - Rina&#10;@budi.run - Instagram"></textarea>
+        <span class="hint" id="sd-kreator-hint"></span></label>
+      <label>Catatan <span class="opt">(opsional)</span><input type="text" id="sd-catatan" placeholder="mis. target konten review jujur, wajib tag akun Zerodeo"></label>
+      <div class="msg" id="sd-msg"></div>
+      <div class="modal-actions">
+        <button type="button" class="btn-cancel" onclick="closeModal('m-seeding')">Batal</button>
+        <button type="submit" class="btn-submit">Ajukan</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- ================= POPUP: Detail seeding ================= -->
+<div class="modal-overlay" id="m-seeddetail">
+  <div class="modal-box wide">
+    <div id="sdd-isi"></div>
+    <div class="modal-actions"><button type="button" class="btn-cancel" onclick="closeModal('m-seeddetail')">Tutup</button></div>
+  </div>
 </div>
 
 <!-- ================= POPUP: Input kegiatan ================= -->
@@ -691,6 +741,7 @@
 <script src="app.js"></script>
 <script src="tracker.js"></script>
 <script src="marketing.js"></script>
+<script src="seeding.js"></script>
 <script>boot();</script>
 </body>
 </html>

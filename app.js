@@ -322,7 +322,7 @@ document.addEventListener('keydown', (e) => {
 
 // ---------- tab ----------
 // view: 'tracker' | 'strategi' | 'event'. Marketing = strategi + event.
-const MKT_VIEWS = ['strategi', 'event'];
+const MKT_VIEWS = ['strategi', 'event', 'seeding'];
 let lastMktView = 'strategi';
 
 function showView(view) {
@@ -336,6 +336,7 @@ function showView(view) {
   document.querySelectorAll('.subtab').forEach((t) => t.classList.toggle('on', t.dataset.view === view));
   $('view-strategi').style.display = view === 'strategi' ? '' : 'none';
   $('view-event').style.display = view === 'event' ? '' : 'none';
+  if ($('view-seeding')) $('view-seeding').style.display = view === 'seeding' ? '' : 'none';
   history.replaceState(null, '', '#' + view);
   if (view === 'strategi' && typeof geserKeHariIni === 'function') geserKeHariIni();
 }
@@ -411,7 +412,7 @@ function applyPayload(json) {
     ada: 'strategi' in json,
     strategi: json.strategi || [], lane: json.lane || [],
     channel: json.channel || [], hasil_event: json.hasil_event || [],
-    seeding: json.seeding || [], seeding_kreator: json.seeding_kreator || []
+    seeding: json.seeding || [], seeding_kreator: json.seeding_kreator || [], seedAda: Array.isArray(json.seeding)
   };
   renderTracker();
   renderMarketing();
