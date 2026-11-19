@@ -483,7 +483,7 @@ function botBaca_(uid, peran, q) {
       var label = { approve: 'perlu diputuskan (approve/tolak)', lengkapi: 'sudah ditransfer, tinggal isi Actual dan nota', nota: 'selesai tapi belum ada nota' }[p[1]];
       tindakan.push('Kegiatan "' + k['Item Kegiatan'] + '"' + (k['Project/Brand'] ? ' (' + k['Project/Brand'] + ')' : '') + ': ' + label);
       item.push({ jenis: p[1], id: p[2], judul: String(k['Item Kegiatan'] || ''), project: String(k['Project/Brand'] || ''), pic: resolvePicIds_(k['PIC'], tim).map(function (x) { return picNama_(x); }).join(', '),
-        estimasi: Number(k['Estimasi (Rp)']) || 0, transfer: Number(k['Nominal Transfer (Rp)']) || 0 });
+        estimasi: Number(k['Estimasi (Rp)']) || 0, transfer: Number(k['Nominal Transfer (Rp)']) || 0, sejak: zTgl_(k['Tanggal Dicatat']) });
     });
   }
   var stById = {};
@@ -495,7 +495,7 @@ function botBaca_(uid, peran, q) {
     item.push({ jenis: p[1], id: p[2], judul: String(s['Nama Strategi'] || ''), selesai: String(s['Selesai'] || '') });
   });
   try {
-    seed_tindakan_(uid, peran, tim).forEach(function (t) { tindakan.push(t.teks); item.push({ jenis: t.jenis, id: t.id, judul: t.judul }); });
+    seed_tindakan_(uid, peran, tim).forEach(function (t) { tindakan.push(t.teks); var sb = t.jenis === 'seed-acc' ? seed_cari_(t.id) : null; item.push({ jenis: t.jenis, id: t.id, judul: t.judul, sejak: sb ? zTgl_(sb['Dicatat Pada']) : '' }); });
   } catch (e) { /* tab seeding belum ada */ }
   if (jenis === 'pengingat') return { tindakan: tindakan };
   var out = { peran: peran, tindakan: tindakan, item: item };
@@ -648,6 +648,72 @@ function logRowNumbers_(data, res) {
   return rows.filter(function (r) { return r > HEADER_ROW; }).slice(0, 20);
 }
 
+// ============================================================
+// KABAR TELEGRAM LANGSUNG (lewat Hub, action kabarApp). Dipanggil setelah aksi berhasil; tidak pernah menggagalkan aksinya.
+//   perlu_acc  : kegiatan / seeding baru diajukan (atau diajukan lagi) -> yang boleh memutuskan (tombol Acc / Revisi / Tolak di bot)
+//   diputuskan : kegiatan / seeding di-approve / ditolak / diminta revisi -> PIC (+ pengaju seeding)
+//   ditransfer : kegiatan ditransfer -> PIC
+// Pelakunya sendiri tidak dikabari. Hub yang memeriksa ulang: Telegram tertaut, kabar menyala, peran Zerodeo yang sesuai.
+// ============================================================
+// tanggal (Date / teks) -> 'yyyy-MM-dd' (kosong kalau tidak terbaca); dipakai Hub untuk pengingat "sudah N hari menunggu"
+function zTgl_(v) {
+  var d = v instanceof Date ? v : (v ? mkt_parseDate_(v) : null);
+  return d && !isNaN(d.getTime()) ? Utilities.formatDate(d, 'Asia/Jakarta', 'yyyy-MM-dd') : '';
+}
+function zDeciders_(owners) {
+  var adaApprover = owners.some(isApproverId_);
+  return readTim_().filter(function (t) {
+    return owners.indexOf(t.id) === -1 && (t.peran === 'approver' || (t.peran === 'admin' && adaApprover));
+  }).map(function (t) { return t.id; });
+}
+function kabarSesudah_(data, out) {
+  try {
+    if (!PropertiesService.getScriptProperties().getProperty('HUB_URL') || !hubSecret_()) return;
+    var res = JSON.parse(out.getContent());
+    if (!res || res.ok !== true) return;
+    var a = data.action || 'add_kegiatan', oleh = CURRENT_WHO_ ? CURRENT_WHO_.uid : '';
+    var kirim = [];
+    if (['add_kegiatan', 'update_status', 'mark_transferred'].indexOf(a) !== -1) {
+      var sh = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('kegiatan');
+      logRowNumbers_(data, res).slice(0, 5).forEach(function (r) {
+        var v = sh.getRange(r, 1, 1, COL.ID).getValues()[0];
+        var owners = ownerIds_(v[COL.PIC - 1]), st = String(v[COL.STATUS - 1]);
+        var info = { jenis: 'kegiatan', id: String(v[COL.ID - 1] || ''), judul: String(v[COL.ITEM - 1] || '').slice(0, 120), project: String(v[COL.PROJECT - 1] || '').slice(0, 40),
+          estimasi: Number(v[COL.ESTIMASI - 1]) || 0, oleh: picNama_(oleh), pic: owners.map(picNama_).join(', ') };
+        if (!info.id) return;
+        if (a === 'add_kegiatan' && st === 'Diajukan') { info.lagi = !!data.row; kirim.push({ kabar: 'perlu_acc', ke: zDeciders_(owners), data: info }); }
+        if (a === 'update_status') { info.status = String(data.status || ''); info.alasan = String(data.alasan || '').slice(0, 200); kirim.push({ kabar: 'diputuskan', ke: owners, data: info }); }
+        if (a === 'mark_transferred') { info.ket = String(res.keterangan || ''); info.nominal = Number(data.nominalTransfer) || 0; info.sebagian = !!res.sebagian; kirim.push({ kabar: 'ditransfer', ke: owners, data: info }); }
+      });
+    }
+    if (a === 'add_seeding' || a === 'putuskan_seeding' || (a === 'update_seeding' && data.status === 'Diajukan')) {
+      var b = seed_cari_(res.id || data.id);
+      if (b) {
+        var pemilik = ownerIds_(b['PIC']).concat([String(b['Diajukan Oleh'] || '')]).filter(Boolean);
+        var nKr = seed_rows_('seeding_kreator').filter(function (k) { return String(k['Batch']) === String(b['ID']); }).length;
+        var sp = seed_sampel_(b), totalPcs = sp.reduce(function (x, y) { return x + y.qty; }, 0);
+        var si = { jenis: 'seeding', id: String(b['ID']), judul: String(b['Nama Batch'] || '').slice(0, 120), produk: String(b['Produk'] || '').slice(0, 80), oleh: picNama_(oleh),
+          pic: ownerIds_(b['PIC']).map(picNama_).join(', '), kreator: nKr, sampel: sp.map(function (x) { return x.varian + (x.qty ? ' ×' + x.qty : ''); }).join(', ').slice(0, 160),
+          total_pcs: totalPcs, platform: String(b['Platform'] || '').slice(0, 80), estimasi: Number(b['Estimasi (Rp)']) || 0 };
+        if (a === 'putuskan_seeding') { si.status = String(res.status || ''); si.alasan = String(data.alasan || '').slice(0, 200); kirim.push({ kabar: 'diputuskan', ke: pemilik, data: si }); }
+        else if (String(b['Status']) === 'Diajukan') {
+          si.lagi = a === 'update_seeding';
+          var dec = readTim_().filter(function (t) { return (t.peran === 'approver' || t.peran === 'admin') && pemilik.indexOf(t.id) === -1; }).map(function (t) { return t.id; });
+          kirim.push({ kabar: 'perlu_acc', ke: dec, data: si });
+        }
+      }
+    }
+    kirim.forEach(function (k) {
+      k.ke = k.ke.filter(function (id, i, arr) { return id && id !== oleh && arr.indexOf(id) === i; });
+      if (!k.ke.length) return;
+      UrlFetchApp.fetch(PropertiesService.getScriptProperties().getProperty('HUB_URL'), {
+        method: 'post', contentType: 'text/plain', muteHttpExceptions: true, followRedirects: true,
+        payload: JSON.stringify({ action: 'kabarApp', app: HUB_APP, kabar: k.kabar, ke: k.ke, data: k.data, token: makeHubToken_('zerodeo-service', 'service', 300) })
+      });
+    });
+  } catch (err) { /* kabar gagal: aksinya tetap jalan */ }
+}
+
 // Dipanggil setelah aksi berhasil. Kegagalan mencatat log tidak boleh menggagalkan aksinya.
 function logAktivitas_(data, out) {
   try {
@@ -665,4 +731,5 @@ function logAktivitas_(data, out) {
     ensureLogTab_().appendRow([new Date(), CURRENT_WHO_ ? CURRENT_WHO_.uid : '(kode tim)', CURRENT_WHO_ ? CURRENT_WHO_.peran : '',
       data.action || 'add_kegiatan', ids.join(','), logSummary_(data)]);
   } catch (err) { /* abaikan */ }
+  kabarSesudah_(data, out);   // kabar Telegram (lewat Hub) untuk pengajuan / keputusan / transfer
 }
