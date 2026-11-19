@@ -52,8 +52,9 @@ var MKT_TABS = {
                 'Strategi', 'PIC Pencatat', 'Dicatat Pada', 'Kegiatan'],
   // Seeding: satu batch (diajukan tim, di-acc approver/admin) berisi daftar kreator yang dikirimi sampel
   seeding: ['ID', 'Nama Batch', 'Produk', 'Lane', 'Platform', 'Estimasi (Rp)', 'Batas Posting (hari)', 'Status', 'PIC', 'Diajukan Oleh',
-            'Diputuskan Oleh', 'Catatan', 'Dicatat Pada', 'Kegiatan', 'Strategi'],
-  seeding_kreator: ['ID', 'Batch', 'Nama', 'Akun', 'Platform', 'Status', 'Tgl Kirim', 'Tgl Terima', 'Tgl Posting', 'Link Konten', 'Views', 'Catatan', 'Diubah']
+            'Diputuskan Oleh', 'Catatan', 'Dicatat Pada', 'Kegiatan', 'Strategi', 'Qty'],
+  // Lane (seeding) = varian sampel, dipisah koma; Qty = jumlah sampel per varian (dipisah "; "), urutannya sama dengan Lane
+  seeding_kreator: ['ID', 'Batch', 'Nama', 'Akun', 'Platform', 'Status', 'Tgl Kirim', 'Tgl Terima', 'Tgl Posting', 'Link Konten', 'Views', 'Catatan', 'Diubah', 'Varian', 'Qty']
 };
 var SEED_STATUS = ['Diajukan', 'Revisi', 'Approved', 'Ditolak', 'Jalan', 'Selesai', 'Dibatalkan'];
 var KREATOR_STATUS = ['Rencana', 'Dikirim', 'Diterima', 'Posting', 'Tidak posting'];
@@ -418,14 +419,45 @@ function seed_parseKreator_(list) {
       var bag = String(x || '').split(/\s+-\s+|\s*\|\s*/).map(function (t) { return t.trim(); }).filter(Boolean);
       if (!bag.length) return;
       o = { akun: bag[0], platform: bag[1] || '', nama: bag[2] || '' };
+      // bagian ke-4 opsional: "Vital Fresh x2" / "Vital Fresh 2" / "2"
+      if (bag[3]) { var vq = seed_varQty_(bag[3]); o.varian = vq.varian; o.qty = vq.qty; }
     }
     var akun = seed_akun_(o.akun || o.nama), nama = mkt_text_(o.nama || '', 80);
     if (!akun && !nama) return;
-    out.push({ akun: akun, nama: nama, platform: mkt_cleanLabel_(o.platform || '') });
+    out.push({ akun: akun, nama: nama, platform: mkt_cleanLabel_(o.platform || ''), varian: mkt_cleanLabel_(o.varian || ''), qty: mkt_int_(o.qty) });
   });
   return out;
 }
-function seed_tambahKreator_(batchId, list, defPlatform) {
+// "Vital Fresh x10" / "Vital Fresh × 10" / "Vital Fresh 10" / "10" -> { varian, qty }
+function seed_varQty_(t) {
+  var m = String(t || '').trim().match(/^(.*?)\s*(?:[x×*]\s*)?(\d+)\s*(?:pcs|botol|btl)?$/i);
+  return m ? { varian: m[1].trim(), qty: Number(m[2]) } : { varian: String(t || '').trim(), qty: 0 };
+}
+// sampel batch dari kiriman: d.sampel [{varian, qty}] atau teks "Vital Fresh 10, Kids Fresh 5"; d.lane (lama) = varian tanpa jumlah
+// -> { lane: 'A, B', qty: '10; 5' }
+function seed_parseSampel_(d) {
+  var list = [];
+  if (d.sampel !== undefined && d.sampel !== null && d.sampel !== '') {
+    var arr = Array.isArray(d.sampel) ? d.sampel : String(d.sampel).split(/[,;\n]/);
+    arr.forEach(function (x) {
+      var o = x && typeof x === 'object' ? { varian: x.varian || x.lane || '', qty: x.qty } : seed_varQty_(x);
+      if (String(o.varian || '').trim()) list.push({ varian: o.varian, qty: mkt_int_(o.qty) });
+    });
+  } else if (d.lane) {
+    (Array.isArray(d.lane) ? d.lane : String(d.lane).split(',')).forEach(function (x) { if (String(x).trim()) list.push({ varian: x, qty: 0 }); });
+  }
+  var nama = mkt_resolveLabels_('lane', list.map(function (x) { return x.varian; }));
+  var qty = {}; list.forEach(function (x) { var k = mkt_cleanLabel_(x.varian).toLowerCase(); qty[k] = (qty[k] || 0) + (x.qty || 0); });
+  // pemisah "; " (bukan koma: di locale Indonesia "10,5" bisa terbaca angka desimal oleh Sheets)
+  return { lane: nama.join(', '), qty: nama.some(function (x) { return qty[x.toLowerCase()]; }) ? nama.map(function (x) { return qty[x.toLowerCase()] || 0; }).join('; ') : '' };
+}
+// sampel batch yang tersimpan: [{ varian, qty }]
+function seed_sampel_(b) {
+  var ln = String(b['Lane'] || '').split(',').map(function (x) { return x.trim(); }).filter(Boolean);
+  var q = String(b['Qty'] === undefined ? '' : b['Qty']).split(/[;,]/).map(function (x) { return Number(String(x).trim()) || 0; });
+  return ln.map(function (v, i) { return { varian: v, qty: q[i] || 0 }; });
+}
+function seed_tambahKreator_(batchId, list, defPlatform, defVarian) {
   var sh = seed_sheet_('seeding_kreator');
   var ada = {};
   seed_rows_('seeding_kreator').forEach(function (k) { if (String(k['Batch']) === batchId) ada[seed_akun_(k['Akun'] || k['Nama'])] = 1; });
@@ -434,7 +466,8 @@ function seed_tambahKreator_(batchId, list, defPlatform) {
     var kunci = k.akun || k.nama.toLowerCase();
     if (ada[kunci]) { lewat.push(k.akun || k.nama); return; }
     ada[kunci] = 1; baru++;
-    mkt_append_(sh, ['K' + new Date().getTime().toString(36) + i, batchId, k.nama, k.akun, k.platform || defPlatform || '', 'Rencana', '', '', '', '', '', '', new Date()]);
+    var varian = k.varian ? (mkt_resolveLabels_('lane', [k.varian])[0] || '') : (defVarian || '');
+    mkt_append_(sh, ['K' + new Date().getTime().toString(36) + i, batchId, k.nama, k.akun, k.platform || defPlatform || '', 'Rencana', '', '', '', '', '', '', new Date(), varian, k.qty || 1]);
   });
   return { baru: baru, dobel: lewat };
 }
@@ -450,13 +483,13 @@ function seed_add_(d) {
   if (kreator.length > SEED_MAKS_KREATOR) return { ok: false, error: 'Maksimal ' + SEED_MAKS_KREATOR + ' kreator per batch.' };
   var pic = d.pic ? normalizePic_(d.pic) : CURRENT_WHO_.uid;
   if (!pic) return { ok: false, error: 'PIC tidak dikenali.' };
-  var lane = d.lane ? mkt_resolveLabels_('lane', [d.lane])[0] || '' : '';
+  var sampel = seed_parseSampel_(d);
   var platform = mkt_cleanLabel_(d.platform || '');
   var batas = mkt_int_(d.batas) || SEED_BATAS_BAWAAN;
   var est = isMarketingOnly_() ? '' : (Math.round(Number(d.estimasi)) || '');
   var id = 'SD' + new Date().getTime().toString(36);
-  mkt_append_(seed_sheet_('seeding'), [id, nama, mkt_text_(d.produk, 120), lane, platform, est, batas, 'Diajukan', pic, CURRENT_WHO_.uid, '', mkt_text_(d.catatan, 500), new Date(), '', mkt_text_(d.strategi, 120)]);
-  var t = seed_tambahKreator_(id, kreator, platform);
+  mkt_append_(seed_sheet_('seeding'), [id, nama, mkt_text_(d.produk, 120), sampel.lane, platform, est, batas, 'Diajukan', pic, CURRENT_WHO_.uid, '', mkt_text_(d.catatan, 500), new Date(), '', mkt_text_(d.strategi, 120), sampel.qty]);
+  var t = seed_tambahKreator_(id, kreator, platform, sampel.lane.split(',')[0].trim());
   return { ok: true, id: id, kreator: t.baru, message: 'Seeding "' + nama + '" diajukan (' + t.baru + ' kreator). Menunggu acc approver / admin Zerodeo.' };
 }
 
@@ -497,7 +530,7 @@ function seed_update_(d) {
     seed_set_('seeding', b._row, 'Kegiatan', r.ids.join(', ')); pesan.push('kegiatan ditautkan');
   }
   // isian batch: sebelum di-acc pengaju / PIC (atau approver / admin); sesudah di-acc hanya approver / admin
-  var isian = ['nama', 'produk', 'lane', 'platform', 'pic', 'estimasi', 'batas', 'catatan'].filter(function (k) { return d[k] !== undefined; });
+  var isian = ['nama', 'produk', 'lane', 'sampel', 'platform', 'pic', 'estimasi', 'batas', 'catatan'].filter(function (k) { return d[k] !== undefined; });
   if (isian.length) {
     if (b['Status'] === 'Dibatalkan' || b['Status'] === 'Ditolak') return { ok: false, error: 'Seeding ini sudah ' + b['Status'] + '.' };
     var sudahAcc = ['Approved', 'Jalan', 'Selesai'].indexOf(String(b['Status'])) !== -1;
@@ -510,7 +543,10 @@ function seed_update_(d) {
       seed_set_('seeding', b._row, 'Nama Batch', nm); pesan.push('nama → ' + nm);
     }
     if (d.produk !== undefined) { seed_set_('seeding', b._row, 'Produk', mkt_text_(d.produk, 120)); pesan.push('produk'); }
-    if (d.lane !== undefined) { seed_set_('seeding', b._row, 'Lane', d.lane ? (mkt_resolveLabels_('lane', [d.lane])[0] || '') : ''); pesan.push('lane'); }
+    if (d.sampel !== undefined || d.lane !== undefined) {
+      var sp = seed_parseSampel_(d);
+      seed_set_('seeding', b._row, 'Lane', sp.lane); seed_set_('seeding', b._row, 'Qty', sp.qty); pesan.push('varian & jumlah sampel');
+    }
     if (d.platform !== undefined) { seed_set_('seeding', b._row, 'Platform', d.platform ? (mkt_resolveLabels_('channel', [d.platform])[0] || '') : ''); pesan.push('platform'); }
     if (d.pic !== undefined) { var pic = normalizePic_(d.pic); if (!pic) return { ok: false, error: 'PIC tidak dikenali.' }; seed_set_('seeding', b._row, 'PIC', pic); pesan.push('PIC ' + picNama_(pic)); }
     if (d.estimasi !== undefined && !isMarketingOnly_()) { seed_set_('seeding', b._row, 'Estimasi (Rp)', Math.round(Number(d.estimasi)) || ''); pesan.push('estimasi'); }
@@ -530,7 +566,7 @@ function seed_addKreator_(d) {
   if (['Ditolak', 'Selesai', 'Dibatalkan'].indexOf(b['Status']) !== -1) return { ok: false, error: 'Seeding ini sudah ' + b['Status'] + '.' };
   var list = seed_parseKreator_(d.kreator);
   if (!list.length) return { ok: false, error: 'Daftar kreatornya kosong.' };
-  var t = seed_tambahKreator_(b['ID'], list, b['Platform']);
+  var t = seed_tambahKreator_(b['ID'], list, b['Platform'], (seed_sampel_(b)[0] || {}).varian || '');
   return { ok: true, id: b['ID'], kreator: t.baru, message: t.baru + ' kreator ditambahkan ke "' + b['Nama Batch'] + '"' + (t.dobel.length ? ' (sudah ada: ' + t.dobel.join(', ') + ')' : '') + '.' };
 }
 
@@ -568,10 +604,12 @@ function seed_updateKreator_(d) {
   var c = seed_cariKreator_(d); if (c.error) return { ok: false, error: c.error };
   var k = c.k;
   // ganti akun / nama / platform kreator (salah ketik): boleh sebelum maupun sesudah acc
-  if (d.akun_baru !== undefined || d.nama_baru !== undefined || d.platform_baru !== undefined) {
+  if (d.akun_baru !== undefined || d.nama_baru !== undefined || d.platform_baru !== undefined || d.varian !== undefined || d.qty !== undefined) {
     var bI = seed_cari_(k['Batch']);
     var tolakI = bI ? seed_bolehUbahIsi_(bI) : 'Batch seeding tidak ditemukan.';
-    if (tolakI) return { ok: false, error: tolakI };
+    // varian / jumlah saja (mis. "@rina kirim 2"): siapa pun yang boleh mencatat pengiriman, asal batch sudah di-acc
+    var cumaJumlah = d.akun_baru === undefined && d.nama_baru === undefined && d.platform_baru === undefined;
+    if (tolakI && !(cumaJumlah && bI && ['Approved', 'Jalan'].indexOf(String(bI['Status'])) !== -1)) return { ok: false, error: tolakI };
     if (d.akun_baru !== undefined) {
       var ak = seed_akun_(d.akun_baru);
       if (ak && seed_rows_('seeding_kreator').some(function (x) { return x['ID'] !== k['ID'] && String(x['Batch']) === String(k['Batch']) && seed_akun_(x['Akun']) === ak; })) return { ok: false, error: '@' + ak + ' sudah ada di batch ini.' };
@@ -579,6 +617,8 @@ function seed_updateKreator_(d) {
     }
     if (d.nama_baru !== undefined) seed_set_('seeding_kreator', k._row, 'Nama', mkt_text_(d.nama_baru, 80));
     if (d.platform_baru !== undefined) seed_set_('seeding_kreator', k._row, 'Platform', mkt_cleanLabel_(d.platform_baru));
+    if (d.varian !== undefined) seed_set_('seeding_kreator', k._row, 'Varian', d.varian ? (mkt_resolveLabels_('lane', [d.varian])[0] || '') : '');
+    if (d.qty !== undefined) { var qn = mkt_int_(d.qty); if (!(qn > 0)) return { ok: false, error: 'Jumlah sampel minimal 1.' }; seed_set_('seeding_kreator', k._row, 'Qty', qn); }
     seed_set_('seeding_kreator', k._row, 'Diubah', new Date());
     if (!d.status && !d.link && d.views === undefined && d.catatan === undefined) return { ok: true, id: k['ID'], message: 'Data kreator ' + (d.akun_baru ? '@' + seed_akun_(d.akun_baru) : (k['Akun'] ? '@' + seed_akun_(k['Akun']) : k['Nama'])) + ' diperbarui.' };
   }
@@ -618,6 +658,14 @@ function seed_ringkas_(b, kreator, uang) {
     pic: resolvePicIds_(b['PIC']).map(picNama_).join(', '), diajukan_oleh: picNama_(String(b['Diajukan Oleh'] || '')), kreator: ks.length,
     dikirim: n['Dikirim'] + n['Diterima'] + n['Posting'] + n['Tidak posting'], diterima: n['Diterima'] + n['Posting'] + n['Tidak posting'], posting: n['Posting'], tidak_posting: n['Tidak posting'],
     views: ks.reduce(function (a, k) { return a + (Number(k['Views']) || 0); }, 0) };
+  // sampel per varian: rencana (isian batch) vs sudah keluar (kreator yang sudah dikirim, qty kosong = 1)
+  var per = {}, urut = [];
+  var tambah = function (v) { var key = v.toLowerCase(); if (!per[key]) { per[key] = { varian: v, rencana: 0, keluar: 0 }; urut.push(key); } return per[key]; };
+  seed_sampel_(b).forEach(function (s) { tambah(s.varian).rencana += s.qty; });
+  ks.forEach(function (k) { if ((k['Status'] || 'Rencana') === 'Rencana') return; tambah(String(k['Varian'] || '').trim() || 'tanpa varian').keluar += Number(k['Qty']) || 1; });
+  o.sampel = urut.map(function (key) { return per[key]; });
+  o.sampel_rencana = o.sampel.reduce(function (a, x) { return a + x.rencana; }, 0);
+  o.sampel_keluar = o.sampel.reduce(function (a, x) { return a + x.keluar; }, 0);
   if (uang) {
     var biaya = Number(b['Estimasi (Rp)']) || 0, perkiraan = true;
     var ids = String(b['Kegiatan'] || '').split(',').map(function (x) { return x.trim(); }).filter(Boolean);
@@ -714,7 +762,7 @@ function mkt_aturLabel_(d) {
     if (bentrok && bentrok._row !== e._row) return { ok: false, error: label + ' "' + bentrok.nama + '" sudah ada.' };
     sheet.getRange(e._row, 1).setValue(mkt_safe_(baru));
     var n = 0;
-    if (tab === 'lane') { n += mkt_gantiDiKolom_('strategi', 'Lane', e.nama, baru); n += mkt_gantiDiKolom_('seeding', 'Lane', e.nama, baru); }
+    if (tab === 'lane') { n += mkt_gantiDiKolom_('strategi', 'Lane', e.nama, baru); n += mkt_gantiDiKolom_('seeding', 'Lane', e.nama, baru); n += mkt_gantiDiKolom_('seeding_kreator', 'Varian', e.nama, baru); }
     else { n += mkt_gantiDiKolom_('strategi', 'Channel', e.nama, baru); n += mkt_gantiDiKolom_('hasil_event', 'Channel', e.nama, baru); n += mkt_gantiDiKolom_('seeding', 'Platform', e.nama, baru); }
     return { ok: true, nama: baru, diganti: n, message: label + ' "' + e.nama + '" → "' + baru + '"' + (n ? ' (' + n + ' baris data ikut diganti)' : '') + '.' };
   }

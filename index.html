@@ -219,18 +219,21 @@
         <input type="text" id="sd-nama" placeholder="mis. Seeding Vital Fresh Desember">
         <span class="field-error" id="err-sd-nama">Wajib diisi.</span></label>
       <label>Produk / sampel <span class="opt">(opsional)</span>
-        <input type="text" id="sd-produk" placeholder="mis. Vital Fresh 250ml, 1 botol per kreator"></label>
-      <div class="row2">
-        <label>Lane <span class="opt">(opsional)</span><select id="sd-lane"></select></label>
-        <label>Platform utama <span class="opt">(opsional)</span><select id="sd-platform"></select></label>
+        <input type="text" id="sd-produk" placeholder="mis. Paket launching Rico"></label>
+      <div class="sd-sampel-wrap">
+        <div class="lbl">Varian &amp; jumlah sampel <span class="opt">(opsional)</span> <span class="sd-total" id="sd-sampel-total"></span></div>
+        <div id="sd-sampel"></div>
+        <button type="button" class="btn ghost sd-addvar" onclick="sdBarisVarian()">+ Varian</button>
       </div>
+      <label>Platform utama <span class="opt">(opsional)</span><select id="sd-platform"></select></label>
       <div class="row2">
         <label id="sd-est-wrap">Estimasi biaya (Rp) <span class="opt">(opsional)</span><input type="number" id="sd-est" min="0" step="1000" inputmode="numeric"></label>
         <label>Ingatkan kalau belum posting setelah <input type="number" id="sd-batas" min="1" value="7" inputmode="numeric"><span class="hint">hari sejak sampel diterima</span></label>
       </div>
       <label>PIC<select id="sd-pic" data-pic><option value="">Pilih PIC…</option></select></label>
-      <label id="sd-kreator-wrap">Kreator <span class="opt">(satu per baris: @akun - platform - nama)</span>
-        <textarea id="sd-kreator" rows="5" placeholder="@rina.fit - TikTok - Rina&#10;@budi.run - Instagram"></textarea>
+      <label id="sd-kreator-wrap">Kreator <span class="opt">(satu per baris: @akun - platform - nama - varian jumlah)</span>
+        <textarea id="sd-kreator" rows="5" placeholder="@rina.fit - TikTok - Rina&#10;@budi.run - Instagram - Budi - Kids Fresh 2"></textarea>
+        <span class="hint">Varian &amp; jumlah boleh dikosongkan: otomatis 1 pcs varian pertama.</span>
         <span class="hint" id="sd-kreator-hint"></span></label>
       <label>Catatan <span class="opt">(opsional)</span><input type="text" id="sd-catatan" placeholder="mis. target konten review jujur, wajib tag akun Zerodeo"></label>
       <div class="msg" id="sd-msg"></div>

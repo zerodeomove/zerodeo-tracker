@@ -518,8 +518,24 @@ tbody tr { transition: background-color .15s ease; }
 .sdk .act { display: flex; gap: 5px; flex-wrap: wrap; justify-content: flex-end; }
 .sdk .act button { border: 1px solid var(--border); background: var(--surface); border-radius: 8px; padding: 5px 9px; font: inherit; font-size: 12px; cursor: pointer; }
 .sdk .act button.go { background: var(--accent); color: #fff; border-color: var(--accent); }
-.sdk .linkrow { grid-column: 1 / -1; display: flex; gap: 6px; }
-.sdk .linkrow input { flex: 1; min-width: 0; }
+.sdk .linkrow { grid-column: 1 / -1; display: flex; gap: 6px; flex-wrap: wrap; }
+.sdk .linkrow input, .sdk .linkrow select { flex: 1; min-width: 90px; }
+.sdk .linkrow input.qty { flex: 0 0 64px; min-width: 0; }
+.sd-sampel-wrap { margin: 4px 0 12px; }
+.sd-sampel-wrap .lbl { font-size: 13px; font-weight: 600; margin-bottom: 6px; }
+.sd-total { font-weight: 600; color: var(--accent); margin-left: 4px; }
+.sd-var { display: flex; gap: 6px; margin-bottom: 6px; align-items: center; }
+.sd-var select { flex: 1; min-width: 0; margin: 0; }
+.sd-var input { flex: 0 0 78px; margin: 0; }
+.sd-var button { flex: 0 0 auto; border: 1px solid var(--border); background: var(--surface); border-radius: 8px; width: 34px; height: 34px; cursor: pointer; color: var(--text-muted); }
+.sd-addvar { padding: 6px 12px; font-size: 13px; }
+.sd-vprog { display: grid; gap: 6px; margin: 4px 0 10px; }
+.sd-vprog .v { font-size: 12.5px; }
+.sd-vprog .v .t { display: flex; justify-content: space-between; margin-bottom: 3px; }
+.sd-vprog .v .t b { font-weight: 600; }
+.sd-vprog .bar { height: 6px; border-radius: 4px; background: var(--border); overflow: hidden; }
+.sd-vprog .bar i { display: block; height: 100%; background: var(--accent); border-radius: 4px; }
+.sdk .vq { display: inline-block; font-size: 11.5px; background: var(--accent-light); border-radius: 6px; padding: 1px 6px; margin-left: 4px; color: var(--accent-dark); }
 .ks { display: inline-block; font-size: 11px; font-weight: 600; padding: 1px 8px; border-radius: 999px; background: #EEEDE8; color: var(--text-muted); }
 .ks.Dikirim { background: var(--accent-light); color: var(--accent-dark); } .ks.Diterima { background: var(--amber-bg); color: var(--amber); }
 .ks.Posting { background: #E6F0E6; color: #2F6B3A; } .ks.Tidak { background: #F7E7E4; color: #A13A2E; }

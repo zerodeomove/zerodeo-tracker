@@ -100,4 +100,22 @@ assert.strictEqual(ba.ok, true, ba.error); assert.strictEqual(rowOf(E)[2], 'Lewa
 ba = svc({ action: 'bot_aksi', for_uid: 'yanuar', for_peran: 'anggota', aksi: { jenis: 'kreator_tambah', id: E, kreator: [{ akun: '@cc' }] } });
 ba = svc({ action: 'bot_aksi', for_uid: 'yanuar', for_peran: 'anggota', aksi: { jenis: 'kreator_hapus', id: E, akun: '@cc' } });
 assert.strictEqual(ba.ok, true, ba.error); ok('bot: hapus kreator');
+// varian (lane) + jumlah sampel
+const V = post({ action: 'add_seeding', nama: 'Seeding Varian', produk: 'Paket launching', sampel: [{ varian: 'Vital Fresh+', qty: 10 }, { varian: 'Kids Fresh', qty: 5 }], kreator: '@v1\n@v2 - TikTok - Dua - Kids Fresh x2' }, 'yanuar', 'anggota').id;
+const rV = e.sheets.seeding.rows.find((x) => x[0] === V);
+assert.strictEqual(rV[3], 'Vital Fresh+, Kids Fresh'); assert.strictEqual(String(rV[15]), '10; 5'); ok('batch: beberapa varian + jumlah sampel (tersimpan "10; 5")');
+const krV = e.sheets.seeding_kreator.rows.filter((x) => x[1] === V).map((x) => [x[3], x[13], x[14]]);
+assert.deepStrictEqual(krV, [['v1', 'Vital Fresh+', 1], ['v2', 'Kids Fresh', 2]]); ok('kreator: varian bawaan = varian pertama, qty 1; baris "Kids Fresh x2" terbaca');
+post({ action: 'putuskan_seeding', id: V, status: 'Approved' }, 'lemon', 'approver');
+r = post({ action: 'update_kreator', batch: V, akun: 'v1', status: 'Dikirim', qty: 3 }, 'vendor', 'marketing');
+assert.strictEqual(r.ok, true, r.error); post({ action: 'update_kreator', batch: V, akun: 'v2', status: 'Dikirim' }, 'yanuar', 'anggota');
+let sb = svc({ action: 'bot_baca', for_uid: 'lenno', for_peran: 'admin', q: { jenis: 'seeding', id: V } }).hasil.data[0];
+assert.deepStrictEqual(sb.sampel, [{ varian: 'Vital Fresh+', rencana: 10, keluar: 3 }, { varian: 'Kids Fresh', rencana: 5, keluar: 2 }]); assert.strictEqual(sb.sampel_keluar, 5); assert.strictEqual(sb.sampel_rencana, 15);
+assert.strictEqual(sb.daftar_kreator[0].qty, 3); ok('ringkasan: keluar vs rencana per varian; peran marketing bisa catat "kirim 3" setelah acc');
+r = post({ action: 'update_seeding', id: V, sampel: 'Vital Fresh+ 12, Kids Fresh 5' }, 'lemon', 'approver');
+assert.strictEqual(r.ok, true, r.error); assert.strictEqual(String(e.sheets.seeding.rows.find((x) => x[0] === V)[15]), '12; 5'); ok('ubah jumlah sampel lewat teks');
+ba = svc({ action: 'bot_aksi', for_uid: 'yanuar', for_peran: 'anggota', aksi: { jenis: 'seeding_baru', nama: 'Seeding Bot Varian', sampel: [{ varian: 'Kids Fresh', qty: 4 }] } });
+assert.strictEqual(ba.ok, true, ba.error); assert.strictEqual(e.sheets.seeding.rows.find((x) => x[0] === ba.id)[3], 'Kids Fresh'); ok('bot: ajukan seeding dengan varian + jumlah');
+post({ action: 'atur_label', jenis: 'lane', op: 'ganti', nama: 'Kids Fresh', baru: 'Kids Fresh Mini' }, 'lenno', 'admin');
+assert(e.sheets.seeding_kreator.rows.some((x) => x[13] === 'Kids Fresh Mini')); ok('ganti nama lane: varian kreator ikut ganti');
 console.log('\n' + n + ' tes lolos');
