@@ -530,3 +530,4 @@ tbody tr { transition: background-color .15s ease; }
 .lbl-row button, .lbl-chip { border: 1px solid var(--border); background: var(--surface); border-radius: 8px; padding: 4px 8px; font: inherit; font-size: 12px; cursor: pointer; margin-left: 4px; }
 .lbl-add { display: flex; gap: 6px; margin-top: 8px; }
 .lbl-add input { flex: 1; min-width: 0; }
+.badge.sd-Dibatalkan { background: #EEEDE8; color: var(--text-muted); text-decoration: line-through; }

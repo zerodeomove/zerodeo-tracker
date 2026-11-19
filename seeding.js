@@ -24,7 +24,7 @@ function sdHitung(b) {
 function renderSeeding() {
   if (!$('sdList')) return;
   if (!M.seedAda) { $('sdList').innerHTML = '<div class="empty">Apps Script Zerodeo belum versi terbaru (Seeding). Pasang Code.gs, Marketing.gs, dan Hub.gs terbaru.</div>'; $('sdFilter').innerHTML = ''; return; }
-  const filt = { aktif: (b) => ['Selesai', 'Ditolak'].indexOf(b.Status) < 0, acc: (b) => b.Status === 'Diajukan', selesai: (b) => b.Status === 'Selesai', semua: () => true };
+  const filt = { aktif: (b) => ['Selesai', 'Ditolak', 'Dibatalkan'].indexOf(b.Status) < 0, acc: (b) => b.Status === 'Diajukan', selesai: (b) => b.Status === 'Selesai', semua: () => true };
   const nAcc = M.seeding.filter((b) => b.Status === 'Diajukan').length;
   $('sdFilter').innerHTML = [['aktif', 'Berjalan'], ['acc', 'Menunggu acc' + (nAcc ? ' (' + nAcc + ')' : '')], ['selesai', 'Selesai'], ['semua', 'Semua']]
     .map((x) => `<button type="button" class="${sdFilter === x[0] ? 'on' : ''}" onclick="sdFilter='${x[0]}';renderSeeding()">${x[1]}</button>`).join('');
@@ -82,6 +82,8 @@ function bukaSeeding(id) {
   if (b.Status === 'Diajukan' && !sdBolehAcc(b)) aksiBatch.push(`<span class="sub">${sdMilik(b) ? 'Menunggu acc approver / admin lain.' : 'Menunggu acc approver / admin.'}</span>`);
   if (b.Status === 'Revisi' && (sdMilik(b) || isDecider())) aksiBatch.push(`<button class="btn green" onclick="sdUbah('${zEsc(id)}',{status:'Diajukan'},'Diajukan lagi')">Ajukan lagi</button>`);
   if (['Approved', 'Jalan'].indexOf(b.Status) >= 0 && (sdMilik(b) || isDecider())) aksiBatch.push(`<button class="btn ghost" onclick="sdUbah('${zEsc(id)}',{status:'Selesai'},'Seeding ditandai selesai')">Tandai selesai</button>`);
+  if (['Diajukan', 'Revisi', 'Approved'].indexOf(b.Status) >= 0 && (sdMilik(b) || isDecider()) || (b.Status === 'Jalan' && isDecider()))
+    aksiBatch.push(`<button class="btn ghost" style="color:var(--red)" onclick="if(this.dataset.y!=='1'){this.dataset.y='1';this.textContent='Yakin batalkan?';return;} sdUbah('${zEsc(id)}',{status:'Dibatalkan'},'Seeding dibatalkan')">Batalkan</button>`);
   let keg = '';
   if (uang && typeof kegiatanData !== 'undefined' && kegiatanData.length) {
     const ids = splitList(b.Kegiatan);
@@ -109,7 +111,7 @@ function bukaSeeding(id) {
     ${b.Catatan ? `<div class="hint" style="white-space:pre-wrap">${zEsc(String(b.Catatan).split(' | ').join('\n'))}</div>` : ''}
     ${keg}
     <h4 style="margin:14px 0 4px">Kreator (${h.total})</h4>${baris}
-    ${['Ditolak', 'Selesai'].indexOf(b.Status) < 0 ? `<label style="margin-top:10px">Tambah kreator <span class="opt">(satu per baris: @akun - platform - nama)</span><textarea id="sdd-tambah" rows="2" placeholder="@sari.lari - TikTok"></textarea></label>
+    ${['Ditolak', 'Selesai', 'Dibatalkan'].indexOf(b.Status) < 0 ? `<label style="margin-top:10px">Tambah kreator <span class="opt">(satu per baris: @akun - platform - nama)</span><textarea id="sdd-tambah" rows="2" placeholder="@sari.lari - TikTok"></textarea></label>
       <button class="btn ghost" onclick="sdTambah('${zEsc(id)}')">+ Tambah</button>` : ''}`;
   if (!$('m-seeddetail').classList.contains('show')) openModal('m-seeddetail');
 }

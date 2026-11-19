@@ -434,7 +434,7 @@ function botBaca_(uid, peran, q) {
     var bs = mkt_readTab_('seeding').filter(function (b) {
       if (q.id && String(b['ID']) !== String(q.id)) return false;
       if (q.status && String(b['Status']) !== String(q.status)) return false;
-      if (!q.id && !q.status && !q.termasuk_selesai && ['Selesai', 'Ditolak'].indexOf(String(b['Status'])) !== -1) return false;
+      if (!q.id && !q.status && !q.termasuk_selesai && ['Selesai', 'Ditolak', 'Dibatalkan'].indexOf(String(b['Status'])) !== -1) return false;
       if (teks && ((b['Nama Batch'] || '') + ' ' + (b['Produk'] || '') + ' ' + (b['Lane'] || '')).toLowerCase().indexOf(teks) === -1) return false;
       return true;
     }).map(function (b) {

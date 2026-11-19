@@ -48,6 +48,17 @@ ba = svc({ action: 'bot_aksi', for_uid: 'lemon', for_peran: 'approver', aksi: { 
 assert.strictEqual(ba.ok, true); ok('bot: acc seeding (approver)');
 ba = svc({ action: 'bot_aksi', for_uid: 'yanuar', for_peran: 'anggota', aksi: { jenis: 'kreator_update', id: B, akun: 'rina.fit', status: 'Tidak posting' } });
 assert.strictEqual(ba.ok, true); ok('bot: update status kreator');
+// anti dobel + batalkan
+r = post({ action: 'add_seeding', nama: 'seeding crystal glow', kreator: '@x' }, 'yanuar', 'anggota');
+assert.strictEqual(r.ok, false); assert(/sudah ada/.test(r.error)); ok('seeding dengan nama sama (masih aktif): ditolak, diarahkan tambah kreator');
+const idDobel = post({ action: 'add_seeding', nama: 'Seeding Launching Rico', kreator: '@farintp' }, 'yanuar', 'anggota').id;
+r = post({ action: 'update_seeding', id: idDobel, status: 'Dibatalkan' }, 'yanuar', 'anggota');
+assert.strictEqual(r.ok, true); ok('pengaju bisa membatalkan seeding (mis. dobel)');
+r = post({ action: 'update_kreator', batch: idDobel, akun: 'farintp', status: 'Dikirim' }, 'lemon', 'approver');
+assert.strictEqual(r.ok, false); assert(/dibatalkan/.test(r.error)); ok('seeding dibatalkan: kreator tidak bisa diubah');
+assert(!svc({ action: 'bot_baca', for_uid: 'lenno', for_peran: 'admin', q: { jenis: 'seeding' } }).hasil.data.some((b) => b.id === idDobel)); ok('seeding dibatalkan tidak muncul di daftar aktif');
+r = post({ action: 'add_seeding', nama: 'Seeding Launching Rico', kreator: '@farintp' }, 'yanuar', 'anggota');
+assert.strictEqual(r.ok, true); ok('setelah dibatalkan, nama yang sama boleh dipakai lagi');
 // lane & channel
 r = post({ action: 'atur_label', jenis: 'lane', op: 'tambah', nama: 'Kids Fresh' }, 'yanuar', 'anggota');
 assert.strictEqual(r.ok, true); assert(post({ action: 'get_data' }, 'yanuar', 'anggota').lane.includes('Kids Fresh')); ok('lane baru bisa ditambah tanpa membuat strategi');

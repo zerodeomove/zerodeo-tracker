@@ -55,7 +55,7 @@ var MKT_TABS = {
             'Diputuskan Oleh', 'Catatan', 'Dicatat Pada', 'Kegiatan', 'Strategi'],
   seeding_kreator: ['ID', 'Batch', 'Nama', 'Akun', 'Platform', 'Status', 'Tgl Kirim', 'Tgl Terima', 'Tgl Posting', 'Link Konten', 'Views', 'Catatan', 'Diubah']
 };
-var SEED_STATUS = ['Diajukan', 'Revisi', 'Approved', 'Ditolak', 'Jalan', 'Selesai'];
+var SEED_STATUS = ['Diajukan', 'Revisi', 'Approved', 'Ditolak', 'Jalan', 'Selesai', 'Dibatalkan'];
 var KREATOR_STATUS = ['Rencana', 'Dikirim', 'Diterima', 'Posting', 'Tidak posting'];
 var SEED_MAKS_KREATOR = 100;
 var SEED_BATAS_BAWAAN = 7;   // hari sejak sampel diterima sebelum PIC diingatkan
@@ -442,6 +442,9 @@ function seed_add_(d) {
   if (!CURRENT_WHO_) return { ok: false, error: 'Masuk lewat Hub dulu supaya kami tahu siapa kamu.' };
   var nama = mkt_text_(d.nama, 120);
   if (!nama) return { ok: false, error: 'Nama batch seeding wajib diisi (mis. "Seeding Vital Fresh Desember").' };
+  // anti dobel: batch aktif dengan nama sama sudah ada -> tambahkan kreator ke sana, jangan bikin baru
+  var kembar = seed_rows_('seeding').filter(function (b) { return String(b['Nama Batch'] || '').trim().toLowerCase() === nama.toLowerCase() && ['Ditolak', 'Selesai', 'Dibatalkan'].indexOf(String(b['Status'])) === -1; })[0];
+  if (kembar) return { ok: false, error: 'Seeding "' + kembar['Nama Batch'] + '" sudah ada (status ' + kembar['Status'] + '). Tambahkan kreatornya ke batch itu, jangan bikin batch baru.' };
   var kreator = seed_parseKreator_(d.kreator);
   if (kreator.length > SEED_MAKS_KREATOR) return { ok: false, error: 'Maksimal ' + SEED_MAKS_KREATOR + ' kreator per batch.' };
   var pic = d.pic ? normalizePic_(d.pic) : CURRENT_WHO_.uid;
@@ -479,7 +482,9 @@ function seed_update_(d) {
   if (!(seed_milik_(b) || whoCanDecide_())) return { ok: false, error: 'Hanya PIC / pengaju seeding, approver, atau admin yang boleh mengubahnya.' };
   var pesan = [];
   if (d.status) {
-    var boleh = { Selesai: ['Approved', 'Jalan'], Jalan: ['Approved', 'Selesai'], Diajukan: ['Revisi'] }[d.status];
+    var boleh = { Selesai: ['Approved', 'Jalan'], Jalan: ['Approved', 'Selesai'], Diajukan: ['Revisi'], Dibatalkan: ['Diajukan', 'Revisi', 'Approved', 'Jalan'] }[d.status];
+    // membatalkan batch yang sudah jalan (sampel sudah keluar) hanya approver / admin
+    if (d.status === 'Dibatalkan' && b['Status'] === 'Jalan' && !whoCanDecide_()) return { ok: false, error: 'Seeding ini sudah jalan (sampel sudah dikirim). Hanya approver / admin yang bisa membatalkannya.' };
     if (!boleh) return { ok: false, error: 'Status tidak dikenali.' };
     if (boleh.indexOf(b['Status']) === -1) return { ok: false, error: 'Dari "' + b['Status'] + '" tidak bisa langsung jadi "' + d.status + '".' };
     seed_set_('seeding', b._row, 'Status', d.status); pesan.push('status ' + d.status);
@@ -499,7 +504,7 @@ function seed_update_(d) {
 function seed_addKreator_(d) {
   var b = seed_cari_(d.batch || d.id);
   if (!b) return { ok: false, error: 'Batch seeding tidak ditemukan.' };
-  if (['Ditolak', 'Selesai'].indexOf(b['Status']) !== -1) return { ok: false, error: 'Seeding ini sudah ' + b['Status'] + '.' };
+  if (['Ditolak', 'Selesai', 'Dibatalkan'].indexOf(b['Status']) !== -1) return { ok: false, error: 'Seeding ini sudah ' + b['Status'] + '.' };
   var list = seed_parseKreator_(d.kreator);
   if (!list.length) return { ok: false, error: 'Daftar kreatornya kosong.' };
   var t = seed_tambahKreator_(b['ID'], list, b['Platform']);
@@ -521,6 +526,7 @@ function seed_updateKreator_(d) {
   if (!k) return { ok: false, error: 'Kreator tidak ditemukan di batch itu.' };
   var b = seed_cari_(k['Batch']);
   if (!b) return { ok: false, error: 'Batch seeding tidak ditemukan.' };
+  if (b['Status'] === 'Dibatalkan') return { ok: false, error: 'Seeding "' + b['Nama Batch'] + '" sudah dibatalkan.' };
   if (['Diajukan', 'Revisi', 'Ditolak'].indexOf(b['Status']) !== -1) return { ok: false, error: 'Seeding "' + b['Nama Batch'] + '" belum di-acc (status ' + b['Status'] + '). Sampel dikirim setelah di-acc approver / admin.' };
   var st = d.status ? KREATOR_STATUS.filter(function (x) { return x.toLowerCase() === String(d.status).toLowerCase(); })[0] : '';
   if (d.status && !st) return { ok: false, error: 'Status kreator: ' + KREATOR_STATUS.join(' / ') + '.' };
