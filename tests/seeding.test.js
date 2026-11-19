@@ -1,0 +1,51 @@
+// Tes Seeding (Marketing.gs): ajukan batch + kreator, acc approver/admin (bukan pengaju), status kreator, pengingat, bot.
+// Jalankan: node tests/seeding.test.js
+const assert = require('assert');
+const { makeEnv, makeSheet, hubToken } = require('./fake-google');
+let n = 0; const ok = (m) => { n++; console.log('ok  ' + m); };
+const SECRET = 'rahasia-zerodeo-yang-panjang-0123456789', SHARED = 'shared-secret-panjang-abcdef';
+const e = makeEnv({ SHARED_SECRET: SHARED, SECRET_ZERODEO: SECRET });
+e.sheets.kegiatan = makeSheet('kegiatan', [[], [], [], ['No', 'Tanggal Dicatat', 'Deadline Kegiatan', 'Project/Brand', 'Item Kegiatan', 'Kategori', 'Tipe', 'Jalur', 'PIC', 'Estimasi (Rp)', 'Status', 'PIC Transaksi', 'Nominal Transfer (Rp)', 'Tgl Transfer', 'Actual (Rp)', 'Selisih (Rp)', 'Nota/Bukti', 'Catatan', 'Dana', 'ID'],
+  [1, '2026-11-02', '', 'Zerodeo', 'Sampel seeding 20 pcs', 'Promosi', 'Opex', 'Pengajuan', 'yanuar', 1200000, 'Selesai', '', 1200000, '', 1000000, '', '', '', '', 'k-seed']]);
+e.sheets.Tim = makeSheet('Tim', [['id', 'nama', 'peran'], ['lenno', 'Lenno', 'admin'], ['yanuar', 'Yanuar', 'anggota'], ['lemon', 'Lemon', 'approver'], ['vendor', 'Vendor', 'marketing']]);
+const post = (body, uid, peran) => JSON.parse(e.ctx.doPost({ postData: { contents: JSON.stringify(Object.assign({ secret: SHARED, hub: { uid, peran } }, body)) } }).text);
+const svc = (body) => JSON.parse(e.ctx.doPost({ postData: { contents: JSON.stringify(Object.assign({ token: hubToken(SECRET, { uid: 'hub-service', peran: 'service' }) }, body)) } }).text);
+
+let r = post({ action: 'add_seeding', nama: 'Seeding Vital Fresh Desember', produk: 'Vital Fresh 250ml', lane: 'Vital Fresh', platform: 'TikTok', estimasi: 900000, kreator: '@rina.fit - TikTok - Rina\n@budi.run - Instagram\n@rina.fit' }, 'yanuar', 'anggota');
+assert.strictEqual(r.ok, true, r.error); assert.strictEqual(r.kreator, 2); const B = r.id; ok('anggota mengajukan seeding + daftar kreator (teks per baris, dobel diabaikan)');
+const kr = e.sheets.seeding_kreator.rows.slice(1);
+assert.deepStrictEqual(kr.map((k) => [k[3], k[4], k[5]]), [['rina.fit', 'TikTok', 'Rencana'], ['budi.run', 'Instagram', 'Rencana']]); ok('kreator tersimpan: akun, platform, status Rencana');
+r = post({ action: 'update_kreator', batch: B, akun: 'rina.fit', status: 'Dikirim' }, 'yanuar', 'anggota');
+assert.strictEqual(r.ok, false); assert(/belum di-acc/.test(r.error)); ok('sampel belum boleh dicatat dikirim sebelum di-acc');
+r = post({ action: 'putuskan_seeding', id: B, status: 'Approved' }, 'yanuar', 'anggota');
+assert.strictEqual(r.ok, false); assert(/approver atau admin/.test(r.error)); ok('anggota tidak bisa meng-acc');
+r = post({ action: 'putuskan_seeding', id: B, status: 'Approved' }, 'vendor', 'marketing');
+assert.strictEqual(r.ok, false); ok('peran marketing tidak bisa meng-acc');
+const keysLemon = svc({ action: 'pending', for_uid: 'lemon', for_peran: 'approver' }).keys;
+assert(keysLemon.includes('z:seed-acc:' + B)); ok('titik merah: approver dapat kunci acc seeding');
+r = post({ action: 'putuskan_seeding', id: B, status: 'Approved' }, 'lemon', 'approver');
+assert.strictEqual(r.ok, true); ok('approver meng-acc');
+r = post({ action: 'update_kreator', batch: B, akun: '@rina.fit', status: 'Diterima', tanggal: '2026-11-01' }, 'yanuar', 'anggota');
+assert.strictEqual(r.ok, true); assert.strictEqual(e.sheets.seeding.rows[1][7], 'Jalan'); ok('kreator diterima → batch otomatis Jalan');
+const keysYan = svc({ action: 'pending', for_uid: 'yanuar', for_peran: 'anggota' }).keys;
+assert(keysYan.includes('z:seed-post:' + B)); ok('pengingat PIC: sudah terima > 7 hari belum posting');
+r = post({ action: 'update_kreator', batch: B, akun: 'budi.run', link: 'https://instagram.com/p/xyz', views: 4200 }, 'vendor', 'marketing');
+assert.strictEqual(r.ok, true); assert(/Posting/.test(r.message)); ok('peran marketing boleh update kreator; kirim link = otomatis Posting');
+r = post({ action: 'update_seeding', id: B, kegiatan: ['k-seed'] }, 'yanuar', 'anggota');
+assert.strictEqual(r.ok, true); ok('tautkan kegiatan Budgeting (biaya sampel)');
+const bot = svc({ action: 'bot_baca', for_uid: 'lenno', for_peran: 'admin', q: { jenis: 'seeding', teks: 'vital' } }).hasil;
+const b0 = bot.data[0];
+assert.strictEqual(b0.posting, 1); assert.strictEqual(b0.biaya, 1000000); assert.strictEqual(b0.biaya_per_konten, 1000000); assert.strictEqual(b0.daftar_kreator.length, 2); ok('bot baca seeding: posting, biaya (actual kegiatan), biaya per konten, daftar kreator');
+const botV = svc({ action: 'bot_baca', for_uid: 'vendor', for_peran: 'marketing', q: { jenis: 'seeding' } }).hasil;
+assert.strictEqual(botV.data[0].biaya, undefined); ok('bot: peran marketing tanpa angka uang');
+const dm = post({ action: 'get_data' }, 'vendor', 'marketing');
+assert(dm.seeding.length === 1 && !('Estimasi (Rp)' in dm.seeding[0]) && !('Kegiatan' in dm.seeding[0])); ok('dashboard peran marketing: seeding tanpa estimasi / kegiatan');
+const pg = svc({ action: 'bot_baca', for_uid: 'yanuar', for_peran: 'anggota', q: { jenis: 'pengingat' } }).hasil;
+assert(pg.tindakan.some((t) => /belum posting/.test(t))); ok('pengingat (ringkasan pagi / kartu Hub) memuat seeding');
+let ba = svc({ action: 'bot_aksi', for_uid: 'yanuar', for_peran: 'anggota', aksi: { jenis: 'seeding_baru', nama: 'Seeding Crystal Glow', kreator: [{ akun: '@sari', platform: 'TikTok' }] } });
+assert.strictEqual(ba.ok, true); ok('bot: ajukan seeding');
+ba = svc({ action: 'bot_aksi', for_uid: 'lemon', for_peran: 'approver', aksi: { jenis: 'putuskan_seeding', id: ba.id, status: 'Approved' } });
+assert.strictEqual(ba.ok, true); ok('bot: acc seeding (approver)');
+ba = svc({ action: 'bot_aksi', for_uid: 'yanuar', for_peran: 'anggota', aksi: { jenis: 'kreator_update', id: B, akun: 'rina.fit', status: 'Tidak posting' } });
+assert.strictEqual(ba.ok, true); ok('bot: update status kreator');
+console.log('\n' + n + ' tes lolos');

@@ -27,7 +27,7 @@
 // Penanda versi kode. Ubah setiap kali Code.gs diedit; tampil di dashboard (baris "Terakhir ambil data")
 // supaya kelihatan versi mana yang sebenarnya melayani dashboard (beda dengan isi editor kalau
 // belum Deploy -> New version).
-var KODE_VERSI = '2026-11-17 tempel-bukti';
+var KODE_VERSI = '2026-11-19 seeding';
 
 var HEADER_ROW = 4;
 // BUKAN batas jumlah kegiatan. Ini hanya sampai baris mana template di Sheet disiapkan
@@ -830,7 +830,10 @@ function buildMarketingPayload_() {
     strategi: m.strategi,
     lane: m.lane,
     channel: m.channel,
-    hasil_event: m.hasil_event
+    hasil_event: m.hasil_event,
+    // seeding tanpa angka uang (peran marketing tidak melihat biaya / kegiatan Budgeting)
+    seeding: (m.seeding || []).map(function (b) { var o = {}; Object.keys(b).forEach(function (k) { if (k !== 'Estimasi (Rp)' && k !== 'Kegiatan') o[k] = b[k]; }); return o; }),
+    seeding_kreator: m.seeding_kreator || []
   };
 }
 
@@ -862,6 +865,8 @@ function buildPayload_() {
   payload.lane = m.lane;
   payload.channel = m.channel;
   payload.hasil_event = m.hasil_event;
+  payload.seeding = m.seeding;
+  payload.seeding_kreator = m.seeding_kreator;
   payload.dibuat_ms = Date.now() - t0;   // lama menyusun data (ms), untuk memantau kecepatan
   return payload;
 }

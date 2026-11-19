@@ -320,6 +320,7 @@ function handlePending_(data) {
   var tim = readTim_();
   var keys = pendingKeysFor_(rows, uid, peran, tim);
   try { keys = keys.concat(mkt_pengingatKeys_(uid, tim)); } catch (e) { /* tab marketing belum ada: lewati */ }
+  try { keys = keys.concat(seed_keys_(uid, peran, tim)); } catch (e) { /* tab seeding belum ada: lewati */ }
   return jsonResponse({ ok: true, keys: keys });
 }
 
@@ -327,7 +328,7 @@ function handlePending_(data) {
 // BOT TELEGRAM HUB: baca data atas nama satu orang. Dipanggil Hub (token servis, sama seperti "pending"); Hub sudah memeriksa
 // orang itu punya akses Zerodeo dan mengirim perannya. Di sini peran itu diterapkan lagi: peran marketing tidak menerima
 // kegiatan, dana, atau angka uang apa pun. Hanya membaca, tidak ada yang diubah.
-//   jenis: ringkasan | kegiatan | transfer_global | strategi | hasil_event | pengingat
+//   jenis: ringkasan | kegiatan | transfer_global | strategi | hasil_event | seeding | pengingat
 // ============================================================
 var BOT_BACA_MAKS = 40;
 function handleBotBaca_(data) {
@@ -427,6 +428,24 @@ function botBaca_(uid, peran, q) {
     });
     return potong(st);
   }
+  if (jenis === 'seeding') {
+    // batch seeding + ringkasan kreator; dengan id / teks: ikut daftar kreatornya
+    var kr = mkt_readTab_('seeding_kreator');
+    var bs = mkt_readTab_('seeding').filter(function (b) {
+      if (q.id && String(b['ID']) !== String(q.id)) return false;
+      if (q.status && String(b['Status']) !== String(q.status)) return false;
+      if (!q.id && !q.status && !q.termasuk_selesai && ['Selesai', 'Ditolak'].indexOf(String(b['Status'])) !== -1) return false;
+      if (teks && ((b['Nama Batch'] || '') + ' ' + (b['Produk'] || '') + ' ' + (b['Lane'] || '')).toLowerCase().indexOf(teks) === -1) return false;
+      return true;
+    }).map(function (b) {
+      var o = seed_ringkas_(b, kr, uang);
+      if (q.id || teks || q.detail) o.daftar_kreator = kr.filter(function (k) { return String(k['Batch']) === String(b['ID']); }).map(function (k) {
+        return { akun: k['Akun'] ? '@' + seed_akun_(k['Akun']) : '', nama: k['Nama'] || '', platform: k['Platform'] || '', status: k['Status'] || 'Rencana', terima: k['Tgl Terima'] || '', link: k['Link Konten'] || '', views: Number(k['Views']) || 0 };
+      });
+      return o;
+    });
+    return potong(bs);
+  }
   if (jenis === 'hasil_event') {
     var keg = uang ? kegiatan() : [];
     var byId = {};
@@ -475,6 +494,9 @@ function botBaca_(uid, peran, q) {
     tindakan.push('Strategi "' + s['Nama Strategi'] + '": ' + (p[1] === 'mkt-selesai' ? 'sudah lewat tanggal selesai (' + s['Selesai'] + ') tapi masih Jalan' : 'sudah selesai, hasil event-nya belum diisi'));
     item.push({ jenis: p[1], id: p[2], judul: String(s['Nama Strategi'] || ''), selesai: String(s['Selesai'] || '') });
   });
+  try {
+    seed_tindakan_(uid, peran, tim).forEach(function (t) { tindakan.push(t.teks); item.push({ jenis: t.jenis, id: t.id, judul: t.judul }); });
+  } catch (e) { /* tab seeding belum ada */ }
   if (jenis === 'pengingat') return { tindakan: tindakan };
   var out = { peran: peran, tindakan: tindakan, item: item };
   if (uang) {
@@ -573,6 +595,11 @@ function botNative_(a) {
   if (j === 'status_strategi') return { action: 'update_strategi_status', id: a.id, status: a.status };
   if (j === 'hasil_event_baru') return { action: 'add_hasil_event', nama: a.nama, tanggal: a.tanggal, channel: Array.isArray(a.channel) ? a.channel[0] : a.channel, komunitas: a.komunitas || '', kode: a.kode || '',
     hadir: a.hadir || 0, coba: a.coba || 0, tanya: a.tanya || 0, order: a.order || 0, ugc: a.ugc || 0, strategi: a.strategi || '', pic: a.pic, kegiatan: a.kegiatan || [] };
+  if (j === 'seeding_baru') return { action: 'add_seeding', nama: a.nama, produk: a.produk || '', lane: a.lane || '', platform: a.platform || '', estimasi: a.estimasi, batas: a.batas, pic: a.pic, strategi: a.strategi || '', catatan: a.catatan || '', kreator: a.kreator || [] };
+  if (j === 'putuskan_seeding') return { action: 'putuskan_seeding', id: a.id, status: a.status, alasan: a.alasan || '' };
+  if (j === 'ubah_seeding') return { action: 'update_seeding', id: a.id, status: a.status, estimasi: a.estimasi, batas: a.batas, catatan: a.catatan, kegiatan: a.kegiatan };
+  if (j === 'kreator_tambah') return { action: 'add_kreator', batch: a.id, kreator: a.kreator || [] };
+  if (j === 'kreator_update') return { action: 'update_kreator', batch: a.id, akun: a.akun || a.nama, status: a.status, link: a.link || '', views: a.views, tanggal: a.tanggal || '', catatan: a.catatan };
   if (j === 'tautkan_event') return { action: 'update_hasil_event_kegiatan', id: a.id, kegiatan: a.kegiatan || [] };
   return { error: 'Aksi tidak dikenal.' };
 }
