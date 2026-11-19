@@ -48,4 +48,16 @@ ba = svc({ action: 'bot_aksi', for_uid: 'lemon', for_peran: 'approver', aksi: { 
 assert.strictEqual(ba.ok, true); ok('bot: acc seeding (approver)');
 ba = svc({ action: 'bot_aksi', for_uid: 'yanuar', for_peran: 'anggota', aksi: { jenis: 'kreator_update', id: B, akun: 'rina.fit', status: 'Tidak posting' } });
 assert.strictEqual(ba.ok, true); ok('bot: update status kreator');
+// lane & channel
+r = post({ action: 'atur_label', jenis: 'lane', op: 'tambah', nama: 'Kids Fresh' }, 'yanuar', 'anggota');
+assert.strictEqual(r.ok, true); assert(post({ action: 'get_data' }, 'yanuar', 'anggota').lane.includes('Kids Fresh')); ok('lane baru bisa ditambah tanpa membuat strategi');
+r = post({ action: 'atur_label', jenis: 'lane', op: 'ganti', nama: 'Vital Fresh', baru: 'Vital Fresh+' }, 'yanuar', 'anggota');
+assert.strictEqual(r.ok, false); ok('ganti nama lane: anggota ditolak');
+r = post({ action: 'atur_label', jenis: 'lane', op: 'ganti', nama: 'Vital Fresh', baru: 'Vital Fresh+' }, 'lemon', 'approver');
+assert.strictEqual(r.ok, true); assert.strictEqual(e.sheets.seeding.rows[1][3], 'Vital Fresh+'); ok('ganti nama lane: seeding lama ikut ganti');
+r = post({ action: 'atur_label', jenis: 'lane', op: 'sembunyi', nama: 'Kids Fresh' }, 'lemon', 'approver');
+let dl = post({ action: 'get_data' }, 'lemon', 'approver');
+assert(!dl.lane.includes('Kids Fresh') && dl.label_tersembunyi.lane.includes('Kids Fresh')); ok('sembunyikan lane: hilang dari pilihan, tercatat di daftar tersembunyi');
+r = post({ action: 'atur_label', jenis: 'lane', op: 'tambah', nama: 'kids fresh' }, 'yanuar', 'anggota');
+assert(/ditampilkan lagi/.test(r.message)); dl = post({ action: 'get_data' }, 'lemon', 'approver'); assert.strictEqual(dl.lane.filter((x) => /kids/i.test(x)).length, 1); ok('menambah lane yang tersembunyi: ditampilkan lagi, tidak dobel');
 console.log('\n' + n + ' tes lolos');

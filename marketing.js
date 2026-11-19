@@ -459,3 +459,36 @@ $('eventForm').addEventListener('submit', (e) => {
   $('eventForm').reset();
   closeModal('m-event');
 });
+
+// ---------- Lane & channel: tambah / ganti nama / sembunyikan (tanpa harus membuat strategi) ----------
+function openLabel() {
+  if (!mktReady()) return;
+  renderLabel();
+  openModal('m-label');
+}
+function renderLabel() {
+  const boleh = isDecider();
+  const sem = M.labelSembunyi || { lane: [], channel: [] };
+  const bagian = (jenis, judul, list, hidden) => `<h4 style="margin:14px 0 6px">${judul}</h4>
+    <div class="lbl-list">${list.map((x) => `<div class="lbl-row"><span>${zEsc(x)}</span>${boleh ? `<span><button type="button" onclick="lblGanti('${jenis}', ${zEsc(JSON.stringify(x))})">✎ Ganti nama</button><button type="button" onclick="lblKirim('${jenis}','sembunyi',${zEsc(JSON.stringify(x))})">Sembunyikan</button></span>` : ''}</div>`).join('') || '<div class="sub">Belum ada.</div>'}
+    ${hidden.length ? `<div class="sub" style="margin-top:6px">Disembunyikan: ${hidden.map((x) => boleh ? `<button type="button" class="lbl-chip" onclick="lblKirim('${jenis}','tampil',${zEsc(JSON.stringify(x))})">${zEsc(x)} ↺</button>` : zEsc(x)).join(' ')}</div>` : ''}</div>
+    <div class="lbl-add"><input type="text" id="lbl-baru-${jenis}" placeholder="${jenis === 'lane' ? 'Lane baru, mis. Kids Fresh' : 'Channel baru, mis. YouTube'}" maxlength="60"><button type="button" class="btn green" onclick="lblTambah('${jenis}')">+ Tambah</button></div>`;
+  $('lbl-isi').innerHTML = bagian('lane', 'Lane', M.lane, sem.lane || []) + bagian('channel', 'Channel', M.channel, sem.channel || []) +
+    (boleh ? '' : '<div class="sub" style="margin-top:10px">Ganti nama dan sembunyikan hanya untuk approver / admin.</div>');
+}
+function lblKirim(jenis, op, nama, baru) {
+  const label = jenis === 'lane' ? 'Lane' : 'Channel';
+  enqueueSave({ label: label + ': ' + nama, payload: { action: 'atur_label', jenis, op, nama, baru: baru || '' },
+    okMsg: label + ' "' + nama + '" ' + ({ tambah: 'ditambahkan', sembunyi: 'disembunyikan', tampil: 'ditampilkan lagi', ganti: '→ "' + baru + '"' }[op]) + '.' });
+  closeModal('m-label');
+}
+function lblTambah(jenis) {
+  const v = $('lbl-baru-' + jenis).value.replace(/,/g, ' ').trim();
+  if (!v) { toast('Tulis dulu namanya.', 'err'); return; }
+  lblKirim(jenis, 'tambah', v);
+}
+function lblGanti(jenis, nama) {
+  const baru = (window.prompt('Ganti nama "' + nama + '" jadi:', nama) || '').replace(/,/g, ' ').trim();
+  if (!baru || baru === nama) return;
+  lblKirim(jenis, 'ganti', nama, baru);
+}

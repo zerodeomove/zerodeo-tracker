@@ -525,3 +525,8 @@ tbody tr { transition: background-color .15s ease; }
 .ks.Posting { background: #E6F0E6; color: #2F6B3A; } .ks.Tidak { background: #F7E7E4; color: #A13A2E; }
 .sd-acts { display: flex; gap: 8px; flex-wrap: wrap; margin: 10px 0; }
 @media (max-width: 600px) { .sdk { grid-template-columns: 1fr; } .sdk .act { justify-content: flex-start; } }
+.lbl-list { display: flex; flex-direction: column; }
+.lbl-row { display: flex; justify-content: space-between; align-items: center; gap: 8px; padding: 7px 0; border-top: 1px dashed var(--border); font-size: 13.5px; }
+.lbl-row button, .lbl-chip { border: 1px solid var(--border); background: var(--surface); border-radius: 8px; padding: 4px 8px; font: inherit; font-size: 12px; cursor: pointer; margin-left: 4px; }
+.lbl-add { display: flex; gap: 6px; margin-top: 8px; }
+.lbl-add input { flex: 1; min-width: 0; }

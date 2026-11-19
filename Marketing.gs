@@ -45,8 +45,8 @@
 
 var MKT_TABS = {
   strategi: ['ID', 'Nama Strategi', 'Lane', 'Pesan Inti', 'Channel', 'Mulai', 'Selesai', 'PIC', 'Status', 'Dicatat Pada'],
-  lane: ['Lane'],
-  channel: ['Channel'],
+  lane: ['Lane', 'Sembunyi'],
+  channel: ['Channel', 'Sembunyi'],   // Sembunyi = TRUE: tidak muncul di pilihan, riwayat tetap
   hasil_event: ['ID', 'Tanggal Event', 'Nama Event', 'Channel', 'Nama Komunitas', 'Kode Voucher',
                 'Hadir', 'Coba Produk', 'Tanya Beli Di Mana', 'Order via Kode', 'Konten UGC',
                 'Strategi', 'PIC Pencatat', 'Dicatat Pada', 'Kegiatan'],
@@ -205,7 +205,13 @@ function mkt_pengingatKeys_(uid, tim, nowMs) {
   return keys;
 }
 
+// semua label (termasuk yang disembunyikan)
+function mkt_readLabels_(name, headerName) {
+  return mkt_readTab_(name).map(function (o) { return { nama: mkt_text_(o[headerName], 60), sembunyi: o['Sembunyi'] === true || String(o['Sembunyi'] || '').toUpperCase() === 'TRUE', _row: o._row }; })
+    .filter(function (x) { return x.nama; });
+}
 function mkt_readList_(name, headerName) {
+  if (name === 'lane' || name === 'channel') return mkt_readLabels_(name, headerName).filter(function (x) { return !x.sembunyi; }).map(function (x) { return x.nama; });
   return mkt_readTab_(name).map(function (o) { return mkt_text_(o[headerName], 60); }).filter(Boolean);
 }
 
@@ -215,6 +221,8 @@ function mkt_getData() {
     strategi: mkt_readTab_('strategi'),
     lane: mkt_readList_('lane', 'Lane'),
     channel: mkt_readList_('channel', 'Channel'),
+    label_tersembunyi: { lane: mkt_readLabels_('lane', 'Lane').filter(function (x) { return x.sembunyi; }).map(function (x) { return x.nama; }),
+      channel: mkt_readLabels_('channel', 'Channel').filter(function (x) { return x.sembunyi; }).map(function (x) { return x.nama; }) },
     hasil_event: mkt_readTab_('hasil_event'),
     seeding: mkt_readTab_('seeding'),
     seeding_kreator: mkt_readTab_('seeding_kreator')
@@ -227,7 +235,7 @@ function mkt_resolveLabels_(tabName, labels) {
   var sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(tabName);
   var headerName = tabName === 'lane' ? 'Lane' : 'Channel';
   var map = {};
-  mkt_readList_(tabName, headerName).forEach(function (e) { map[e.toLowerCase()] = e; });
+  mkt_readLabels_(tabName, headerName).forEach(function (e) { map[e.nama.toLowerCase()] = e.nama; });   // yang disembunyikan tetap dikenali (tidak dobel)
   var result = [], seen = {};
   (labels || []).forEach(function (raw) {
     var clean = mkt_cleanLabel_(raw);
@@ -245,7 +253,7 @@ function mkt_resolveLabels_(tabName, labels) {
 // ============================================================
 function mkt_handlePost(data) {
   var known = { add_strategi: 1, update_strategi_status: 1, add_hasil_event: 1, update_hasil_event_kegiatan: 1,
-    add_seeding: 1, putuskan_seeding: 1, update_seeding: 1, add_kreator: 1, update_kreator: 1 };
+    add_seeding: 1, putuskan_seeding: 1, update_seeding: 1, add_kreator: 1, update_kreator: 1, atur_label: 1 };
   if (!data || !known[data.action]) return null;
   mkt_ensureTabs_();
   var lock = LockService.getScriptLock();
@@ -254,6 +262,7 @@ function mkt_handlePost(data) {
     if (data.action === 'add_strategi') return mkt_addStrategi_(data);
     if (data.action === 'update_strategi_status') return mkt_updateStatus_(data);
     if (data.action === 'update_hasil_event_kegiatan') return mkt_updateEventKegiatan_(data);
+    if (data.action === 'atur_label') return mkt_aturLabel_(data);
     if (data.action === 'add_seeding') return seed_add_(data);
     if (data.action === 'putuskan_seeding') return seed_putuskan_(data);
     if (data.action === 'update_seeding') return seed_update_(data);
@@ -589,4 +598,61 @@ function seed_tindakan_(uid, peran, tim) {
     var n = kreator.filter(function (k) { return String(k['Batch']) === p[2] && k['Status'] === 'Diterima'; }).length;
     return { jenis: 'seed-post', id: p[2], judul: String(b['Nama Batch']), teks: 'Seeding "' + b['Nama Batch'] + '": ' + n + ' kreator sudah terima sampel tapi belum posting, perlu diingatkan' };
   }).filter(Boolean);
+}
+
+
+// ============================================================
+// LANE & CHANNEL: tambah tanpa harus membuat strategi, ganti nama (data lama ikut), sembunyikan / tampilkan lagi.
+// Tambah: semua orang tim. Ganti nama & sembunyikan: approver / admin (mengubah data yang dipakai bersama).
+// ============================================================
+function mkt_gantiDiKolom_(tab, judul, lama, baru) {
+  var sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(tab);
+  if (!sheet || sheet.getLastRow() < 2) return 0;
+  var lastCol = Math.max(sheet.getLastColumn(), 1);
+  var kol = sheet.getRange(1, 1, 1, lastCol).getValues()[0].map(function (h) { return String(h).trim(); }).indexOf(judul) + 1;
+  if (!kol) return 0;
+  var rng = sheet.getRange(2, kol, sheet.getLastRow() - 1, 1), vals = rng.getValues(), n = 0;
+  vals.forEach(function (v) {
+    var bag = String(v[0] || '').split(',').map(function (x) { return x.trim(); });
+    var ubah = false;
+    bag = bag.map(function (x) { if (x && x.toLowerCase() === lama.toLowerCase()) { ubah = true; return baru; } return x; });
+    if (ubah) { v[0] = bag.filter(Boolean).join(', '); n++; }
+  });
+  if (n) rng.setValues(vals);
+  return n;
+}
+function mkt_aturLabel_(d) {
+  var tab = d.jenis === 'channel' ? 'channel' : (d.jenis === 'lane' ? 'lane' : '');
+  if (!tab) return { ok: false, error: 'Jenis harus lane atau channel.' };
+  var judul = tab === 'lane' ? 'Lane' : 'Channel', label = tab === 'lane' ? 'Lane' : 'Channel';
+  var semua = mkt_readLabels_(tab, judul), sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(tab);
+  var nama = mkt_cleanLabel_(d.nama), cari = function (x) { return semua.filter(function (e) { return e.nama.toLowerCase() === String(x || '').trim().toLowerCase(); })[0]; };
+  var op = String(d.op || 'tambah');
+  if (op === 'tambah') {
+    if (!nama) return { ok: false, error: label + ' kosong.' };
+    var ada = cari(nama);
+    if (ada && !ada.sembunyi) return { ok: false, error: label + ' "' + ada.nama + '" sudah ada.' };
+    if (ada) { sheet.getRange(ada._row, 2).setValue(''); return { ok: true, nama: ada.nama, message: label + ' "' + ada.nama + '" ditampilkan lagi.' }; }
+    mkt_append_(sheet, [nama, '']);
+    return { ok: true, nama: nama, message: label + ' "' + nama + '" ditambahkan.' };
+  }
+  if (!whoCanDecide_()) return { ok: false, error: 'Mengganti nama atau menyembunyikan ' + label.toLowerCase() + ' hanya untuk approver atau admin Zerodeo.' };
+  var e = cari(nama);
+  if (!e) return { ok: false, error: label + ' "' + nama + '" tidak ditemukan.' };
+  if (op === 'sembunyi' || op === 'tampil') {
+    sheet.getRange(e._row, 2).setValue(op === 'sembunyi' ? true : '');
+    return { ok: true, nama: e.nama, message: label + ' "' + e.nama + '" ' + (op === 'sembunyi' ? 'disembunyikan (riwayat tetap ada).' : 'ditampilkan lagi.') };
+  }
+  if (op === 'ganti') {
+    var baru = mkt_cleanLabel_(d.baru);
+    if (!baru) return { ok: false, error: 'Nama baru kosong.' };
+    var bentrok = cari(baru);
+    if (bentrok && bentrok._row !== e._row) return { ok: false, error: label + ' "' + bentrok.nama + '" sudah ada.' };
+    sheet.getRange(e._row, 1).setValue(mkt_safe_(baru));
+    var n = 0;
+    if (tab === 'lane') { n += mkt_gantiDiKolom_('strategi', 'Lane', e.nama, baru); n += mkt_gantiDiKolom_('seeding', 'Lane', e.nama, baru); }
+    else { n += mkt_gantiDiKolom_('strategi', 'Channel', e.nama, baru); n += mkt_gantiDiKolom_('hasil_event', 'Channel', e.nama, baru); n += mkt_gantiDiKolom_('seeding', 'Platform', e.nama, baru); }
+    return { ok: true, nama: baru, diganti: n, message: label + ' "' + e.nama + '" → "' + baru + '"' + (n ? ' (' + n + ' baris data ikut diganti)' : '') + '.' };
+  }
+  return { ok: false, error: 'Aksi tidak dikenal.' };
 }

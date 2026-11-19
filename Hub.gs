@@ -595,6 +595,7 @@ function botNative_(a) {
   if (j === 'status_strategi') return { action: 'update_strategi_status', id: a.id, status: a.status };
   if (j === 'hasil_event_baru') return { action: 'add_hasil_event', nama: a.nama, tanggal: a.tanggal, channel: Array.isArray(a.channel) ? a.channel[0] : a.channel, komunitas: a.komunitas || '', kode: a.kode || '',
     hadir: a.hadir || 0, coba: a.coba || 0, tanya: a.tanya || 0, order: a.order || 0, ugc: a.ugc || 0, strategi: a.strategi || '', pic: a.pic, kegiatan: a.kegiatan || [] };
+  if (j === 'atur_label') return { action: 'atur_label', jenis: a.label_jenis || a.jenis_label || 'lane', op: a.operasi || 'tambah', nama: a.nama, baru: a.baru || '' };
   if (j === 'seeding_baru') return { action: 'add_seeding', nama: a.nama, produk: a.produk || '', lane: a.lane || '', platform: a.platform || '', estimasi: a.estimasi, batas: a.batas, pic: a.pic, strategi: a.strategi || '', catatan: a.catatan || '', kreator: a.kreator || [] };
   if (j === 'putuskan_seeding') return { action: 'putuskan_seeding', id: a.id, status: a.status, alasan: a.alasan || '' };
   if (j === 'ubah_seeding') return { action: 'update_seeding', id: a.id, status: a.status, estimasi: a.estimasi, batas: a.batas, catatan: a.catatan, kegiatan: a.kegiatan };

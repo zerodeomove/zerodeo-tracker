@@ -78,7 +78,7 @@ function isDecider() { const r = myRole(); return r === 'approver' || r === 'adm
 function isOwnRow(r) { const me = myUid(); return !!me && String(r['PIC'] || '').split(',').some((p) => picKey(p).toLowerCase() === me); }
 const TIPE_LIST = ['Capex', 'Opex'];
 // Harus sama dengan KODE_VERSI di Code.gs. Kalau Apps Script yang melayani berbeda, muncul peringatan.
-const EXPECTED_VERSI = '2026-11-19 seeding';
+const EXPECTED_VERSI = '2026-11-19 lane';
 
 function fmtRupiah(n) {
   if (n === null || n === undefined || n === '' || isNaN(n)) return '-';
@@ -412,7 +412,7 @@ function applyPayload(json) {
     ada: 'strategi' in json,
     strategi: json.strategi || [], lane: json.lane || [],
     channel: json.channel || [], hasil_event: json.hasil_event || [],
-    seeding: json.seeding || [], seeding_kreator: json.seeding_kreator || [], seedAda: Array.isArray(json.seeding)
+    seeding: json.seeding || [], seeding_kreator: json.seeding_kreator || [], seedAda: Array.isArray(json.seeding), labelSembunyi: json.label_tersembunyi || { lane: [], channel: [] }
   };
   renderTracker();
   renderMarketing();
