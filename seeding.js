@@ -44,16 +44,31 @@ function renderSeeding() {
   if (sdBuka && $('m-seeddetail').classList.contains('show')) bukaSeeding(sdBuka);
 }
 
-// ---------- ajukan ----------
-function openSeeding() {
+// ---------- ajukan / ubah ----------
+let sdEdit = null;   // id batch yang sedang diubah (null = ajukan baru)
+function openSeeding(editId) {
   if (!M.seedAda) { toast('Apps Script Zerodeo belum versi terbaru (Seeding).', 'err'); return; }
+  const b = editId ? M.seeding.find((x) => x.ID === editId) : null;
+  sdEdit = b ? b.ID : null;
   $('seedingForm').reset(); clearErrors($('seedingForm')); setMsg($('sd-msg'), '', '');
-  $('sd-lane').innerHTML = '<option value="">-</option>' + M.lane.map((x) => '<option>' + zEsc(x) + '</option>').join('');
-  $('sd-platform').innerHTML = '<option value="">-</option>' + M.channel.map((x) => '<option>' + zEsc(x) + '</option>').join('');
+  const opsi = (list, cur) => '<option value="">-</option>' + list.concat(cur && list.indexOf(cur) < 0 ? [cur] : []).map((x) => '<option>' + zEsc(x) + '</option>').join('');
+  $('sd-lane').innerHTML = opsi(M.lane, b && b.Lane);
+  $('sd-platform').innerHTML = opsi(M.channel, b && b.Platform);
   $('sd-est-wrap').style.display = isMarketingOnly() ? 'none' : '';
-  $('sd-batas').value = 7;
-  const me = myUid(); if (me && TIM.some((t) => t.id === me)) $('sd-pic').value = me;
+  $('sd-judul').textContent = b ? 'Ubah seeding' : 'Ajukan seeding';
+  $('sd-hint').textContent = b ? 'Kreator diubah / dihapus langsung di daftar kreator.' : 'Setelah di-acc approver / admin, sampel baru boleh dikirim. Daftar kreator bisa ditambah belakangan.';
+  $('sd-submit').textContent = b ? 'Simpan perubahan' : 'Ajukan';
+  $('sd-kreator-wrap').style.display = b ? 'none' : '';
+  if (b) {
+    $('sd-nama').value = b['Nama Batch'] || ''; $('sd-produk').value = b.Produk || ''; $('sd-lane').value = b.Lane || ''; $('sd-platform').value = b.Platform || '';
+    $('sd-est').value = b['Estimasi (Rp)'] || ''; $('sd-batas').value = b['Batas Posting (hari)'] || 7; $('sd-pic').value = picKey(b.PIC || '');
+    $('sd-catatan').value = String(b.Catatan || '').split(' | ').filter((x) => !/^(Approved|Ditolak|Revisi) oleh /.test(x.trim())).join(' | ');
+  } else {
+    $('sd-batas').value = 7;
+    const me = myUid(); if (me && TIM.some((t) => t.id === me)) $('sd-pic').value = me;
+  }
   $('sd-kreator-hint').textContent = '';
+  if (b) closeModal('m-seeddetail');
   openModal('m-seeding');
 }
 $('sd-kreator').addEventListener('input', () => { const n = $('sd-kreator').value.split('\n').filter((x) => x.trim()).length; $('sd-kreator-hint').textContent = n ? n + ' kreator' : ''; });
@@ -61,6 +76,22 @@ $('seedingForm').addEventListener('submit', (e) => {
   e.preventDefault(); clearErrors($('seedingForm'));
   const nama = $('sd-nama').value.trim();
   if (!nama) { $('err-sd-nama').classList.add('show'); return; }
+  if (sdEdit) {
+    const b = M.seeding.find((x) => x.ID === sdEdit) || {};
+    const ubah = { nama, produk: $('sd-produk').value.trim(), lane: $('sd-lane').value, platform: $('sd-platform').value, pic: $('sd-pic').value,
+      batas: $('sd-batas').value, catatan: $('sd-catatan').value.trim() };
+    if (!isMarketingOnly()) ubah.estimasi = $('sd-est').value;
+    const lama = { nama: b['Nama Batch'] || '', produk: b.Produk || '', lane: b.Lane || '', platform: b.Platform || '', pic: picKey(b.PIC || ''), batas: String(b['Batas Posting (hari)'] || 7),
+      catatan: String(b.Catatan || '').split(' | ').filter((x) => !/^(Approved|Ditolak|Revisi) oleh /.test(x.trim())).join(' | '), estimasi: String(b['Estimasi (Rp)'] || '') };
+    const payload = { action: 'update_seeding', id: sdEdit };
+    Object.keys(ubah).forEach((k) => { if (String(ubah[k]) !== String(lama[k])) payload[k] = ubah[k]; });
+    const id = sdEdit; sdEdit = null;
+    closeModal('m-seeding');
+    if (Object.keys(payload).length === 2) { toast('Tidak ada perubahan.'); bukaSeeding(id); return; }
+    enqueueSave({ label: 'Ubah seeding: ' + nama, payload, okMsg: 'Seeding "' + nama + '" diperbarui.' });
+    bukaSeeding(id);   // detail dibuka lagi; ikut diperbarui begitu data baru masuk
+    return;
+  }
   const kreator = $('sd-kreator').value;
   enqueueSave({
     label: 'Seeding: ' + nama,
@@ -79,6 +110,8 @@ function bukaSeeding(id) {
   const h = sdHitung(b), uang = !isMarketingOnly(), sudahAcc = ['Approved', 'Jalan', 'Selesai'].indexOf(b.Status) >= 0;
   const aksiBatch = [];
   if (sdBolehAcc(b)) aksiBatch.push(`<button class="btn green" onclick="sdPutus('${zEsc(id)}','Approved')">✓ Acc</button>`, `<button class="btn ghost" onclick="sdPutus('${zEsc(id)}','Revisi')">Minta revisi</button>`, `<button class="btn ghost" style="color:var(--red)" onclick="sdPutus('${zEsc(id)}','Ditolak')">Tolak</button>`);
+  const bolehIsi = ['Diajukan', 'Revisi'].indexOf(b.Status) >= 0 ? (sdMilik(b) || isDecider()) : (['Approved', 'Jalan'].indexOf(b.Status) >= 0 && isDecider());
+  if (bolehIsi) aksiBatch.push(`<button class="btn ghost" onclick="openSeeding('${zEsc(id)}')">✎ Ubah</button>`);
   if (b.Status === 'Diajukan' && !sdBolehAcc(b)) aksiBatch.push(`<span class="sub">${sdMilik(b) ? 'Menunggu acc approver / admin lain.' : 'Menunggu acc approver / admin.'}</span>`);
   if (b.Status === 'Revisi' && (sdMilik(b) || isDecider())) aksiBatch.push(`<button class="btn green" onclick="sdUbah('${zEsc(id)}',{status:'Diajukan'},'Diajukan lagi')">Ajukan lagi</button>`);
   if (['Approved', 'Jalan'].indexOf(b.Status) >= 0 && (sdMilik(b) || isDecider())) aksiBatch.push(`<button class="btn ghost" onclick="sdUbah('${zEsc(id)}',{status:'Selesai'},'Seeding ditandai selesai')">Tandai selesai</button>`);
@@ -98,6 +131,10 @@ function bukaSeeding(id) {
       if (st === 'Dikirim') btn.push(`<button class="go" onclick="sdKr('${kid}',{status:'Diterima'})">✅ Diterima</button>`);
       if (st === 'Dikirim' || st === 'Diterima') btn.push(`<button onclick="sdLink('${kid}')">🎬 Sudah posting</button>`, `<button onclick="sdKr('${kid}',{status:'Tidak posting'})">✕ Tidak posting</button>`);
       if (st === 'Posting') btn.push(`<button onclick="sdLink('${kid}')">✎ Link / views</button>`);
+    }
+    if ((sdMilik(b) || isDecider()) && ['Ditolak', 'Dibatalkan', 'Selesai'].indexOf(b.Status) < 0) {
+      btn.push(`<button title="Ubah akun / nama / platform" onclick="sdEditKr('${kid}')">✎</button>`);
+      if (st === 'Rencana') btn.push(`<button title="Hapus (belum dikirim)" onclick="if(this.dataset.y!=='1'){this.dataset.y='1';this.textContent='Yakin?';return;} sdSimpan({action:'hapus_kreator',id:'${kid}'},'Hapus kreator','Kreator dihapus.')">🗑</button>`);
     }
     const tgl = st === 'Diterima' && k['Tgl Terima'] ? ' · diterima ' + mktDate(k['Tgl Terima']) : st === 'Dikirim' && k['Tgl Kirim'] ? ' · dikirim ' + mktDate(k['Tgl Kirim']) : '';
     return `<div class="sdk" id="sdk-${kid}"><div class="who"><b>${zEsc(sdAkun(k))}</b><span>${zEsc([k.Nama && k.Akun ? k.Nama : '', k.Platform].filter(Boolean).join(' · '))} <span class="ks ${zEsc(st.split(' ')[0])}">${zEsc(st)}</span>${zEsc(tgl)}${k['Link Konten'] ? ` · <a href="${zEsc(k['Link Konten'])}" target="_blank" rel="noopener noreferrer">lihat konten ↗</a>` : ''}${Number(k.Views) ? ' · ' + Number(k.Views).toLocaleString('id-ID') + ' views' : ''}</span></div>
@@ -136,6 +173,22 @@ function sdLink(kid) {
     const link = d.querySelector('input').value.trim(), views = d.querySelectorAll('input')[1].value;
     if (link && !/^https?:\/\/\S+$/i.test(link)) { toast('Link harus diawali http:// atau https://', 'err'); return; }
     sdKr(kid, Object.assign({ status: 'Posting' }, link ? { link } : {}, views !== '' ? { views } : {}));
+  };
+  row.appendChild(d); d.querySelector('input').focus();
+}
+function sdEditKr(kid) {
+  const row = $('sdk-' + kid); if (!row || row.querySelector('.linkrow')) return;
+  const k = (M.seeding_kreator || []).find((x) => x.ID === kid) || {};
+  const d = document.createElement('div'); d.className = 'linkrow';
+  d.innerHTML = `<input placeholder="akun" value="${zEsc(k.Akun ? '@' + String(k.Akun).replace(/^@+/, '') : '')}"><input placeholder="nama" value="${zEsc(k.Nama || '')}"><input placeholder="platform" style="max-width:110px" value="${zEsc(k.Platform || '')}"><button class="btn green">Simpan</button>`;
+  d.querySelector('button').onclick = () => {
+    const [a, n, p] = Array.from(d.querySelectorAll('input')).map((x) => x.value.trim());
+    const isi = { action: 'update_kreator', id: kid };
+    if (a !== (k.Akun ? '@' + String(k.Akun).replace(/^@+/, '') : '')) isi.akun_baru = a;
+    if (n !== (k.Nama || '')) isi.nama_baru = n;
+    if (p !== (k.Platform || '')) isi.platform_baru = p;
+    if (Object.keys(isi).length === 2) { d.remove(); return; }
+    sdSimpan(isi, 'Ubah kreator', 'Data kreator diperbarui.');
   };
   row.appendChild(d); d.querySelector('input').focus();
 }

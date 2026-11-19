@@ -253,7 +253,7 @@ function mkt_resolveLabels_(tabName, labels) {
 // ============================================================
 function mkt_handlePost(data) {
   var known = { add_strategi: 1, update_strategi_status: 1, add_hasil_event: 1, update_hasil_event_kegiatan: 1,
-    add_seeding: 1, putuskan_seeding: 1, update_seeding: 1, add_kreator: 1, update_kreator: 1, atur_label: 1 };
+    add_seeding: 1, putuskan_seeding: 1, update_seeding: 1, add_kreator: 1, update_kreator: 1, hapus_kreator: 1, atur_label: 1 };
   if (!data || !known[data.action]) return null;
   mkt_ensureTabs_();
   var lock = LockService.getScriptLock();
@@ -268,6 +268,7 @@ function mkt_handlePost(data) {
     if (data.action === 'update_seeding') return seed_update_(data);
     if (data.action === 'add_kreator') return seed_addKreator_(data);
     if (data.action === 'update_kreator') return seed_updateKreator_(data);
+    if (data.action === 'hapus_kreator') return seed_hapusKreator_(data);
     return mkt_addHasilEvent_(data);
   } finally {
     lock.releaseLock();
@@ -495,9 +496,31 @@ function seed_update_(d) {
     if (r.error) return { ok: false, error: r.error };
     seed_set_('seeding', b._row, 'Kegiatan', r.ids.join(', ')); pesan.push('kegiatan ditautkan');
   }
-  if (d.estimasi !== undefined && !isMarketingOnly_()) { seed_set_('seeding', b._row, 'Estimasi (Rp)', Math.round(Number(d.estimasi)) || ''); pesan.push('estimasi'); }
-  if (d.batas !== undefined) { seed_set_('seeding', b._row, 'Batas Posting (hari)', mkt_int_(d.batas) || SEED_BATAS_BAWAAN); pesan.push('batas posting'); }
-  if (d.catatan !== undefined) { seed_set_('seeding', b._row, 'Catatan', mkt_text_(d.catatan, 500)); pesan.push('catatan'); }
+  // isian batch: sebelum di-acc pengaju / PIC (atau approver / admin); sesudah di-acc hanya approver / admin
+  var isian = ['nama', 'produk', 'lane', 'platform', 'pic', 'estimasi', 'batas', 'catatan'].filter(function (k) { return d[k] !== undefined; });
+  if (isian.length) {
+    if (b['Status'] === 'Dibatalkan' || b['Status'] === 'Ditolak') return { ok: false, error: 'Seeding ini sudah ' + b['Status'] + '.' };
+    var sudahAcc = ['Approved', 'Jalan', 'Selesai'].indexOf(String(b['Status'])) !== -1;
+    if (sudahAcc && !whoCanDecide_()) return { ok: false, error: 'Seeding ini sudah di-acc. Mengubah isiannya hanya approver / admin.' };
+    if (d.nama !== undefined) {
+      var nm = mkt_text_(d.nama, 120);
+      if (!nm) return { ok: false, error: 'Nama batch tidak boleh kosong.' };
+      var kembar = seed_rows_('seeding').filter(function (x) { return x['ID'] !== b['ID'] && String(x['Nama Batch'] || '').trim().toLowerCase() === nm.toLowerCase() && ['Ditolak', 'Selesai', 'Dibatalkan'].indexOf(String(x['Status'])) === -1; })[0];
+      if (kembar) return { ok: false, error: 'Sudah ada seeding aktif bernama "' + kembar['Nama Batch'] + '".' };
+      seed_set_('seeding', b._row, 'Nama Batch', nm); pesan.push('nama → ' + nm);
+    }
+    if (d.produk !== undefined) { seed_set_('seeding', b._row, 'Produk', mkt_text_(d.produk, 120)); pesan.push('produk'); }
+    if (d.lane !== undefined) { seed_set_('seeding', b._row, 'Lane', d.lane ? (mkt_resolveLabels_('lane', [d.lane])[0] || '') : ''); pesan.push('lane'); }
+    if (d.platform !== undefined) { seed_set_('seeding', b._row, 'Platform', d.platform ? (mkt_resolveLabels_('channel', [d.platform])[0] || '') : ''); pesan.push('platform'); }
+    if (d.pic !== undefined) { var pic = normalizePic_(d.pic); if (!pic) return { ok: false, error: 'PIC tidak dikenali.' }; seed_set_('seeding', b._row, 'PIC', pic); pesan.push('PIC ' + picNama_(pic)); }
+    if (d.estimasi !== undefined && !isMarketingOnly_()) { seed_set_('seeding', b._row, 'Estimasi (Rp)', Math.round(Number(d.estimasi)) || ''); pesan.push('estimasi'); }
+    if (d.batas !== undefined) { seed_set_('seeding', b._row, 'Batas Posting (hari)', mkt_int_(d.batas) || SEED_BATAS_BAWAAN); pesan.push('batas posting'); }
+    if (d.catatan !== undefined) {
+      // jejak keputusan (Approved / Ditolak / Revisi oleh …) tetap disimpan, hanya catatan bebasnya yang diganti
+      var jejak = String(b['Catatan'] || '').split(' | ').filter(function (x) { return /^(Approved|Ditolak|Revisi) oleh /.test(x.trim()); });
+      seed_set_('seeding', b._row, 'Catatan', [mkt_text_(d.catatan, 500)].concat(jejak).filter(Boolean).join(' | ')); pesan.push('catatan');
+    }
+  }
   return { ok: true, id: b['ID'], message: 'Seeding "' + b['Nama Batch'] + '" diperbarui' + (pesan.length ? ': ' + pesan.join(', ') : '') + '.' };
 }
 
@@ -512,18 +535,53 @@ function seed_addKreator_(d) {
 }
 
 // status kreator: Dikirim (tgl kirim), Diterima (tgl terima), Posting (link + views), Tidak posting. Hanya setelah batch di-acc.
-function seed_updateKreator_(d) {
+// kreator lewat id, atau batch + akun / nama. { k } atau { error }
+function seed_cariKreator_(d) {
   var semua = seed_rows_('seeding_kreator'), k = null;
   if (d.id) k = semua.filter(function (x) { return String(x['ID']) === String(d.id); })[0];
   else {
     var b0 = seed_cari_(d.batch);
-    if (!b0) return { ok: false, error: 'Batch seeding tidak ditemukan.' };
+    if (!b0) return { error: 'Batch seeding tidak ditemukan.' };
     var cari = seed_akun_(d.akun || d.nama);
     var cocok = semua.filter(function (x) { return String(x['Batch']) === b0['ID'] && (seed_akun_(x['Akun']) === cari || String(x['Nama'] || '').toLowerCase() === cari); });
-    if (cocok.length > 1) return { ok: false, error: 'Ada beberapa kreator "' + cari + '". Sebut akunnya.' };
+    if (cocok.length > 1) return { error: 'Ada beberapa kreator "' + cari + '". Sebut akunnya.' };
     k = cocok[0];
   }
-  if (!k) return { ok: false, error: 'Kreator tidak ditemukan di batch itu.' };
+  return k ? { k: k } : { error: 'Kreator tidak ditemukan di batch itu.' };
+}
+function seed_bolehUbahIsi_(b) {
+  if (!(seed_milik_(b) || whoCanDecide_())) return 'Hanya PIC / pengaju seeding, approver, atau admin yang boleh mengubahnya.';
+  if (['Ditolak', 'Dibatalkan', 'Selesai'].indexOf(String(b['Status'])) !== -1) return 'Seeding ini sudah ' + b['Status'] + '.';
+  return '';
+}
+// hapus kreator yang belum dikirimi sampel (salah input). Yang sudah dikirim: tandai "Tidak posting" saja (riwayat dijaga).
+function seed_hapusKreator_(d) {
+  var c = seed_cariKreator_(d); if (c.error) return { ok: false, error: c.error };
+  var k = c.k, b = seed_cari_(k['Batch']);
+  if (!b) return { ok: false, error: 'Batch seeding tidak ditemukan.' };
+  var tolak = seed_bolehUbahIsi_(b); if (tolak) return { ok: false, error: tolak };
+  if ((k['Status'] || 'Rencana') !== 'Rencana') return { ok: false, error: (k['Akun'] ? '@' + seed_akun_(k['Akun']) : k['Nama']) + ' sudah ' + k['Status'] + ', jadi tidak dihapus (riwayatnya dijaga). Tandai "Tidak posting" saja.' };
+  seed_sheet_('seeding_kreator').deleteRow(k._row);
+  return { ok: true, id: k['ID'], message: (k['Akun'] ? '@' + seed_akun_(k['Akun']) : k['Nama']) + ' dihapus dari "' + b['Nama Batch'] + '".' };
+}
+function seed_updateKreator_(d) {
+  var c = seed_cariKreator_(d); if (c.error) return { ok: false, error: c.error };
+  var k = c.k;
+  // ganti akun / nama / platform kreator (salah ketik): boleh sebelum maupun sesudah acc
+  if (d.akun_baru !== undefined || d.nama_baru !== undefined || d.platform_baru !== undefined) {
+    var bI = seed_cari_(k['Batch']);
+    var tolakI = bI ? seed_bolehUbahIsi_(bI) : 'Batch seeding tidak ditemukan.';
+    if (tolakI) return { ok: false, error: tolakI };
+    if (d.akun_baru !== undefined) {
+      var ak = seed_akun_(d.akun_baru);
+      if (ak && seed_rows_('seeding_kreator').some(function (x) { return x['ID'] !== k['ID'] && String(x['Batch']) === String(k['Batch']) && seed_akun_(x['Akun']) === ak; })) return { ok: false, error: '@' + ak + ' sudah ada di batch ini.' };
+      seed_set_('seeding_kreator', k._row, 'Akun', ak);
+    }
+    if (d.nama_baru !== undefined) seed_set_('seeding_kreator', k._row, 'Nama', mkt_text_(d.nama_baru, 80));
+    if (d.platform_baru !== undefined) seed_set_('seeding_kreator', k._row, 'Platform', mkt_cleanLabel_(d.platform_baru));
+    seed_set_('seeding_kreator', k._row, 'Diubah', new Date());
+    if (!d.status && !d.link && d.views === undefined && d.catatan === undefined) return { ok: true, id: k['ID'], message: 'Data kreator ' + (d.akun_baru ? '@' + seed_akun_(d.akun_baru) : (k['Akun'] ? '@' + seed_akun_(k['Akun']) : k['Nama'])) + ' diperbarui.' };
+  }
   var b = seed_cari_(k['Batch']);
   if (!b) return { ok: false, error: 'Batch seeding tidak ditemukan.' };
   if (b['Status'] === 'Dibatalkan') return { ok: false, error: 'Seeding "' + b['Nama Batch'] + '" sudah dibatalkan.' };

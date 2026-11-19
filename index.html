@@ -212,8 +212,8 @@
 <!-- ================= POPUP: Ajukan seeding ================= -->
 <div class="modal-overlay" id="m-seeding">
   <div class="modal-box">
-    <h3>Ajukan seeding</h3>
-    <div class="hint">Setelah di-acc approver / admin, sampel baru boleh dikirim. Daftar kreator bisa ditambah belakangan.</div>
+    <h3 id="sd-judul">Ajukan seeding</h3>
+    <div class="hint" id="sd-hint">Setelah di-acc approver / admin, sampel baru boleh dikirim. Daftar kreator bisa ditambah belakangan.</div>
     <form id="seedingForm" novalidate>
       <label>Nama batch
         <input type="text" id="sd-nama" placeholder="mis. Seeding Vital Fresh Desember">
@@ -229,14 +229,14 @@
         <label>Ingatkan kalau belum posting setelah <input type="number" id="sd-batas" min="1" value="7" inputmode="numeric"><span class="hint">hari sejak sampel diterima</span></label>
       </div>
       <label>PIC<select id="sd-pic" data-pic><option value="">Pilih PIC…</option></select></label>
-      <label>Kreator <span class="opt">(satu per baris: @akun - platform - nama)</span>
+      <label id="sd-kreator-wrap">Kreator <span class="opt">(satu per baris: @akun - platform - nama)</span>
         <textarea id="sd-kreator" rows="5" placeholder="@rina.fit - TikTok - Rina&#10;@budi.run - Instagram"></textarea>
         <span class="hint" id="sd-kreator-hint"></span></label>
       <label>Catatan <span class="opt">(opsional)</span><input type="text" id="sd-catatan" placeholder="mis. target konten review jujur, wajib tag akun Zerodeo"></label>
       <div class="msg" id="sd-msg"></div>
       <div class="modal-actions">
         <button type="button" class="btn-cancel" onclick="closeModal('m-seeding')">Batal</button>
-        <button type="submit" class="btn-submit">Ajukan</button>
+        <button type="submit" class="btn-submit" id="sd-submit">Ajukan</button>
       </div>
     </form>
   </div>

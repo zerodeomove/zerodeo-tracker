@@ -18,6 +18,7 @@ function makeSheet(name, rows) {
   sh.setColumnWidth = () => {};
   sh.clear = () => { sh.rows = []; return sh; };
   sh.appendRow = (vals) => { sh.rows.push(vals.slice()); };
+  sh.deleteRow = (r) => { sh.rows.splice(r - 1, 1); };
   sh.protect = () => { const p = { setDescription() { return p; }, setWarningOnly() { sh.protectedWarn = true; return p; } }; return p; };
   sh.getRange = (r, c, nr, nc) => {
     nr = nr || 1; nc = nc || 1;

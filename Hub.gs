@@ -598,9 +598,10 @@ function botNative_(a) {
   if (j === 'atur_label') return { action: 'atur_label', jenis: a.label_jenis || a.jenis_label || 'lane', op: a.operasi || 'tambah', nama: a.nama, baru: a.baru || '' };
   if (j === 'seeding_baru') return { action: 'add_seeding', nama: a.nama, produk: a.produk || '', lane: a.lane || '', platform: a.platform || '', estimasi: a.estimasi, batas: a.batas, pic: a.pic, strategi: a.strategi || '', catatan: a.catatan || '', kreator: a.kreator || [] };
   if (j === 'putuskan_seeding') return { action: 'putuskan_seeding', id: a.id, status: a.status, alasan: a.alasan || '' };
-  if (j === 'ubah_seeding') return { action: 'update_seeding', id: a.id, status: a.status, estimasi: a.estimasi, batas: a.batas, catatan: a.catatan, kegiatan: a.kegiatan };
+  if (j === 'ubah_seeding') { var us = { action: 'update_seeding', id: a.id }; ['status', 'nama', 'produk', 'lane', 'platform', 'pic', 'estimasi', 'batas', 'catatan', 'kegiatan'].forEach(function (k) { if (a[k] !== undefined && a[k] !== null) us[k] = a[k]; }); return us; }
+  if (j === 'kreator_hapus') return { action: 'hapus_kreator', batch: a.id, akun: a.akun || a.nama };
   if (j === 'kreator_tambah') return { action: 'add_kreator', batch: a.id, kreator: a.kreator || [] };
-  if (j === 'kreator_update') return { action: 'update_kreator', batch: a.id, akun: a.akun || a.nama, status: a.status, link: a.link || '', views: a.views, tanggal: a.tanggal || '', catatan: a.catatan };
+  if (j === 'kreator_update') { var ku = { action: 'update_kreator', batch: a.id, akun: a.akun || a.nama, status: a.status, link: a.link || '', tanggal: a.tanggal || '' }; ['views', 'catatan', 'akun_baru', 'nama_baru', 'platform_baru'].forEach(function (k) { if (a[k] !== undefined && a[k] !== null) ku[k] = a[k]; }); return ku; }
   if (j === 'tautkan_event') return { action: 'update_hasil_event_kegiatan', id: a.id, kegiatan: a.kegiatan || [] };
   return { error: 'Aksi tidak dikenal.' };
 }
