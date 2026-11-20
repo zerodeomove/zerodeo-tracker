@@ -532,6 +532,8 @@ tbody tr { transition: background-color .15s ease; }
 .sd-chips button { border: 1px solid var(--border); background: var(--surface); border-radius: 999px; padding: 6px 12px; font: inherit; font-size: 13px; cursor: pointer; color: var(--text); }
 .sd-chips button.on { background: var(--accent); border-color: var(--accent); color: #fff; }
 .sd-chips button.on::before { content: '✓ '; }
+.tgl-ubah { border: none; background: none; cursor: pointer; color: var(--text-muted); padding: 0 2px; font-size: 13px; }
+.tgl-ubah:hover { color: var(--accent); }
 .cek-kal { display: flex; gap: 8px; align-items: center; font-size: 13px; margin: 6px 0 4px; cursor: pointer; }
 .cek-kal input { width: auto; margin: 0; }
 .dari-tracker { border: 1px dashed var(--border); border-radius: var(--radius); padding: 10px 12px; margin: 0 0 12px; background: var(--surface); }

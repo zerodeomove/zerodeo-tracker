@@ -163,6 +163,7 @@ function zTampilUlang() {
   if (!dataLoaded) return;
   if (typeof renderTracker === 'function') renderTracker();
   if (typeof renderSeeding === 'function') renderSeeding();
+  if (typeof renderStrategi === 'function' && typeof M !== 'undefined' && M.strategi && $('bodyS')) renderStrategi();
 }
 function zTerapLokal(job) {
   if (!job.lokal) return;
@@ -221,7 +222,7 @@ async function runSaveQueue() {
   // satu kali muat ulang setelah antrean habis
   const done = saveJobs.filter((j) => j.state === 'ok' && !j.reloaded);
   // kabar Telegram (pengajuan / keputusan / transfer) dikirim server di belakang; tidak ditunggu, gagal pun tidak apa-apa
-  if (done.some((j) => !j.payload.action || ['update_status', 'mark_transferred', 'add_seeding', 'putuskan_seeding', 'update_seeding', 'add_strategi', 'update_strategi_status'].indexOf(j.payload.action) !== -1)) {
+  if (done.some((j) => !j.payload.action || ['update_status', 'mark_transferred', 'add_seeding', 'putuskan_seeding', 'update_seeding', 'add_strategi', 'update_strategi_status', 'update_strategi_tanggal'].indexOf(j.payload.action) !== -1)) {
     zApi.post({ action: 'kirim_kabar' }).catch(() => {});
   }
   if (done.length) {

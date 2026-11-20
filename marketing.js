@@ -181,7 +181,7 @@ function renderStrategi() {
     <td style="max-width:300px"><b>${zEsc(r['Nama Strategi'])}</b><div class="sub">${zEsc(r['Pesan Inti'])}</div></td>
     <td>${splitList(r.Lane).map((x) => `<span class="pill">${zEsc(x)}</span>`).join('')}</td>
     <td>${splitList(r.Channel).map((x) => `<span class="pill alt">${zEsc(x)}</span>`).join('')}</td>
-    <td style="white-space:nowrap">${mktDate(r.Mulai)}${r.Selesai ? ' – ' + mktDate(r.Selesai) : ' →'}</td>
+    <td style="white-space:nowrap" id="stg-${zEsc(r.ID)}">${mktDate(r.Mulai)}${r.Selesai ? ' – ' + mktDate(r.Selesai) : ' →'} <button type="button" class="tgl-ubah" title="Ubah tanggal (ikut ke Tracker)" onclick="ubahTanggalStrategi('${zEsc(r.ID)}')">✎</button></td>
     <td>${zEsc(picNama(r.PIC))}</td>
     <td><select data-id="${zEsc(r.ID)}" onchange="setStrategiStatus(this.dataset.id, this.value)">${MKT_STATUS.map((s) => `<option ${s === r.Status ? 'selected' : ''}>${s}</option>`).join('')}</select></td>
   </tr>`).join('');
@@ -260,10 +260,27 @@ function geserKeHariIni() {
   tlSudahGeser = true;
 }
 
+// ubah tanggal strategi di tempat (tugas Tracker-nya ikut)
+function ubahTanggalStrategi(id) {
+  const r = M.strategi.find((x) => String(x.ID) === String(id)), td = $('stg-' + id);
+  if (!r || !td || td.querySelector('input')) return;
+  td.innerHTML = `<input type="date" value="${zEsc(r.Mulai || '')}" style="width:auto"> – <input type="date" value="${zEsc(r.Selesai || '')}" style="width:auto"> <button type="button" class="btn green">Simpan</button>`;
+  const [m, s] = td.querySelectorAll('input');
+  td.querySelector('button').onclick = () => {
+    if (!m.value) { toast('Tanggal mulai wajib diisi.', 'err'); return; }
+    if (s.value && s.value < m.value) { toast('Tanggal selesai tidak boleh sebelum mulai.', 'err'); return; }
+    const lama = { Mulai: r.Mulai, Selesai: r.Selesai };
+    enqueueSave({ label: 'Tanggal strategi: ' + r['Nama Strategi'], payload: { action: 'update_strategi_tanggal', id, mulai: m.value, selesai: s.value || '' },
+      okMsg: 'Tanggal "' + r['Nama Strategi'] + '" diperbarui (Tracker ikut).',
+      lokal: () => { r.Mulai = m.value; r.Selesai = s.value || ''; return lama; }, balik: (x) => { r.Mulai = x.Mulai; r.Selesai = x.Selesai; } });
+  };
+  m.focus();
+}
 async function setStrategiStatus(id, status) {
   try {
     const j = await zApi.post({ action: 'update_strategi_status', id: id, status: status });
     if (!j.ok) throw new Error(j.error || 'Gagal');
+    zApi.post({ action: 'kirim_kabar' }).catch(() => {});   // tugas Tracker-nya ikut berubah (di belakang)
     load();
   } catch (e) {
     toast('Gagal ubah status: ' + e.message, 'err');

@@ -21,6 +21,7 @@ const postMentah = (body, uid, peran) => JSON.parse(e.ctx.doPost({ postData: { c
 // web: simpan dulu (kabar hanya antre), lalu "kirim_kabar" di belakang seperti yang dilakukan app.js
 const post = (body, uid, peran) => { const n0 = kabar.length; const r = postMentah(body, uid, peran); assert.strictEqual(kabar.length, n0, 'simpanan web tidak boleh menunggu kabar'); postMentah({ action: 'kirim_kabar' }, uid, peran); return r; };
 const svc = (body) => JSON.parse(e.ctx.doPost({ postData: { contents: JSON.stringify(Object.assign({ token: hubToken(SECRET, { uid: 'hub-service', peran: 'service' }) }, body)) } }).text);
+let ba;
 const botAksi = (uid, peran, aksi) => svc({ action: 'bot_aksi', for_uid: uid, for_peran: peran, aksi });
 
 // kegiatan diajukan -> approver (bukan pengaju); admin tidak (kegiatan bukan milik approver)
@@ -76,6 +77,16 @@ assert(si && si.judul === 'Seeding: Seeding Kalender' && si.kalender === false &
 sinkron.length = 0;
 post({ action: 'update_seeding', id: r.id, kalender: true }, 'yanuar', 'anggota');
 assert(sinkron[0] && sinkron[0].kalender === true); ok('seeding dimasukkan ke Kalender Tim lewat ubah');
+// tanggal strategi: dari web Zerodeo dan dari Tracker (lewat bot_aksi tanggal_strategi) -> tugas Tracker ikut
+const idSt = e.sheets.strategi.rows.find((x) => x[1] === 'Run club Desember')[0];
+sinkron.length = 0;
+r = post({ action: 'update_strategi_tanggal', id: idSt, mulai: '2026-12-05', selesai: '2026-12-27' }, 'yanuar', 'anggota');
+assert.strictEqual(r.ok, true, r.error); assert(sinkron[0] && sinkron[0].mulai === '2026-12-05' && sinkron[0].deadline === '2026-12-27'); ok('ubah tanggal strategi di Zerodeo -> tugas Tracker ikut');
+r = post({ action: 'update_strategi_tanggal', id: idSt, mulai: '2026-12-10', selesai: '2026-12-01' }, 'yanuar', 'anggota');
+assert.strictEqual(r.ok, false); ok('selesai sebelum mulai: ditolak');
+ba = svc({ action: 'bot_aksi', for_uid: 'lenno', for_peran: 'admin', aksi: { jenis: 'tanggal_strategi', id: idSt, selesai: '2026-12-30' } });
+assert.strictEqual(ba.ok, true, ba.error); const rowSt = e.sheets.strategi.rows.find((x) => x[0] === idSt);
+assert.strictEqual(e.ctx.zTgl_(rowSt[6]), '2026-12-30'); assert.strictEqual(e.ctx.zTgl_(rowSt[5]), '2026-12-05'); ok('dari Tracker (bot_aksi tanggal_strategi): tanggal selesai berubah, mulai tetap');
 tugasHub = [{ id: 't-1', judul: 'Briefing', pic: ['yanuar'], mulai: '2026-12-01', deadline: '2026-12-02', status: 'To do' }];
 const tt = postMentah({ action: 'tugas_tracker' }, 'vendor', 'marketing');
 assert(tt.ok && tt.tugas.length === 1 && tt.tugas[0].judul === 'Briefing'); ok('tugas Tracker project Zerodeo terbaca di Zerodeo (juga untuk peran marketing)');

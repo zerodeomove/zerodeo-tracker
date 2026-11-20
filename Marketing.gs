@@ -257,7 +257,7 @@ function mkt_handlePost(data) {
   if (data && data.action === 'kirim_kabar') return typeof zKabarKirimAntre_ === 'function' ? zKabarKirimAntre_() : { ok: true, terkirim: 0 };
   // tugas Tracker di project Zerodeo (untuk ditampilkan & "dijadikan strategi"), dibaca dari Hub
   if (data && data.action === 'tugas_tracker') return typeof zTugasTracker_ === 'function' ? zTugasTracker_() : { ok: true, tugas: [] };
-  var known = { add_strategi: 1, update_strategi_status: 1, add_hasil_event: 1, update_hasil_event_kegiatan: 1,
+  var known = { add_strategi: 1, update_strategi_status: 1, update_strategi_tanggal: 1, add_hasil_event: 1, update_hasil_event_kegiatan: 1,
     add_seeding: 1, putuskan_seeding: 1, update_seeding: 1, add_kreator: 1, update_kreator: 1, hapus_kreator: 1, atur_label: 1 };
   if (!data || !known[data.action]) return null;
   mkt_ensureTabs_();
@@ -266,6 +266,7 @@ function mkt_handlePost(data) {
   try {
     if (data.action === 'add_strategi') return mkt_addStrategi_(data);
     if (data.action === 'update_strategi_status') return mkt_updateStatus_(data);
+    if (data.action === 'update_strategi_tanggal') return mkt_updateTanggal_(data);
     if (data.action === 'update_hasil_event_kegiatan') return mkt_updateEventKegiatan_(data);
     if (data.action === 'atur_label') return mkt_aturLabel_(data);
     if (data.action === 'add_seeding') return seed_add_(data);
@@ -309,6 +310,25 @@ function mkt_addStrategi_(d) {
   var sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('strategi');
   mkt_append_(sheet, [id, nama, lane.join(', '), pesan, channel.join(', '), mulai, selesai, normalizePic_(d.pic), status, new Date(), d.kalender === false ? 'tidak' : 'ya']);
   return { ok: true, id: id, lane: lane, channel: channel };
+}
+
+// ubah tanggal mulai / selesai strategi (dari web Zerodeo, atau dari Tracker lewat Hub). selesai kosong = belum ditentukan.
+function mkt_updateTanggal_(d) {
+  var sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('strategi');
+  var last = sheet ? sheet.getLastRow() : 0;
+  if (last < 2) return { ok: false, error: 'Belum ada strategi.' };
+  var ids = sheet.getRange(2, 1, last - 1, 1).getValues(), row = 0;
+  for (var i = 0; i < ids.length; i++) if (String(ids[i][0]) === String(d.id)) { row = i + 2; break; }
+  if (!row) return { ok: false, error: 'Strategi tidak ditemukan.' };
+  var mulai = d.mulai ? mkt_parseDate_(d.mulai) : sheet.getRange(row, 6).getValue();
+  if (d.mulai && !mulai) return { ok: false, error: 'Tanggal mulai tidak valid.' };
+  var selesai = d.selesai === undefined ? sheet.getRange(row, 7).getValue() : (d.selesai ? mkt_parseDate_(d.selesai) : '');
+  if (d.selesai && !selesai) return { ok: false, error: 'Tanggal selesai tidak valid.' };
+  var mD = mulai instanceof Date ? mulai : mkt_parseDate_(mulai), sD = selesai instanceof Date ? selesai : (selesai ? mkt_parseDate_(selesai) : null);
+  if (mD && sD && sD < mD) return { ok: false, error: 'Tanggal selesai tidak boleh sebelum tanggal mulai.' };
+  if (d.mulai) sheet.getRange(row, 6).setValue(mulai);
+  if (d.selesai !== undefined) sheet.getRange(row, 7).setValue(selesai);
+  return { ok: true, id: d.id, message: 'Tanggal strategi diperbarui.' };
 }
 
 function mkt_updateStatus_(d) {
