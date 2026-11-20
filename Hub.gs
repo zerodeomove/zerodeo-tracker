@@ -593,7 +593,7 @@ function botNative_(a) {
   }
   if (j === 'strategi_baru') return { action: 'add_strategi', nama: a.nama, pesan: a.pesan, lane: a.lane || [], channel: a.channel || [], mulai: a.mulai, selesai: a.selesai || '', pic: a.pic, status: a.status || 'Ide', kalender: a.kalender !== false };
   if (j === 'status_strategi') return { action: 'update_strategi_status', id: a.id, status: a.status };
-  if (j === 'tanggal_strategi') { var ts = { action: 'update_strategi_tanggal', id: a.id }; if (a.mulai) ts.mulai = a.mulai; if (a.selesai !== undefined && a.selesai !== null) ts.selesai = a.selesai; return ts; }
+  if (j === 'tanggal_strategi') { var ts = { action: 'update_strategi_tanggal', id: a.id }; if (a.mulai) ts.mulai = a.mulai; if (a.selesai !== undefined && a.selesai !== null) ts.selesai = a.selesai; if (typeof a.kalender === 'boolean') ts.kalender = a.kalender; return ts; }
   if (j === 'hasil_event_baru') return { action: 'add_hasil_event', nama: a.nama, tanggal: a.tanggal, channel: Array.isArray(a.channel) ? a.channel[0] : a.channel, komunitas: a.komunitas || '', kode: a.kode || '',
     hadir: a.hadir || 0, coba: a.coba || 0, tanya: a.tanya || 0, order: a.order || 0, ugc: a.ugc || 0, strategi: a.strategi || '', pic: a.pic, kegiatan: a.kegiatan || [] };
   if (j === 'atur_label') return { action: 'atur_label', jenis: a.label_jenis || a.jenis_label || 'lane', op: a.operasi || 'tambah', nama: a.nama, baru: a.baru || '' };
@@ -776,6 +776,41 @@ function zSinkronItem_(a, data, res, oleh) {
   }
   return null;
 }
+// Sekali jalan (tombol "Sinkronkan ke Tracker"): strategi & seeding yang masih aktif dikirim ke Tracker. Yang dibuat sebelum ada pilihan
+// kalender (kolom Kalender kosong) dianggap TIDAK masuk kalender dan ditandai "tidak" supaya ke depannya tetap begitu.
+function zSinkronSemua_() {
+  if (!whoCanDecide_()) return { ok: false, error: 'Hanya approver atau admin Zerodeo yang bisa menyinkronkan semua.' };
+  var url = PropertiesService.getScriptProperties().getProperty('HUB_URL');
+  if (!url || !hubSecret_()) return { ok: false, error: 'Isi Script Properties HUB_URL dan SECRET_ZERODEO dulu.' };
+  mkt_ensureTabs_();   // kolom Kalender dibuat dulu kalau tab lama belum punya
+  var oleh = CURRENT_WHO_ ? CURRENT_WHO_.uid : '';
+  var items = [], nS = 0, nD = 0;
+  var shS = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('strategi');
+  mkt_readTab_('strategi').forEach(function (r, i) {
+    if (!r['ID'] || String(r['Status']) === 'Selesai') return;
+    if (!String(r['Kalender'] || '')) { try { shS.getRange(r._row || (i + 2), MKT_TABS.strategi.indexOf('Kalender') + 1).setValue('tidak'); } catch (e) { /* lewati */ } r['Kalender'] = 'tidak'; }
+    var it = zSinkronItem_('update_strategi_status', { id: r['ID'] }, { id: r['ID'] }, oleh);
+    if (it) { it.kalender = String(r['Kalender']) === 'ya'; items.push(it); nS++; }
+  });
+  seed_rows_('seeding').forEach(function (b) {
+    if (!b['ID'] || ['Selesai', 'Ditolak', 'Dibatalkan'].indexOf(String(b['Status'])) !== -1) return;
+    if (!String(b['Kalender'] || '')) seed_set_('seeding', b._row, 'Kalender', 'tidak');
+    var it = zSinkronItem_('update_seeding', { id: b['ID'] }, { id: b['ID'] }, oleh);
+    if (it) { items.push(it); nD++; }
+  });
+  var gagal = 0;
+  for (var k = 0; k < items.length; k += 20) {
+    try {
+      var r = UrlFetchApp.fetch(url, { method: 'post', contentType: 'text/plain', muteHttpExceptions: true, followRedirects: true,
+        payload: JSON.stringify({ action: 'sinkronTugas', app: HUB_APP, items: items.slice(k, k + 20), token: makeHubToken_('zerodeo-service', 'service', 300) }) });
+      var j = JSON.parse(r.getContentText());
+      if (!j || !j.ok) gagal += Math.min(20, items.length - k); else (j.hasil || []).forEach(function (h) { if (!h.ok) gagal++; });
+    } catch (e) { gagal += Math.min(20, items.length - k); }
+  }
+  return { ok: true, strategi: nS, seeding: nD, gagal: gagal,
+    message: nS + ' strategi & ' + nD + ' seeding aktif dikirim ke Tracker' + (gagal ? ' (' + gagal + ' gagal: cek PIC-nya terdaftar di Hub)' : '') + '. Yang lama tidak masuk Kalender Tim; centang di form kalau perlu.' };
+}
+
 // Tugas Tracker biasa di project Zerodeo, dari Hub (disimpan sebentar supaya halaman tidak menunggu Hub tiap kali)
 function zTugasTracker_() {
   var c = CacheService.getScriptCache(), hit = c.get('ztugas:tracker');

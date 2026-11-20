@@ -90,4 +90,19 @@ assert.strictEqual(e.ctx.zTgl_(rowSt[6]), '2026-12-30'); assert.strictEqual(e.ct
 tugasHub = [{ id: 't-1', judul: 'Briefing', pic: ['yanuar'], mulai: '2026-12-01', deadline: '2026-12-02', status: 'To do' }];
 const tt = postMentah({ action: 'tugas_tracker' }, 'vendor', 'marketing');
 assert(tt.ok && tt.tugas.length === 1 && tt.tugas[0].judul === 'Briefing'); ok('tugas Tracker project Zerodeo terbaca di Zerodeo (juga untuk peran marketing)');
+// sinkron semua (sekali jalan): yang lama tanpa pilihan kalender -> tidak masuk kalender
+const hS = e.sheets.strategi.rows[0];
+const lamaRow = new Array(hS.length).fill(''); lamaRow[hS.indexOf('ID')] = 'S-lama'; lamaRow[hS.indexOf('Nama Strategi')] = 'Strategi lama'; lamaRow[hS.indexOf('Mulai')] = '2026-10-01'; lamaRow[hS.indexOf('PIC')] = 'yanuar'; lamaRow[hS.indexOf('Status')] = 'Jalan';
+e.sheets.strategi.rows.push(lamaRow);
+r = post({ action: 'sinkron_semua' }, 'yanuar', 'anggota');
+assert.strictEqual(r.ok, false); ok('sinkron semua: anggota ditolak (approver / admin saja)');
+sinkron.length = 0;
+r = postMentah({ action: 'sinkron_semua' }, 'lemon', 'approver');
+assert.strictEqual(r.ok, true, r.error);
+const sl = sinkron.find((x) => x.id === 'S-lama');
+assert(sl && sl.kalender === false && sl.status === 'Jalan', JSON.stringify(sl)); assert.strictEqual(e.sheets.strategi.rows.find((x) => x[0] === 'S-lama')[hS.indexOf('Kalender')], 'tidak');
+assert(sinkron.some((x) => x.jenis === 'seeding') && !sinkron.some((x) => x.status === 'Selesai')); ok('sinkron semua: strategi & seeding aktif terkirim; yang lama tidak masuk kalender (ditandai "tidak"), yang Selesai dilewati');
+sinkron.length = 0;
+r = post({ action: 'update_strategi_tanggal', id: 'S-lama', kalender: true }, 'yanuar', 'anggota');
+assert.strictEqual(r.ok, true, r.error); assert(sinkron[0] && sinkron[0].kalender === true && sinkron[0].mulai === '2026-10-01'); ok('strategi lama dimasukkan ke Kalender Tim belakangan (tanggal tetap)');
 console.log('\n' + n + ' tes lolos');

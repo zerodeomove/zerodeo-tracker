@@ -175,13 +175,14 @@ function renderStrategi() {
 
   $('countS').textContent = rows.length + ' strategi';
   muatTugasTracker();
+  if ($('btnSinkronSemua')) $('btnSinkronSemua').hidden = !isDecider();
   renderTimeline(rows);
   if (!rows.length) { $('bodyS').innerHTML = '<tr><td colspan="6" class="empty">Belum ada strategi yang cocok.</td></tr>'; return; }
   $('bodyS').innerHTML = rows.map((r) => `<tr>
     <td style="max-width:300px"><b>${zEsc(r['Nama Strategi'])}</b><div class="sub">${zEsc(r['Pesan Inti'])}</div></td>
     <td>${splitList(r.Lane).map((x) => `<span class="pill">${zEsc(x)}</span>`).join('')}</td>
     <td>${splitList(r.Channel).map((x) => `<span class="pill alt">${zEsc(x)}</span>`).join('')}</td>
-    <td style="white-space:nowrap" id="stg-${zEsc(r.ID)}">${mktDate(r.Mulai)}${r.Selesai ? ' – ' + mktDate(r.Selesai) : ' →'} <button type="button" class="tgl-ubah" title="Ubah tanggal (ikut ke Tracker)" onclick="ubahTanggalStrategi('${zEsc(r.ID)}')">✎</button></td>
+    <td style="white-space:nowrap" id="stg-${zEsc(r.ID)}">${mktDate(r.Mulai)}${r.Selesai ? ' – ' + mktDate(r.Selesai) : ' →'} ${String(r.Kalender || '') === 'ya' ? ' <span title="Masuk Kalender Tim">📅</span>' : ''} <button type="button" class="tgl-ubah" title="Ubah tanggal / Kalender Tim (ikut ke Tracker)" onclick="ubahTanggalStrategi('${zEsc(r.ID)}')">✎</button></td>
     <td>${zEsc(picNama(r.PIC))}</td>
     <td><select data-id="${zEsc(r.ID)}" onchange="setStrategiStatus(this.dataset.id, this.value)">${MKT_STATUS.map((s) => `<option ${s === r.Status ? 'selected' : ''}>${s}</option>`).join('')}</select></td>
   </tr>`).join('');
@@ -264,15 +265,18 @@ function geserKeHariIni() {
 function ubahTanggalStrategi(id) {
   const r = M.strategi.find((x) => String(x.ID) === String(id)), td = $('stg-' + id);
   if (!r || !td || td.querySelector('input')) return;
-  td.innerHTML = `<input type="date" value="${zEsc(r.Mulai || '')}" style="width:auto"> – <input type="date" value="${zEsc(r.Selesai || '')}" style="width:auto"> <button type="button" class="btn green">Simpan</button>`;
-  const [m, s] = td.querySelectorAll('input');
+  const kalNow = String(r.Kalender || '') === 'ya';
+  td.innerHTML = `<input type="date" value="${zEsc(r.Mulai || '')}" style="width:auto"> – <input type="date" value="${zEsc(r.Selesai || '')}" style="width:auto"> <label class="cek-kal" style="display:inline-flex"><input type="checkbox" ${kalNow ? 'checked' : ''}> Kalender Tim</label> <button type="button" class="btn green">Simpan</button>`;
+  const [m, s] = td.querySelectorAll('input[type=date]'), kal = td.querySelector('input[type=checkbox]');
   td.querySelector('button').onclick = () => {
     if (!m.value) { toast('Tanggal mulai wajib diisi.', 'err'); return; }
     if (s.value && s.value < m.value) { toast('Tanggal selesai tidak boleh sebelum mulai.', 'err'); return; }
-    const lama = { Mulai: r.Mulai, Selesai: r.Selesai };
-    enqueueSave({ label: 'Tanggal strategi: ' + r['Nama Strategi'], payload: { action: 'update_strategi_tanggal', id, mulai: m.value, selesai: s.value || '' },
-      okMsg: 'Tanggal "' + r['Nama Strategi'] + '" diperbarui (Tracker ikut).',
-      lokal: () => { r.Mulai = m.value; r.Selesai = s.value || ''; return lama; }, balik: (x) => { r.Mulai = x.Mulai; r.Selesai = x.Selesai; } });
+    const lama = { Mulai: r.Mulai, Selesai: r.Selesai, Kalender: r.Kalender };
+    const payload = { action: 'update_strategi_tanggal', id, mulai: m.value, selesai: s.value || '' };
+    if (kal.checked !== kalNow) payload.kalender = kal.checked;
+    enqueueSave({ label: 'Tanggal strategi: ' + r['Nama Strategi'], payload,
+      okMsg: '"' + r['Nama Strategi'] + '" diperbarui (Tracker ikut).',
+      lokal: () => { r.Mulai = m.value; r.Selesai = s.value || ''; r.Kalender = kal.checked ? 'ya' : 'tidak'; return lama; }, balik: (x) => { Object.assign(r, x); } });
   };
   m.focus();
 }
@@ -410,6 +414,18 @@ function renderDariTracker() {
   if (!list.length) return;
   el.innerHTML = '<h4>📋 Tugas dari Tracker (project Zerodeo) · ' + list.length + '</h4>' + list.slice(0, 8).map((t) => `<div class="dt"><span><b>${zEsc(t.judul)}</b><span class="sub"> · ${zEsc(t.pic_nama || '')} · ${mktDate(t.mulai)}${t.deadline !== t.mulai ? ' – ' + mktDate(t.deadline) : ''} · ${zEsc(t.status)}</span></span>
     <button type="button" onclick="jadikanStrategi('${zEsc(t.id)}')">Jadikan strategi</button></div>`).join('') + (list.length > 8 ? `<div class="sub">…dan ${list.length - 8} lagi</div>` : '');
+}
+// sekali jalan: strategi & seeding aktif yang dibuat sebelum ada sinkron ikut masuk Tracker (tidak masuk Kalender Tim)
+async function sinkronSemua(btn) {
+  if (btn.dataset.y !== '1') { btn.dataset.y = '1'; btn.textContent = 'Yakin? Kirim semua yang aktif'; setTimeout(() => { if (btn.dataset.y === '1') { btn.dataset.y = ''; btn.textContent = '⟳ Sinkronkan ke Tracker'; } }, 5000); return; }
+  btn.dataset.y = ''; btn.disabled = true; btn.textContent = '⏳ Mengirim ke Tracker…';
+  try {
+    const r = await zApi.post({ action: 'sinkron_semua' });
+    if (!r.ok) throw new Error(r.error || 'Gagal');
+    toast(r.message || 'Terkirim ke Tracker.');
+    load();
+  } catch (e) { toast('Gagal sinkron: ' + e.message, 'err'); }
+  btn.disabled = false; btn.textContent = '⟳ Sinkronkan ke Tracker';
 }
 function jadikanStrategi(id) {
   const t = tugasTracker.find((x) => x.id === id); if (!t) return;

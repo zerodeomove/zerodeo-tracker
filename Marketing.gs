@@ -257,6 +257,8 @@ function mkt_handlePost(data) {
   if (data && data.action === 'kirim_kabar') return typeof zKabarKirimAntre_ === 'function' ? zKabarKirimAntre_() : { ok: true, terkirim: 0 };
   // tugas Tracker di project Zerodeo (untuk ditampilkan & "dijadikan strategi"), dibaca dari Hub
   if (data && data.action === 'tugas_tracker') return typeof zTugasTracker_ === 'function' ? zTugasTracker_() : { ok: true, tugas: [] };
+  // sekali jalan: semua strategi & seeding yang masih aktif dikirim ke Tracker (approver / admin)
+  if (data && data.action === 'sinkron_semua') return zSinkronSemua_();
   var known = { add_strategi: 1, update_strategi_status: 1, update_strategi_tanggal: 1, add_hasil_event: 1, update_hasil_event_kegiatan: 1,
     add_seeding: 1, putuskan_seeding: 1, update_seeding: 1, add_kreator: 1, update_kreator: 1, hapus_kreator: 1, atur_label: 1 };
   if (!data || !known[data.action]) return null;
@@ -328,6 +330,7 @@ function mkt_updateTanggal_(d) {
   if (mD && sD && sD < mD) return { ok: false, error: 'Tanggal selesai tidak boleh sebelum tanggal mulai.' };
   if (d.mulai) sheet.getRange(row, 6).setValue(mulai);
   if (d.selesai !== undefined) sheet.getRange(row, 7).setValue(selesai);
+  if (d.kalender !== undefined) { mkt_ensureTabs_(); sheet.getRange(row, MKT_TABS.strategi.indexOf('Kalender') + 1).setValue(d.kalender === true ? 'ya' : 'tidak'); }
   return { ok: true, id: d.id, message: 'Tanggal strategi diperbarui.' };
 }
 
