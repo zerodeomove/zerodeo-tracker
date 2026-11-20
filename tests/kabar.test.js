@@ -12,8 +12,11 @@ e.props.TIM_SYNC_AT = String(Date.now());
 e.ctx.SpreadsheetApp.newDataValidation = () => { const v = { requireValueInList: () => v, setAllowInvalid: () => v, build: () => ({}) }; return v; };
 Object.values(e.sheets).forEach((sh) => { sh.getMaxRows = sh.getMaxRows || (() => 1000); });
 const rangeAsli = e.sheets.kegiatan.getRange; e.sheets.kegiatan.getRange = function () { const r = rangeAsli.apply(this, arguments); ['setDataValidation', 'setNumberFormat', 'setNumberFormats'].forEach((f) => { if (!r[f]) r[f] = () => r; }); return r; };
-const kabar = [];
-e.ctx.UrlFetchApp = { fetch: (url, o) => { const b = JSON.parse(o.payload); if (b.action === 'kabarApp') kabar.push(b); return { getContentText: () => JSON.stringify({ ok: true, terkirim: 1 }) }; } };
+const kabar = [], sinkron = [];
+let tugasHub = [];
+e.ctx.UrlFetchApp = { fetch: (url, o) => { const b = JSON.parse(o.payload); if (b.action === 'kabarApp') kabar.push(b); if (b.action === 'sinkronTugas') sinkron.push(...b.items);
+  if (b.action === 'tugasUntukApp') return { getContentText: () => JSON.stringify({ ok: true, tugas: tugasHub }) };
+  return { getContentText: () => JSON.stringify({ ok: true, terkirim: 1 }) }; } };
 const postMentah = (body, uid, peran) => JSON.parse(e.ctx.doPost({ postData: { contents: JSON.stringify(Object.assign({ secret: SHARED, hub: { uid, peran } }, body)) } }).text);
 // web: simpan dulu (kabar hanya antre), lalu "kirim_kabar" di belakang seperti yang dilakukan app.js
 const post = (body, uid, peran) => { const n0 = kabar.length; const r = postMentah(body, uid, peran); assert.strictEqual(kabar.length, n0, 'simpanan web tidak boleh menunggu kabar'); postMentah({ action: 'kirim_kabar' }, uid, peran); return r; };
@@ -56,4 +59,24 @@ assert.strictEqual(r.ok, false); assert.strictEqual(kabar.length, 0); ok('aksi d
 // bot ringkasan: item yang perlu diputuskan membawa tanggal (untuk pengingat "sudah N hari menunggu" dari Hub)
 const rk = svc({ action: 'bot_baca', for_uid: 'ricko', for_peran: 'approver', q: { jenis: 'ringkasan' } }).hasil.item;
 assert(rk.some((x) => x.jenis === 'approve' && /^\d{4}-\d{2}-\d{2}$/.test(x.sejak)), JSON.stringify(rk)); ok('bot ringkasan: item approve membawa tanggal "sejak"');
+// sinkron ke Tracker: strategi & seeding -> item untuk Hub (sinkronTugas)
+e.ctx.UrlFetchApp = { fetch: (url, o) => { const b = JSON.parse(o.payload); if (b.action === 'sinkronTugas') sinkron.push(...b.items); if (b.action === 'tugasUntukApp') return { getContentText: () => JSON.stringify({ ok: true, tugas: tugasHub }) }; return { getContentText: () => '{"ok":true}' }; } };
+sinkron.length = 0;
+r = post({ action: 'add_strategi', nama: 'Run club Desember', pesan: 'Lari bareng', lane: ['Vital Fresh'], channel: ['Komunitas Lari'], mulai: '2026-12-01', selesai: '2026-12-20', pic: 'yanuar', status: 'Ide', tugas_id: 't-abc' }, 'yanuar', 'anggota');
+assert.strictEqual(r.ok, true, r.error);
+let si = sinkron.find((x) => x.jenis === 'strategi');
+assert(si && si.judul === 'Run club Desember' && si.pic === 'yanuar' && si.mulai === '2026-12-01' && si.deadline === '2026-12-20' && si.status === 'Ide' && si.kalender === true && si.tugas_id === 't-abc', JSON.stringify(si)); ok('strategi baru -> dikirim ke Tracker (kalender nyala bawaan, tautan ke tugas Tracker asal)');
+sinkron.length = 0;
+post({ action: 'update_strategi_status', id: r.id, status: 'Jalan' }, 'yanuar', 'anggota');
+assert(sinkron.length === 1 && sinkron[0].status === 'Jalan' && sinkron[0].tugas_id === ''); ok('status strategi berubah -> ikut ke Tracker');
+sinkron.length = 0;
+r = post({ action: 'add_seeding', nama: 'Seeding Kalender', pic: 'yanuar', batas: 7, kreator: '@x' }, 'yanuar', 'anggota');
+si = sinkron.find((x) => x.jenis === 'seeding');
+assert(si && si.judul === 'Seeding: Seeding Kalender' && si.kalender === false && si.status === 'Diajukan' && /^\d{4}-\d{2}-\d{2}$/.test(si.deadline), JSON.stringify(si)); ok('seeding -> tugas Tracker tanpa kalender (bawaan), tenggat = kirim sampel + batas posting');
+sinkron.length = 0;
+post({ action: 'update_seeding', id: r.id, kalender: true }, 'yanuar', 'anggota');
+assert(sinkron[0] && sinkron[0].kalender === true); ok('seeding dimasukkan ke Kalender Tim lewat ubah');
+tugasHub = [{ id: 't-1', judul: 'Briefing', pic: ['yanuar'], mulai: '2026-12-01', deadline: '2026-12-02', status: 'To do' }];
+const tt = postMentah({ action: 'tugas_tracker' }, 'vendor', 'marketing');
+assert(tt.ok && tt.tugas.length === 1 && tt.tugas[0].judul === 'Briefing'); ok('tugas Tracker project Zerodeo terbaca di Zerodeo (juga untuk peran marketing)');
 console.log('\n' + n + ' tes lolos');

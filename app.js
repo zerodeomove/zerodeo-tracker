@@ -221,7 +221,7 @@ async function runSaveQueue() {
   // satu kali muat ulang setelah antrean habis
   const done = saveJobs.filter((j) => j.state === 'ok' && !j.reloaded);
   // kabar Telegram (pengajuan / keputusan / transfer) dikirim server di belakang; tidak ditunggu, gagal pun tidak apa-apa
-  if (done.some((j) => !j.payload.action || ['update_status', 'mark_transferred', 'add_seeding', 'putuskan_seeding', 'update_seeding'].indexOf(j.payload.action) !== -1)) {
+  if (done.some((j) => !j.payload.action || ['update_status', 'mark_transferred', 'add_seeding', 'putuskan_seeding', 'update_seeding', 'add_strategi', 'update_strategi_status'].indexOf(j.payload.action) !== -1)) {
     zApi.post({ action: 'kirim_kabar' }).catch(() => {});
   }
   if (done.length) {

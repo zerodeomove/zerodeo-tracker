@@ -591,14 +591,14 @@ function botNative_(a) {
     if (a.dana) baru.dana = a.dana;
     return baru;
   }
-  if (j === 'strategi_baru') return { action: 'add_strategi', nama: a.nama, pesan: a.pesan, lane: a.lane || [], channel: a.channel || [], mulai: a.mulai, selesai: a.selesai || '', pic: a.pic, status: a.status || 'Ide' };
+  if (j === 'strategi_baru') return { action: 'add_strategi', nama: a.nama, pesan: a.pesan, lane: a.lane || [], channel: a.channel || [], mulai: a.mulai, selesai: a.selesai || '', pic: a.pic, status: a.status || 'Ide', kalender: a.kalender !== false };
   if (j === 'status_strategi') return { action: 'update_strategi_status', id: a.id, status: a.status };
   if (j === 'hasil_event_baru') return { action: 'add_hasil_event', nama: a.nama, tanggal: a.tanggal, channel: Array.isArray(a.channel) ? a.channel[0] : a.channel, komunitas: a.komunitas || '', kode: a.kode || '',
     hadir: a.hadir || 0, coba: a.coba || 0, tanya: a.tanya || 0, order: a.order || 0, ugc: a.ugc || 0, strategi: a.strategi || '', pic: a.pic, kegiatan: a.kegiatan || [] };
   if (j === 'atur_label') return { action: 'atur_label', jenis: a.label_jenis || a.jenis_label || 'lane', op: a.operasi || 'tambah', nama: a.nama, baru: a.baru || '' };
-  if (j === 'seeding_baru') return { action: 'add_seeding', nama: a.nama, produk: a.produk || '', lane: a.lane || '', sampel: a.sampel || '', platform: a.platform || '', estimasi: a.estimasi, batas: a.batas, pic: a.pic, strategi: a.strategi || '', catatan: a.catatan || '', kreator: a.kreator || [] };
+  if (j === 'seeding_baru') return { action: 'add_seeding', nama: a.nama, produk: a.produk || '', lane: a.lane || '', sampel: a.sampel || '', platform: a.platform || '', estimasi: a.estimasi, batas: a.batas, pic: a.pic, strategi: a.strategi || '', catatan: a.catatan || '', kreator: a.kreator || [], kalender: a.kalender === true };
   if (j === 'putuskan_seeding') return { action: 'putuskan_seeding', id: a.id, status: a.status, alasan: a.alasan || '' };
-  if (j === 'ubah_seeding') { var us = { action: 'update_seeding', id: a.id }; ['status', 'nama', 'produk', 'lane', 'sampel', 'platform', 'pic', 'estimasi', 'batas', 'catatan', 'kegiatan'].forEach(function (k) { if (a[k] !== undefined && a[k] !== null) us[k] = a[k]; }); return us; }
+  if (j === 'ubah_seeding') { var us = { action: 'update_seeding', id: a.id }; ['status', 'nama', 'produk', 'lane', 'sampel', 'platform', 'pic', 'estimasi', 'batas', 'catatan', 'kegiatan', 'kalender'].forEach(function (k) { if (a[k] !== undefined && a[k] !== null) us[k] = a[k]; }); return us; }
   if (j === 'kreator_hapus') return { action: 'hapus_kreator', batch: a.id, akun: a.akun || a.nama };
   if (j === 'kreator_tambah') return { action: 'add_kreator', batch: a.id, kreator: a.kreator || [] };
   if (j === 'kreator_update') { var ku = { action: 'update_kreator', batch: a.id, akun: a.akun || a.nama, status: a.status, link: a.link || '', tanggal: a.tanggal || '' }; ['views', 'catatan', 'akun_baru', 'nama_baru', 'platform_baru', 'varian', 'qty'].forEach(function (k) { if (a[k] !== undefined && a[k] !== null) ku[k] = a[k]; }); return ku; }
@@ -707,6 +707,9 @@ function kabarSesudah_(data, out) {
       k.ke = k.ke.filter(function (id, i, arr) { return id && id !== oleh && arr.indexOf(id) === i; });
       return k.ke.length > 0;
     });
+    // sinkron ke Tracker: strategi & seeding jadi tugas (judul, PIC, tanggal, status); detail tetap di Zerodeo
+    var sk = zSinkronItem_(a, data, res, oleh);
+    if (sk) kirim.push({ sinkron: sk, ke: ['-'] });
     if (!kirim.length) return;
     // dari web: ditaruh di antrean, dikirim saat web memanggil "kirim_kabar" di belakang (simpanan tidak menunggu kabar).
     // dari bot (via telegram): langsung dikirim, sekalian antrean yang masih ada.
@@ -740,14 +743,52 @@ function zKabarKirimAntre_() {
 function zKabarKirim_(list) {
   var url = PropertiesService.getScriptProperties().getProperty('HUB_URL');
   if (!url || !hubSecret_()) return;
-  list.forEach(function (k) {
+  var sinkron = list.filter(function (k) { return k.sinkron; }).map(function (k) { return k.sinkron; });
+  var kirimKe = function (body) {
     try {
-      UrlFetchApp.fetch(url, {
-        method: 'post', contentType: 'text/plain', muteHttpExceptions: true, followRedirects: true,
-        payload: JSON.stringify({ action: 'kabarApp', app: HUB_APP, kabar: k.kabar, ke: k.ke, data: k.data, token: makeHubToken_('zerodeo-service', 'service', 300) })
-      });
-    } catch (e) { /* satu kabar gagal: lanjut yang lain */ }
-  });
+      UrlFetchApp.fetch(url, { method: 'post', contentType: 'text/plain', muteHttpExceptions: true, followRedirects: true,
+        payload: JSON.stringify(Object.assign({ app: HUB_APP, token: makeHubToken_('zerodeo-service', 'service', 300) }, body)) });
+    } catch (e) { /* satu kiriman gagal: lanjut yang lain */ }
+  };
+  if (sinkron.length) kirimKe({ action: 'sinkronTugas', items: sinkron });
+  list.forEach(function (k) { if (!k.sinkron) kirimKe({ action: 'kabarApp', kabar: k.kabar, ke: k.ke, data: k.data }); });
+}
+// Tugas Tracker sesuai strategi / seeding (dikirim ke Hub, Hub yang membuat / memperbarui tugasnya)
+function zTambahHari_(d, n) { var x = new Date(d.getTime()); x.setDate(x.getDate() + n); return x; }
+function zSinkronItem_(a, data, res, oleh) {
+  if (a === 'add_strategi' || a === 'update_strategi_status') {
+    var id = String(res.id || data.id || '');
+    var r = mkt_readTab_('strategi').filter(function (x) { return String(x['ID']) === id; })[0];
+    if (!r) return null;
+    var mulai = zTgl_(r['Mulai']), selesai = zTgl_(r['Selesai']);
+    return { jenis: 'strategi', id: id, judul: String(r['Nama Strategi'] || ''), pic: ownerIds_(r['PIC']).join(','), mulai: mulai, deadline: selesai || mulai,
+      status: String(r['Status'] || 'Ide'), kalender: String(r['Kalender'] || 'ya') !== 'tidak', oleh: oleh, tugas_id: a === 'add_strategi' && data.tugas_id ? String(data.tugas_id).slice(0, 60) : '' };
+  }
+  if (['add_seeding', 'update_seeding', 'putuskan_seeding'].indexOf(a) !== -1) {
+    var b = seed_cari_(res.id || data.id);
+    if (!b) return null;
+    // tenggat kerja seeding: kirim sampel (± 7 hari) + batas posting sejak diterima
+    var dicatat = b['Dicatat Pada'] instanceof Date ? b['Dicatat Pada'] : (mkt_parseDate_(b['Dicatat Pada']) || new Date());
+    var batas = mkt_int_(b['Batas Posting (hari)']) || SEED_BATAS_BAWAAN;
+    return { jenis: 'seeding', id: String(b['ID']), judul: 'Seeding: ' + String(b['Nama Batch'] || ''), pic: ownerIds_(b['PIC']).join(','),
+      mulai: zTgl_(dicatat), deadline: zTgl_(zTambahHari_(dicatat, batas + 7)), status: String(b['Status'] || ''), kalender: String(b['Kalender'] || '') === 'ya', oleh: oleh };
+  }
+  return null;
+}
+// Tugas Tracker biasa di project Zerodeo, dari Hub (disimpan sebentar supaya halaman tidak menunggu Hub tiap kali)
+function zTugasTracker_() {
+  var c = CacheService.getScriptCache(), hit = c.get('ztugas:tracker');
+  if (hit) { try { return { ok: true, tugas: JSON.parse(hit) }; } catch (e) { /* ambil ulang */ } }
+  var url = PropertiesService.getScriptProperties().getProperty('HUB_URL');
+  if (!url || !hubSecret_()) return { ok: true, tugas: [] };
+  try {
+    var r = UrlFetchApp.fetch(url, { method: 'post', contentType: 'text/plain', muteHttpExceptions: true, followRedirects: true,
+      payload: JSON.stringify({ action: 'tugasUntukApp', app: HUB_APP, token: makeHubToken_('zerodeo-service', 'service', 300) }) });
+    var j = JSON.parse(r.getContentText());
+    if (!j || !j.ok || !Array.isArray(j.tugas)) return { ok: true, tugas: [], catatan: (j && j.error) || 'Hub belum versi terbaru.' };
+    c.put('ztugas:tracker', JSON.stringify(j.tugas), 120);
+    return { ok: true, tugas: j.tugas };
+  } catch (e) { return { ok: true, tugas: [], catatan: 'Hub tidak terjangkau.' }; }
 }
 
 // Dipanggil setelah aksi berhasil. Kegagalan mencatat log tidak boleh menggagalkan aksinya.

@@ -146,6 +146,7 @@
           <button class="btn green" onclick="openStrategi()">+ Strategi</button>
         </span>
       </div>
+      <div class="dari-tracker" id="dariTracker" hidden></div>
       <div class="scroll" id="wrapTabelS">
         <table>
           <thead><tr><th>Strategi</th><th>Lane</th><th>Channel</th><th>Periode</th><th>PIC</th><th>Status</th></tr></thead>
@@ -239,6 +240,7 @@
         <span class="hint">Varian &amp; jumlah boleh dikosongkan: otomatis 1 pcs varian pertama.</span>
         <span class="hint" id="sd-kreator-hint"></span></label>
       <label>Catatan <span class="opt">(opsional)</span><input type="text" id="sd-catatan" placeholder="mis. target konten review jujur, wajib tag akun Zerodeo"></label>
+      <label class="cek-kal"><input type="checkbox" id="sd-kalender"> Masukkan ke Kalender Tim <span class="opt">(tugas PIC tetap masuk Tracker)</span></label>
       <div class="msg" id="sd-msg"></div>
       <div class="modal-actions">
         <button type="button" class="btn-cancel" onclick="closeModal('m-seeding')">Batal</button>
@@ -647,6 +649,7 @@
     <h3>Strategi baru</h3>
     <div class="hint">Lane = produk yang diangkat. Channel = tempat programnya jalan. Boleh pilih lebih dari satu.</div>
     <form id="strategiForm" novalidate>
+      <div class="note" id="s-dariTracker" hidden></div>
       <label>Nama strategi
         <input type="text" id="s-nama" placeholder="Contoh: Hook launch November">
         <span class="field-error" id="err-s-nama">Wajib diisi.</span></label>
@@ -677,6 +680,8 @@
         <label>Status
           <select id="s-status"><option>Ide</option><option>Jalan</option><option>Selesai</option></select></label>
       </div>
+      <label class="cek-kal"><input type="checkbox" id="s-kalender" checked> Masukkan ke Kalender Tim <span class="opt">(tugasnya tetap masuk Tracker PIC)</span></label>
+      <input type="hidden" id="s-tugas">
 
       <div class="msg" id="s-msg"></div>
       <div class="modal-actions">

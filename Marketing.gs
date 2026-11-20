@@ -44,7 +44,7 @@
  */
 
 var MKT_TABS = {
-  strategi: ['ID', 'Nama Strategi', 'Lane', 'Pesan Inti', 'Channel', 'Mulai', 'Selesai', 'PIC', 'Status', 'Dicatat Pada'],
+  strategi: ['ID', 'Nama Strategi', 'Lane', 'Pesan Inti', 'Channel', 'Mulai', 'Selesai', 'PIC', 'Status', 'Dicatat Pada', 'Kalender'],   // Kalender: ikut Kalender Tim di Tracker (bawaan ya)
   lane: ['Lane', 'Sembunyi'],
   channel: ['Channel', 'Sembunyi'],   // Sembunyi = TRUE: tidak muncul di pilihan, riwayat tetap
   hasil_event: ['ID', 'Tanggal Event', 'Nama Event', 'Channel', 'Nama Komunitas', 'Kode Voucher',
@@ -52,7 +52,7 @@ var MKT_TABS = {
                 'Strategi', 'PIC Pencatat', 'Dicatat Pada', 'Kegiatan'],
   // Seeding: satu batch (diajukan tim, di-acc approver/admin) berisi daftar kreator yang dikirimi sampel
   seeding: ['ID', 'Nama Batch', 'Produk', 'Lane', 'Platform', 'Estimasi (Rp)', 'Batas Posting (hari)', 'Status', 'PIC', 'Diajukan Oleh',
-            'Diputuskan Oleh', 'Catatan', 'Dicatat Pada', 'Kegiatan', 'Strategi', 'Qty'],
+            'Diputuskan Oleh', 'Catatan', 'Dicatat Pada', 'Kegiatan', 'Strategi', 'Qty', 'Kalender'],   // Kalender: ikut Kalender Tim (bawaan tidak)
   // Lane (seeding) = varian sampel, dipisah koma; Qty = jumlah sampel per varian (dipisah "; "), urutannya sama dengan Lane
   seeding_kreator: ['ID', 'Batch', 'Nama', 'Akun', 'Platform', 'Status', 'Tgl Kirim', 'Tgl Terima', 'Tgl Posting', 'Link Konten', 'Views', 'Catatan', 'Diubah', 'Varian', 'Qty']
 };
@@ -255,6 +255,8 @@ function mkt_resolveLabels_(tabName, labels) {
 function mkt_handlePost(data) {
   // web memanggil ini di belakang setelah menyimpan: kabar Telegram yang tertunda dikirim (Hub.gs), tanpa menahan simpanannya
   if (data && data.action === 'kirim_kabar') return typeof zKabarKirimAntre_ === 'function' ? zKabarKirimAntre_() : { ok: true, terkirim: 0 };
+  // tugas Tracker di project Zerodeo (untuk ditampilkan & "dijadikan strategi"), dibaca dari Hub
+  if (data && data.action === 'tugas_tracker') return typeof zTugasTracker_ === 'function' ? zTugasTracker_() : { ok: true, tugas: [] };
   var known = { add_strategi: 1, update_strategi_status: 1, add_hasil_event: 1, update_hasil_event_kegiatan: 1,
     add_seeding: 1, putuskan_seeding: 1, update_seeding: 1, add_kreator: 1, update_kreator: 1, hapus_kreator: 1, atur_label: 1 };
   if (!data || !known[data.action]) return null;
@@ -305,7 +307,7 @@ function mkt_addStrategi_(d) {
 
   var id = 'S' + new Date().getTime().toString(36);
   var sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('strategi');
-  mkt_append_(sheet, [id, nama, lane.join(', '), pesan, channel.join(', '), mulai, selesai, normalizePic_(d.pic), status, new Date()]);
+  mkt_append_(sheet, [id, nama, lane.join(', '), pesan, channel.join(', '), mulai, selesai, normalizePic_(d.pic), status, new Date(), d.kalender === false ? 'tidak' : 'ya']);
   return { ok: true, id: id, lane: lane, channel: channel };
 }
 
@@ -497,7 +499,7 @@ function seed_add_(d) {
   var batas = mkt_int_(d.batas) || SEED_BATAS_BAWAAN;
   var est = isMarketingOnly_() ? '' : (Math.round(Number(d.estimasi)) || '');
   var id = 'SD' + new Date().getTime().toString(36);
-  mkt_append_(seed_sheet_('seeding'), [id, nama, mkt_text_(d.produk, 120), sampel.lane, platform, est, batas, 'Diajukan', pic, CURRENT_WHO_.uid, '', mkt_text_(d.catatan, 500), new Date(), '', mkt_text_(d.strategi, 120), sampel.qty]);
+  mkt_append_(seed_sheet_('seeding'), [id, nama, mkt_text_(d.produk, 120), sampel.lane, platform, est, batas, 'Diajukan', pic, CURRENT_WHO_.uid, '', mkt_text_(d.catatan, 500), new Date(), '', mkt_text_(d.strategi, 120), sampel.qty, d.kalender === true ? 'ya' : 'tidak']);
   var t = seed_tambahKreator_(id, kreator, platform, sampel.lane.split(',')[0].trim());
   return { ok: true, id: id, kreator: t.baru, message: 'Seeding "' + nama + '" diajukan (' + t.baru + ' kreator). Menunggu acc approver / admin Zerodeo.' };
 }
@@ -540,6 +542,7 @@ function seed_update_(d) {
     seed_set_('seeding', b._row, 'Kegiatan', r.ids.join(', ')); pesan.push('kegiatan ditautkan');
   }
   // isian batch: sebelum di-acc pengaju / PIC (atau approver / admin); sesudah di-acc hanya approver / admin
+  if (d.kalender !== undefined && d.status === undefined && ['Ditolak', 'Dibatalkan'].indexOf(String(b['Status'])) === -1) { seed_set_('seeding', b._row, 'Kalender', d.kalender === true ? 'ya' : 'tidak'); pesan.push(d.kalender === true ? 'masuk Kalender Tim' : 'keluar dari Kalender Tim'); }
   var isian = ['nama', 'produk', 'lane', 'sampel', 'platform', 'pic', 'estimasi', 'batas', 'catatan'].filter(function (k) { return d[k] !== undefined; });
   if (isian.length) {
     if (b['Status'] === 'Dibatalkan' || b['Status'] === 'Ditolak') return { ok: false, error: 'Seeding ini sudah ' + b['Status'] + '.' };

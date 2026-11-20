@@ -174,6 +174,7 @@ function renderStrategi() {
   }).sort((a, b) => (MKT_RANK[a.Status] - MKT_RANK[b.Status]) || String(a.Mulai || '').localeCompare(String(b.Mulai || '')));
 
   $('countS').textContent = rows.length + ' strategi';
+  muatTugasTracker();
   renderTimeline(rows);
   if (!rows.length) { $('bodyS').innerHTML = '<tr><td colspan="6" class="empty">Belum ada strategi yang cocok.</td></tr>'; return; }
   $('bodyS').innerHTML = rows.map((r) => `<tr>
@@ -372,8 +373,36 @@ function openStrategi() {
   sOpts.channel = M.channel.slice();
   sSel.lane.clear(); sSel.channel.clear();
   $('s-mulai').value = todayStr();
+  $('s-kalender').checked = true; $('s-tugas').value = ''; $('s-dariTracker').hidden = true;
   renderChips('lane'); renderChips('channel');
   openModal('m-strategi');
+}
+// ---------- tugas Tracker di project Zerodeo: tampil di sini, bisa "dijadikan strategi" untuk didetailkan ----------
+let tugasTracker = [], tugasTrackerAt = 0;
+async function muatTugasTracker() {
+  if (Date.now() - tugasTrackerAt < 60000) return renderDariTracker();
+  tugasTrackerAt = Date.now();
+  try { const r = await zApi.post({ action: 'tugas_tracker' }); tugasTracker = (r && r.ok && Array.isArray(r.tugas)) ? r.tugas : []; } catch (e) { tugasTracker = []; }
+  renderDariTracker();
+}
+function renderDariTracker() {
+  const el = $('dariTracker'); if (!el) return;
+  const terpakai = new Set();   // tugas yang sudah jadi strategi tidak dikirim lagi oleh Hub, jadi cukup tampilkan semuanya
+  const list = tugasTracker.filter((t) => !terpakai.has(t.id));
+  el.hidden = !list.length;
+  if (!list.length) return;
+  el.innerHTML = '<h4>📋 Tugas dari Tracker (project Zerodeo) · ' + list.length + '</h4>' + list.slice(0, 8).map((t) => `<div class="dt"><span><b>${zEsc(t.judul)}</b><span class="sub"> · ${zEsc(t.pic_nama || '')} · ${mktDate(t.mulai)}${t.deadline !== t.mulai ? ' – ' + mktDate(t.deadline) : ''} · ${zEsc(t.status)}</span></span>
+    <button type="button" onclick="jadikanStrategi('${zEsc(t.id)}')">Jadikan strategi</button></div>`).join('') + (list.length > 8 ? `<div class="sub">…dan ${list.length - 8} lagi</div>` : '');
+}
+function jadikanStrategi(id) {
+  const t = tugasTracker.find((x) => x.id === id); if (!t) return;
+  openStrategi();
+  $('s-nama').value = t.judul; $('s-mulai').value = t.mulai; $('s-selesai').value = t.deadline !== t.mulai ? t.deadline : '';
+  if (t.pic && t.pic[0]) $('s-pic').value = t.pic[0];
+  $('s-status').value = t.status === 'Jalan' || t.status === 'Review' ? 'Jalan' : 'Ide';
+  $('s-kalender').checked = t.kalender !== false; $('s-tugas').value = t.id;
+  $('s-dariTracker').hidden = false; $('s-dariTracker').textContent = 'Dari tugas Tracker "' + t.judul + '": lengkapi pesan inti, lane, dan channel. Tugasnya di Tracker ikut tertaut (tidak dobel).';
+  $('s-pesan').focus();
 }
 
 $('strategiForm').addEventListener('submit', (e) => {
@@ -397,10 +426,12 @@ $('strategiForm').addEventListener('submit', (e) => {
 
   const lane = Array.from(sSel.lane), channel = Array.from(sSel.channel);
   const snap = snapshotForm($('strategiForm'));
+  const tugasId = $('s-tugas').value;
+  if (tugasId) { tugasTracker = tugasTracker.filter((t) => t.id !== tugasId); renderDariTracker(); }
   enqueueSave({
     label: 'Strategi: ' + v.nama,
     payload: { action: 'add_strategi', nama: v.nama, pesan: v.pesan, lane: lane, channel: channel,
-      mulai: v.mulai, selesai: v.selesai || null, pic: v.pic, status: v.status },
+      mulai: v.mulai, selesai: v.selesai || null, pic: v.pic, status: v.status, kalender: $('s-kalender').checked, tugas_id: tugasId || undefined },
     okMsg: 'Strategi "' + v.nama + '" tersimpan. Lane/channel baru otomatis masuk daftar untuk semua orang.',
     restore: () => {
       openStrategi(); restoreForm(snap);
