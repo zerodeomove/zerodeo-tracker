@@ -126,4 +126,5 @@ ba = svc({ action: 'bot_aksi', for_uid: 'lenno', for_peran: 'admin', aksi: { jen
 assert.strictEqual(ba.ok, true, ba.error); assert.strictEqual(e.sheets.strategi.rows.find((x) => x[0] === r.id)[hS2.indexOf('PIC')], 'yanuar, ricko'); ok('bot: ubah strategi (PIC banyak)');
 r2 = post({ action: 'add_seeding', nama: 'Seeding dua PIC', pic: ['yanuar', 'lemon'], kreator: '@q' }, 'yanuar', 'anggota');
 assert.strictEqual(r2.ok, true, r2.error); assert.strictEqual(e.sheets.seeding.rows.find((x) => x[0] === r2.id)[8], 'yanuar, lemon'); ok('seeding dengan 2 PIC');
+assert(/^dash_/.test(e.ctx.CACHE_KEY) && e.ctx.CACHE_KEY.indexOf(e.ctx.KODE_VERSI.replace(/[^A-Za-z0-9]/g, '')) > 0); ok('cache data server ikut versi Code.gs (pasang versi baru = tidak menyajikan data lama)');
 console.log('\n' + n + ' tes lolos');

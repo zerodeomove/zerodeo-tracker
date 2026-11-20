@@ -411,7 +411,7 @@ document.addEventListener('visibilitychange', () => {
 
 // fresh = true: ambil langsung dari Sheet, lewati cache Apps Script (tombol Refresh).
 // Memasang data ke seluruh tampilan. Dipakai untuk data tersimpan (langsung tampil) dan data baru dari server.
-function applyPayload(json) {
+function applyPayload(json, dariCache) {
   if (Array.isArray(json.tim) && json.tim.length) TIM = json.tim;
   fillPicSelects();
   renderWho();
@@ -428,7 +428,8 @@ function applyPayload(json) {
   lastLoadAt = Date.now();
   backendVersi = json.versi || 'lama';
   const vb = $('versiBanner');
-  if (backendVersi !== EXPECTED_VERSI) {
+  // banner versi hanya dari jawaban server yang baru, bukan dari data tersimpan di perangkat (bisa dari sebelum Code.gs dipasang)
+  if (dariCache) { /* tunggu jawaban server */ } else if (backendVersi !== EXPECTED_VERSI) {
     vb.style.display = '';
     vb.textContent = 'Apps Script yang melayani dashboard ini versi "' + backendVersi + '", seharusnya "' + EXPECTED_VERSI + '". Fitur baru (misalnya upload nota) belum jalan. Di Apps Script: Deploy → Manage deployments → ikon pensil → di Version pilih "New version" (bukan Version yang lama) → Deploy.';
   } else {
@@ -484,7 +485,7 @@ async function load(fresh) {
     cached = zApi.cacheRead();
     if (cached) {
       try {
-        applyPayload(cached.json);
+        applyPayload(cached.json, true);
         setSync('Menampilkan data tersimpan (' + new Date(cached.at).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }) + '), memperbarui…', false);
       } catch (e) { cached = null; }
     }

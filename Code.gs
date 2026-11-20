@@ -746,7 +746,9 @@ function buildRingkasanSheet(ss) {
 // (onEdit), jadi data tidak basi. Tombol Refresh selalu mengambil langsung (fresh=1).
 // Nilai cache dibatasi ~100 KB per kunci, jadi isinya dipotong-potong.
 // ============================================================
-var CACHE_KEY = 'dash_v1';
+// Nama cache ikut versi kode: setelah Code.gs baru dipasang, data siap-saji buatan kode lama tidak pernah tersaji lagi
+// (dulu namanya tetap 'dash_v1', sehingga pembukaan biasa masih melihat versi lama sampai cache kedaluwarsa; Refresh melewatinya).
+var CACHE_KEY = 'dash_' + String(KODE_VERSI).replace(/[^A-Za-z0-9]/g, '');
 var CACHE_TTL = 300;
 var CACHE_PART = 45000;
 
