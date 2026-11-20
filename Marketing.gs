@@ -259,6 +259,8 @@ function mkt_handlePost(data) {
   if (data && data.action === 'tugas_tracker') return typeof zTugasTracker_ === 'function' ? zTugasTracker_() : { ok: true, tugas: [] };
   // sekali jalan: semua strategi & seeding yang masih aktif dikirim ke Tracker (approver / admin)
   if (data && data.action === 'sinkron_semua') return zSinkronSemua_();
+  // ✕ "bukan untuk Marketing" (siapa pun): tugas Tracker itu tidak ditampilkan lagi di sini
+  if (data && data.action === 'tolak_tugas_tracker') return zTolakTugas_(data.id);
   var known = { add_strategi: 1, update_strategi_status: 1, update_strategi_tanggal: 1, add_hasil_event: 1, update_hasil_event_kegiatan: 1,
     add_seeding: 1, putuskan_seeding: 1, update_seeding: 1, add_kreator: 1, update_kreator: 1, hapus_kreator: 1, atur_label: 1 };
   if (!data || !known[data.action]) return null;

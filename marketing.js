@@ -412,8 +412,8 @@ function renderDariTracker() {
   const list = tugasTracker.filter((t) => !terpakai.has(t.id));
   el.hidden = !list.length;
   if (!list.length) return;
-  el.innerHTML = '<h4>📋 Tugas dari Tracker (project Zerodeo) · ' + list.length + '</h4>' + list.slice(0, 8).map((t) => `<div class="dt"><span><b>${zEsc(t.judul)}</b><span class="sub"> · ${zEsc(t.pic_nama || '')} · ${mktDate(t.mulai)}${t.deadline !== t.mulai ? ' – ' + mktDate(t.deadline) : ''} · ${zEsc(t.status)}</span></span>
-    <button type="button" onclick="jadikanStrategi('${zEsc(t.id)}')">Jadikan strategi</button></div>`).join('') + (list.length > 8 ? `<div class="sub">…dan ${list.length - 8} lagi</div>` : '');
+  el.innerHTML = '<h4>📋 Tugas dari Tracker untuk Marketing · ' + list.length + '</h4>' + list.slice(0, 8).map((t) => `<div class="dt"><span><b>${zEsc(t.judul)}</b><span class="sub"> · ${zEsc(t.pic_nama || '')} · ${mktDate(t.mulai)}${t.deadline !== t.mulai ? ' – ' + mktDate(t.deadline) : ''} · ${zEsc(t.status)}</span></span>
+    <span class="dt-aksi"><button type="button" onclick="jadikanStrategi('${zEsc(t.id)}')">Jadikan strategi</button><button type="button" class="dt-x" title="Bukan untuk Marketing (tugasnya tetap di Tracker)" onclick="tolakTugasTracker('${zEsc(t.id)}')">✕</button></span></div>`).join('') + (list.length > 8 ? `<div class="sub">…dan ${list.length - 8} lagi</div>` : '');
 }
 // sekali jalan: strategi & seeding aktif yang dibuat sebelum ada sinkron ikut masuk Tracker (tidak masuk Kalender Tim)
 async function sinkronSemua(btn) {
@@ -426,6 +426,16 @@ async function sinkronSemua(btn) {
     load();
   } catch (e) { toast('Gagal sinkron: ' + e.message, 'err'); }
   btn.disabled = false; btn.textContent = '⟳ Sinkronkan ke Tracker';
+}
+// ✕: siapa pun boleh menolak (tugasnya tetap di Tracker; bisa dicentang lagi di sana)
+async function tolakTugasTracker(id) {
+  const t = tugasTracker.find((x) => x.id === id); if (!t) return;
+  tugasTracker = tugasTracker.filter((x) => x.id !== id); renderDariTracker();
+  try {
+    const r = await zApi.post({ action: 'tolak_tugas_tracker', id });
+    if (!r.ok) throw new Error(r.error || 'Gagal');
+    toast(r.message || 'Disembunyikan dari Marketing.');
+  } catch (e) { tugasTracker.push(t); renderDariTracker(); toast('Gagal: ' + e.message, 'err'); }
 }
 function jadikanStrategi(id) {
   const t = tugasTracker.find((x) => x.id === id); if (!t) return;

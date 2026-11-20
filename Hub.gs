@@ -811,6 +811,19 @@ function zSinkronSemua_() {
     message: nS + ' strategi & ' + nD + ' seeding aktif dikirim ke Tracker' + (gagal ? ' (' + gagal + ' gagal: cek PIC-nya terdaftar di Hub)' : '') + '. Yang lama tidak masuk Kalender Tim; centang di form kalau perlu.' };
 }
 
+function zTolakTugas_(id) {
+  var url = PropertiesService.getScriptProperties().getProperty('HUB_URL');
+  if (!url || !hubSecret_()) return { ok: false, error: 'Isi Script Properties HUB_URL dan SECRET_ZERODEO dulu.' };
+  try {
+    var r = UrlFetchApp.fetch(url, { method: 'post', contentType: 'text/plain', muteHttpExceptions: true, followRedirects: true,
+      payload: JSON.stringify({ action: 'tolakTugasApp', app: HUB_APP, tugas_id: String(id || '').slice(0, 60), token: makeHubToken_('zerodeo-service', 'service', 300) }) });
+    var j = JSON.parse(r.getContentText());
+    if (!j || !j.ok) return { ok: false, error: (j && j.error) || 'Hub belum versi terbaru.' };
+    CacheService.getScriptCache().remove('ztugas:tracker');
+    return { ok: true, message: '"' + j.judul + '" tidak ditampilkan lagi di Marketing (tugasnya tetap ada di Tracker).' };
+  } catch (e) { return { ok: false, error: 'Hub tidak terjangkau.' }; }
+}
+
 // Tugas Tracker biasa di project Zerodeo, dari Hub (disimpan sebentar supaya halaman tidak menunggu Hub tiap kali)
 function zTugasTracker_() {
   var c = CacheService.getScriptCache(), hit = c.get('ztugas:tracker');

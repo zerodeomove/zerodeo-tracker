@@ -61,7 +61,9 @@ assert.strictEqual(r.ok, false); assert.strictEqual(kabar.length, 0); ok('aksi d
 const rk = svc({ action: 'bot_baca', for_uid: 'ricko', for_peran: 'approver', q: { jenis: 'ringkasan' } }).hasil.item;
 assert(rk.some((x) => x.jenis === 'approve' && /^\d{4}-\d{2}-\d{2}$/.test(x.sejak)), JSON.stringify(rk)); ok('bot ringkasan: item approve membawa tanggal "sejak"');
 // sinkron ke Tracker: strategi & seeding -> item untuk Hub (sinkronTugas)
-e.ctx.UrlFetchApp = { fetch: (url, o) => { const b = JSON.parse(o.payload); if (b.action === 'sinkronTugas') sinkron.push(...b.items); if (b.action === 'tugasUntukApp') return { getContentText: () => JSON.stringify({ ok: true, tugas: tugasHub }) }; return { getContentText: () => '{"ok":true}' }; } };
+const tolak = [];
+e.ctx.UrlFetchApp = { fetch: (url, o) => { const b = JSON.parse(o.payload); if (b.action === 'sinkronTugas') sinkron.push(...b.items); if (b.action === 'tugasUntukApp') return { getContentText: () => JSON.stringify({ ok: true, tugas: tugasHub }) };
+  if (b.action === 'tolakTugasApp') { tolak.push(b.tugas_id); return { getContentText: () => JSON.stringify({ ok: true, judul: 'Briefing' }) }; } return { getContentText: () => '{"ok":true}' }; } };
 sinkron.length = 0;
 r = post({ action: 'add_strategi', nama: 'Run club Desember', pesan: 'Lari bareng', lane: ['Vital Fresh'], channel: ['Komunitas Lari'], mulai: '2026-12-01', selesai: '2026-12-20', pic: 'yanuar', status: 'Ide', tugas_id: 't-abc' }, 'yanuar', 'anggota');
 assert.strictEqual(r.ok, true, r.error);
@@ -105,4 +107,6 @@ assert(sinkron.some((x) => x.jenis === 'seeding') && !sinkron.some((x) => x.stat
 sinkron.length = 0;
 r = post({ action: 'update_strategi_tanggal', id: 'S-lama', kalender: true }, 'yanuar', 'anggota');
 assert.strictEqual(r.ok, true, r.error); assert(sinkron[0] && sinkron[0].kalender === true && sinkron[0].mulai === '2026-10-01'); ok('strategi lama dimasukkan ke Kalender Tim belakangan (tanggal tetap)');
+r = postMentah({ action: 'tolak_tugas_tracker', id: 't-1' }, 'vendor', 'marketing');
+assert(r.ok && tolak[0] === 't-1' && /tidak ditampilkan lagi/.test(r.message)); ok('✕ tugas Tracker di Marketing: siapa pun boleh (termasuk peran marketing), diteruskan ke Hub');
 console.log('\n' + n + ' tes lolos');
