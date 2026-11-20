@@ -593,6 +593,7 @@ function botNative_(a) {
   }
   if (j === 'strategi_baru') return { action: 'add_strategi', nama: a.nama, pesan: a.pesan, lane: a.lane || [], channel: a.channel || [], mulai: a.mulai, selesai: a.selesai || '', pic: a.pic, status: a.status || 'Ide', kalender: a.kalender !== false };
   if (j === 'status_strategi') return { action: 'update_strategi_status', id: a.id, status: a.status };
+  if (j === 'ubah_strategi') { var uS = { action: 'update_strategi', id: a.id }; ['nama', 'pesan', 'lane', 'channel', 'mulai', 'selesai', 'pic', 'status', 'kalender'].forEach(function (k) { if (a[k] !== undefined && a[k] !== null) uS[k] = a[k]; }); return uS; }
   if (j === 'tanggal_strategi') { var ts = { action: 'update_strategi_tanggal', id: a.id }; if (a.mulai) ts.mulai = a.mulai; if (a.selesai !== undefined && a.selesai !== null) ts.selesai = a.selesai; if (typeof a.kalender === 'boolean') ts.kalender = a.kalender; return ts; }
   if (j === 'hasil_event_baru') return { action: 'add_hasil_event', nama: a.nama, tanggal: a.tanggal, channel: Array.isArray(a.channel) ? a.channel[0] : a.channel, komunitas: a.komunitas || '', kode: a.kode || '',
     hadir: a.hadir || 0, coba: a.coba || 0, tanya: a.tanya || 0, order: a.order || 0, ugc: a.ugc || 0, strategi: a.strategi || '', pic: a.pic, kegiatan: a.kegiatan || [] };
@@ -757,7 +758,7 @@ function zKabarKirim_(list) {
 // Tugas Tracker sesuai strategi / seeding (dikirim ke Hub, Hub yang membuat / memperbarui tugasnya)
 function zTambahHari_(d, n) { var x = new Date(d.getTime()); x.setDate(x.getDate() + n); return x; }
 function zSinkronItem_(a, data, res, oleh) {
-  if (a === 'add_strategi' || a === 'update_strategi_status' || a === 'update_strategi_tanggal') {
+  if (a === 'add_strategi' || a === 'update_strategi' || a === 'update_strategi_status' || a === 'update_strategi_tanggal') {
     var id = String(res.id || data.id || '');
     var r = mkt_readTab_('strategi').filter(function (x) { return String(x['ID']) === id; })[0];
     if (!r) return null;

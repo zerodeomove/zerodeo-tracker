@@ -109,4 +109,21 @@ r = post({ action: 'update_strategi_tanggal', id: 'S-lama', kalender: true }, 'y
 assert.strictEqual(r.ok, true, r.error); assert(sinkron[0] && sinkron[0].kalender === true && sinkron[0].mulai === '2026-10-01'); ok('strategi lama dimasukkan ke Kalender Tim belakangan (tanggal tetap)');
 r = postMentah({ action: 'tolak_tugas_tracker', id: 't-1' }, 'vendor', 'marketing');
 assert(r.ok && tolak[0] === 't-1' && /tidak ditampilkan lagi/.test(r.message)); ok('✕ tugas Tracker di Marketing: siapa pun boleh (termasuk peran marketing), diteruskan ke Hub');
+// strategi: PIC lebih dari satu, ubah isi strategi (web & bot), Tracker ikut
+sinkron.length = 0;
+r = post({ action: 'add_strategi', nama: 'Strategi duo', pesan: 'Dua PIC', lane: ['Vital Fresh'], channel: ['TikTok'], mulai: '2026-12-02', pic: ['yanuar', 'ricko'], status: 'Ide' }, 'yanuar', 'anggota');
+assert.strictEqual(r.ok, true, r.error);
+const rowDuo = e.sheets.strategi.rows.find((x) => x[0] === r.id), hS2 = e.sheets.strategi.rows[0];
+assert.strictEqual(rowDuo[hS2.indexOf('PIC')], 'yanuar, ricko'); assert.strictEqual(sinkron.find((x) => x.id === r.id).pic, 'yanuar,ricko'); ok('strategi dengan 2 PIC tersimpan, keduanya dapat tugas Tracker');
+sinkron.length = 0;
+let r2 = post({ action: 'update_strategi', id: r.id, nama: 'Strategi duo (revisi)', pesan: 'Pesan baru', lane: ['Vital Fresh'], channel: ['TikTok', 'Instagram'], mulai: '2026-12-03', selesai: '2026-12-10', pic: ['ricko'], status: 'Jalan', kalender: true }, 'yanuar', 'anggota');
+assert.strictEqual(r2.ok, true, r2.error);
+const rowDuo2 = e.sheets.strategi.rows.find((x) => x[0] === r.id);
+assert.strictEqual(rowDuo2[hS2.indexOf('Nama Strategi')], 'Strategi duo (revisi)'); assert.strictEqual(rowDuo2[hS2.indexOf('PIC')], 'ricko'); assert.strictEqual(rowDuo2[hS2.indexOf('Channel')], 'TikTok, Instagram');
+const sd2 = sinkron.find((x) => x.id === r.id); assert(sd2 && sd2.judul === 'Strategi duo (revisi)' && sd2.pic === 'ricko' && sd2.deadline === '2026-12-10' && sd2.kalender === true); ok('ubah strategi (nama, pesan, channel, tanggal, PIC, status, kalender) + tugas Tracker ikut');
+r2 = post({ action: 'update_strategi', id: r.id, pic: [] }, 'yanuar', 'anggota'); assert.strictEqual(r2.ok, false); ok('ubah strategi tanpa PIC ditolak');
+ba = svc({ action: 'bot_aksi', for_uid: 'lenno', for_peran: 'admin', aksi: { jenis: 'ubah_strategi', id: r.id, pesan: 'Lewat bot', pic: 'yanuar, ricko' } });
+assert.strictEqual(ba.ok, true, ba.error); assert.strictEqual(e.sheets.strategi.rows.find((x) => x[0] === r.id)[hS2.indexOf('PIC')], 'yanuar, ricko'); ok('bot: ubah strategi (PIC banyak)');
+r2 = post({ action: 'add_seeding', nama: 'Seeding dua PIC', pic: ['yanuar', 'lemon'], kreator: '@q' }, 'yanuar', 'anggota');
+assert.strictEqual(r2.ok, true, r2.error); assert.strictEqual(e.sheets.seeding.rows.find((x) => x[0] === r2.id)[8], 'yanuar, lemon'); ok('seeding dengan 2 PIC');
 console.log('\n' + n + ' tes lolos');

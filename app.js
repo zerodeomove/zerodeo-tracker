@@ -35,6 +35,16 @@ function fillPicSelects() {
   });
 }
 
+// PIC lebih dari satu: chip pilihan (dipakai form strategi & seeding). pilih = daftar id.
+function picChips(id, pilih) {
+  const el = $(id); if (!el) return;
+  const set = new Set((pilih || []).map(String));
+  el.innerHTML = TIM.map((t) => `<label class="chip ${set.has(t.id) ? 'on' : ''}"><input type="checkbox" value="${zEsc(t.id)}" ${set.has(t.id) ? 'checked' : ''}>${zEsc(t.nama)}</label>`).join('') || '<span class="sub">Daftar tim belum tersinkron.</span>';
+  el.onchange = (e) => { if (e.target.matches('input')) e.target.closest('.chip').classList.toggle('on', e.target.checked); };
+}
+function ambilPics(id) { return Array.from(($(id) || document).querySelectorAll('input:checked')).map((x) => x.value); }
+const picIdList = (v) => String(v || '').split(',').map((x) => picKey(x.trim())).filter(Boolean);
+
 // Peran pengguna ini dari token Hub (hanya untuk tampilan; server yang memutuskan). null = tanpa identitas.
 function myRole() { const c = zApi.me(); return c ? c.peran : null; }
 function myUid() { const c = zApi.me(); return c ? c.uid : null; }
@@ -222,7 +232,7 @@ async function runSaveQueue() {
   // satu kali muat ulang setelah antrean habis
   const done = saveJobs.filter((j) => j.state === 'ok' && !j.reloaded);
   // kabar Telegram (pengajuan / keputusan / transfer) dikirim server di belakang; tidak ditunggu, gagal pun tidak apa-apa
-  if (done.some((j) => !j.payload.action || ['update_status', 'mark_transferred', 'add_seeding', 'putuskan_seeding', 'update_seeding', 'add_strategi', 'update_strategi_status', 'update_strategi_tanggal'].indexOf(j.payload.action) !== -1)) {
+  if (done.some((j) => !j.payload.action || ['update_status', 'mark_transferred', 'add_seeding', 'putuskan_seeding', 'update_seeding', 'add_strategi', 'update_strategi', 'update_strategi_status', 'update_strategi_tanggal'].indexOf(j.payload.action) !== -1)) {
     zApi.post({ action: 'kirim_kabar' }).catch(() => {});
   }
   if (done.length) {

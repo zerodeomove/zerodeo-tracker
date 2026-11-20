@@ -235,7 +235,7 @@
         <label id="sd-est-wrap">Estimasi biaya (Rp) <span class="opt">(opsional)</span><input type="number" id="sd-est" min="0" step="1000" inputmode="numeric"></label>
         <label>Ingatkan kalau belum posting setelah <input type="number" id="sd-batas" min="1" value="7" inputmode="numeric"><span class="hint">hari sejak sampel diterima</span></label>
       </div>
-      <label>PIC<select id="sd-pic" data-pic><option value="">Pilih PIC…</option></select></label>
+      <label>PIC <span class="opt">(boleh lebih dari satu)</span><div class="chips" id="sd-pic"></div></label>
       <label id="sd-kreator-wrap">Kreator <span class="opt">(satu per baris: @akun - platform - nama - varian jumlah)</span>
         <textarea id="sd-kreator" rows="5" placeholder="@rina.fit - TikTok - Rina&#10;@budi.run - Instagram - Budi - Kids Fresh 2"></textarea>
         <span class="hint">Varian &amp; jumlah boleh dikosongkan: otomatis 1 pcs varian pertama.</span>
@@ -676,8 +676,8 @@
 
       <div class="row2">
         <label>PIC
-          <select id="s-pic" data-pic><option value="">Pilih…</option></select>
-          <span class="field-error" id="err-s-pic">Wajib dipilih.</span></label>
+          <div class="chips" id="s-pic"></div>
+          <span class="field-error" id="err-s-pic">Pilih minimal satu PIC.</span></label>
         <label>Status
           <select id="s-status"><option>Ide</option><option>Jalan</option><option>Selesai</option></select></label>
       </div>

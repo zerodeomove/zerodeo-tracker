@@ -77,12 +77,12 @@ function openSeeding(editId) {
   $('sd-kreator-wrap').style.display = b ? 'none' : '';
   if (b) {
     $('sd-nama').value = b['Nama Batch'] || ''; $('sd-produk').value = b.Produk || '';
-    $('sd-est').value = b['Estimasi (Rp)'] || ''; $('sd-batas').value = b['Batas Posting (hari)'] || 7; $('sd-pic').value = picKey(b.PIC || '');
+    $('sd-est').value = b['Estimasi (Rp)'] || ''; $('sd-batas').value = b['Batas Posting (hari)'] || 7; picChips('sd-pic', picIdList(b.PIC));
     $('sd-kalender').checked = String(b.Kalender || '') === 'ya';
     $('sd-catatan').value = String(b.Catatan || '').split(' | ').filter((x) => !/^(Approved|Ditolak|Revisi) oleh /.test(x.trim())).join(' | ');
   } else {
     $('sd-batas').value = 7;
-    const me = myUid(); if (me && TIM.some((t) => t.id === me)) $('sd-pic').value = me;
+    const me = myUid(); picChips('sd-pic', me && TIM.some((t) => t.id === me) ? [me] : []);
   }
   $('sd-kreator-hint').textContent = '';
   if (b) closeModal('m-seeddetail');
@@ -111,13 +111,14 @@ $('seedingForm').addEventListener('submit', (e) => {
   e.preventDefault(); clearErrors($('seedingForm'));
   const nama = $('sd-nama').value.trim();
   if (!nama) { $('err-sd-nama').classList.add('show'); return; }
+  if (sdEdit && !ambilPics('sd-pic').length) { toast('Pilih minimal satu PIC.', 'err'); return; }
   if (sdEdit) {
     const b = M.seeding.find((x) => x.ID === sdEdit) || {};
     const sampelTeks = (arr) => arr.map((x) => x.varian + '=' + (x.qty || 0)).join('|');
-    const ubah = { nama, produk: $('sd-produk').value.trim(), sampel: sampelTeks(sdAmbilSampel()), platform: sdAmbilPlatform().join(', '), pic: $('sd-pic').value,
+    const ubah = { nama, produk: $('sd-produk').value.trim(), sampel: sampelTeks(sdAmbilSampel()), platform: sdAmbilPlatform().join(', '), pic: ambilPics('sd-pic').join(', '),
       batas: $('sd-batas').value, catatan: $('sd-catatan').value.trim() };
     if (!isMarketingOnly()) ubah.estimasi = $('sd-est').value;
-    const lama = { nama: b['Nama Batch'] || '', produk: b.Produk || '', sampel: sampelTeks(sdSampel(b)), platform: splitList(b.Platform).join(', '), pic: picKey(b.PIC || ''), batas: String(b['Batas Posting (hari)'] || 7),
+    const lama = { nama: b['Nama Batch'] || '', produk: b.Produk || '', sampel: sampelTeks(sdSampel(b)), platform: splitList(b.Platform).join(', '), pic: picIdList(b.PIC).join(', '), batas: String(b['Batas Posting (hari)'] || 7),
       catatan: String(b.Catatan || '').split(' | ').filter((x) => !/^(Approved|Ditolak|Revisi) oleh /.test(x.trim())).join(' | '), estimasi: String(b['Estimasi (Rp)'] || '') };
     const payload = { action: 'update_seeding', id: sdEdit };
     Object.keys(ubah).forEach((k) => { if (String(ubah[k]) !== String(lama[k])) payload[k] = ubah[k]; });
@@ -134,7 +135,7 @@ $('seedingForm').addEventListener('submit', (e) => {
   enqueueSave({
     label: 'Seeding: ' + nama,
     payload: { action: 'add_seeding', nama, produk: $('sd-produk').value.trim(), sampel: sdAmbilSampel(), platform: sdAmbilPlatform(), kalender: $('sd-kalender').checked,
-      estimasi: isMarketingOnly() ? '' : $('sd-est').value, batas: $('sd-batas').value, pic: $('sd-pic').value, kreator, catatan: $('sd-catatan').value.trim() },
+      estimasi: isMarketingOnly() ? '' : $('sd-est').value, batas: $('sd-batas').value, pic: ambilPics('sd-pic').length ? ambilPics('sd-pic') : undefined, kreator, catatan: $('sd-catatan').value.trim() },
     okMsg: 'Seeding "' + nama + '" diajukan. Menunggu acc approver / admin.'
   });
   closeModal('m-seeding');

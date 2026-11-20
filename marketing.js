@@ -171,19 +171,19 @@ function renderStrategi() {
     if (fs && r.Status !== fs) return false;
     if (q && !((r['Nama Strategi'] || '') + ' ' + (r['Pesan Inti'] || '')).toLowerCase().includes(q)) return false;
     return true;
-  }).sort((a, b) => (MKT_RANK[a.Status] - MKT_RANK[b.Status]) || String(a.Mulai || '').localeCompare(String(b.Mulai || '')));
+  }).sort((a, b) => String(b.Mulai || '').localeCompare(String(a.Mulai || '')) || String(b['Dicatat Pada'] || '').localeCompare(String(a['Dicatat Pada'] || '')));   // terbaru di atas
 
   $('countS').textContent = rows.length + ' strategi';
   muatTugasTracker();
   if ($('btnSinkronSemua')) $('btnSinkronSemua').hidden = !isDecider();
-  renderTimeline(rows);
+  renderTimeline(rows.slice().sort((a, b) => String(a.Mulai || '').localeCompare(String(b.Mulai || ''))));   // garis waktu tetap urut kalender
   if (!rows.length) { $('bodyS').innerHTML = '<tr><td colspan="6" class="empty">Belum ada strategi yang cocok.</td></tr>'; return; }
   $('bodyS').innerHTML = rows.map((r) => `<tr>
-    <td style="max-width:300px"><b>${zEsc(r['Nama Strategi'])}</b><div class="sub">${zEsc(r['Pesan Inti'])}</div></td>
+    <td style="max-width:300px"><b>${zEsc(r['Nama Strategi'])}</b> <button type="button" class="tgl-ubah" title="Ubah strategi" onclick="openStrategi('${zEsc(r.ID)}')">✎</button><div class="sub">${zEsc(r['Pesan Inti'])}</div></td>
     <td>${splitList(r.Lane).map((x) => `<span class="pill">${zEsc(x)}</span>`).join('')}</td>
     <td>${splitList(r.Channel).map((x) => `<span class="pill alt">${zEsc(x)}</span>`).join('')}</td>
     <td style="white-space:nowrap" id="stg-${zEsc(r.ID)}">${mktDate(r.Mulai)}${r.Selesai ? ' – ' + mktDate(r.Selesai) : ' →'} ${String(r.Kalender || '') === 'ya' ? ' <span title="Masuk Kalender Tim">📅</span>' : ''} <button type="button" class="tgl-ubah" title="Ubah tanggal / Kalender Tim (ikut ke Tracker)" onclick="ubahTanggalStrategi('${zEsc(r.ID)}')">✎</button></td>
-    <td>${zEsc(picNama(r.PIC))}</td>
+    <td>${zEsc(picIdList(r.PIC).map((x) => picNama(x)).join(', ') || picNama(r.PIC))}</td>
     <td><select data-id="${zEsc(r.ID)}" onchange="setStrategiStatus(this.dataset.id, this.value)">${MKT_STATUS.map((s) => `<option ${s === r.Status ? 'selected' : ''}>${s}</option>`).join('')}</select></td>
   </tr>`).join('');
 }
@@ -240,7 +240,7 @@ function renderTimeline(rows) {
     const hadir = evs.reduce((t, e) => t + (+e.Hadir || 0), 0), order = evs.reduce((t, e) => t + (+e['Order via Kode'] || 0), 0);
     const dots = evs.map((e) => `<i class="tl-ev" style="left:${pct(hariKe(e['Tanggal Event']))}" title="${zEsc(e['Nama Event'] || '')} · ${mktDate(e['Tanggal Event'])} · hadir ${+e.Hadir || 0}, order ${+e['Order via Kode'] || 0}"></i>`).join('');
     return `<div class="tl-row" onclick="this.classList.toggle('buka')">
-      <div class="tl-nama"><b>${zEsc(r['Nama Strategi'] || '')}</b><span class="sub">${zEsc(picNama(r.PIC))}</span></div>
+      <div class="tl-nama"><b>${zEsc(r['Nama Strategi'] || '')}</b><span class="sub">${zEsc(picIdList(r.PIC).map((x) => picNama(x)).join(', ') || picNama(r.PIC))}</span></div>
       <div class="tl-track">${garisHari}
         <div class="tl-bar ${kelas}${adaS ? '' : ' terbuka'}${telat ? ' telat' : ''}" style="left:${pct(m)};width:max(6px, calc(${pct(s + 1)} - ${pct(m)}))"></div>${dots}
       </div>
@@ -385,8 +385,11 @@ $('m-strategi').querySelectorAll('[data-add]').forEach((b) => b.addEventListener
   if (e.key === 'Enter') { e.preventDefault(); addNewLabel(k); }
 }));
 
-function openStrategi() {
+let sEdit = null;   // id strategi yang sedang diubah (null = baru)
+function openStrategi(editId) {
   if (!mktReady()) return;
+  const r = editId ? M.strategi.find((x) => String(x.ID) === String(editId)) : null;
+  sEdit = r ? r.ID : null;
   $('strategiForm').reset();
   clearErrors($('strategiForm'));
   setMsg($('s-msg'), '', '');
@@ -395,6 +398,17 @@ function openStrategi() {
   sSel.lane.clear(); sSel.channel.clear();
   $('s-mulai').value = todayStr();
   $('s-kalender').checked = true; $('s-tugas').value = ''; $('s-dariTracker').hidden = true;
+  const me = myUid(); picChips('s-pic', me && TIM.some((t) => t.id === me) ? [me] : []);
+  if (r) {
+    $('s-nama').value = r['Nama Strategi'] || ''; $('s-pesan').value = r['Pesan Inti'] || '';
+    $('s-mulai').value = r.Mulai || ''; $('s-selesai').value = r.Selesai || ''; $('s-status').value = r.Status || 'Ide';
+    $('s-kalender').checked = String(r.Kalender || '') === 'ya';
+    splitList(r.Lane).forEach((x) => { if (sOpts.lane.indexOf(x) === -1) sOpts.lane.push(x); sSel.lane.add(x); });
+    splitList(r.Channel).forEach((x) => { if (sOpts.channel.indexOf(x) === -1) sOpts.channel.push(x); sSel.channel.add(x); });
+    picChips('s-pic', picIdList(r.PIC));
+  }
+  $('m-strategi').querySelector('h3').textContent = r ? 'Ubah strategi' : 'Strategi baru';
+  $('s-submit').textContent = r ? 'Simpan perubahan' : 'Simpan strategi';
   renderChips('lane'); renderChips('channel');
   openModal('m-strategi');
 }
@@ -441,7 +455,7 @@ function jadikanStrategi(id) {
   const t = tugasTracker.find((x) => x.id === id); if (!t) return;
   openStrategi();
   $('s-nama').value = t.judul; $('s-mulai').value = t.mulai; $('s-selesai').value = t.deadline !== t.mulai ? t.deadline : '';
-  if (t.pic && t.pic[0]) $('s-pic').value = t.pic[0];
+  picChips('s-pic', t.pic || []);
   $('s-status').value = t.status === 'Jalan' || t.status === 'Review' ? 'Jalan' : 'Ide';
   $('s-kalender').checked = t.kalender !== false; $('s-tugas').value = t.id;
   $('s-dariTracker').hidden = false; $('s-dariTracker').textContent = 'Dari tugas Tracker "' + t.judul + '": lengkapi pesan inti, lane, dan channel. Tugasnya di Tracker ikut tertaut (tidak dobel).';
@@ -454,7 +468,7 @@ $('strategiForm').addEventListener('submit', (e) => {
   clearErrors($('strategiForm'));
   const v = {
     nama: $('s-nama').value.trim(), pesan: $('s-pesan').value.trim(),
-    mulai: $('s-mulai').value, selesai: $('s-selesai').value, pic: $('s-pic').value, status: $('s-status').value
+    mulai: $('s-mulai').value, selesai: $('s-selesai').value, pic: ambilPics('s-pic'), status: $('s-status').value
   };
   let ok = true;
   const bad = (id) => { $(id).classList.add('show'); ok = false; };
@@ -464,11 +478,22 @@ $('strategiForm').addEventListener('submit', (e) => {
   if (!sSel.channel.size) bad('err-s-channel');
   if (!v.mulai) bad('err-s-mulai');
   if (v.selesai && v.mulai && v.selesai < v.mulai) bad('err-s-selesai');
-  if (!v.pic) bad('err-s-pic');
+  if (!v.pic.length) bad('err-s-pic');
   if (!ok) return;
 
   const lane = Array.from(sSel.lane), channel = Array.from(sSel.channel);
   const snap = snapshotForm($('strategiForm'));
+  if (sEdit) {
+    const id = sEdit, r = M.strategi.find((x) => String(x.ID) === String(id)) || {};
+    const payload = { action: 'update_strategi', id, nama: v.nama, pesan: v.pesan, lane, channel, mulai: v.mulai, selesai: v.selesai || '', pic: v.pic, status: v.status, kalender: $('s-kalender').checked };
+    const lama = Object.assign({}, r);
+    enqueueSave({ label: 'Ubah strategi: ' + v.nama, payload, okMsg: 'Strategi "' + v.nama + '" diperbarui (tugas Tracker ikut).',
+      lokal: () => { Object.assign(r, { 'Nama Strategi': v.nama, 'Pesan Inti': v.pesan, Lane: lane.join(', '), Channel: channel.join(', '), Mulai: v.mulai, Selesai: v.selesai || '', PIC: v.pic.join(', '), Status: v.status, Kalender: $('s-kalender').checked ? 'ya' : 'tidak' }); return lama; },
+      balik: (x) => { Object.keys(r).forEach((k) => delete r[k]); Object.assign(r, x); } });
+    sEdit = null; $('strategiForm').reset(); sSel.lane.clear(); sSel.channel.clear();
+    closeModal('m-strategi');
+    return;
+  }
   const tugasId = $('s-tugas').value;
   if (tugasId) { tugasTracker = tugasTracker.filter((t) => t.id !== tugasId); renderDariTracker(); }
   enqueueSave({

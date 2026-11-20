@@ -261,7 +261,7 @@ function mkt_handlePost(data) {
   if (data && data.action === 'sinkron_semua') return zSinkronSemua_();
   // ✕ "bukan untuk Marketing" (siapa pun): tugas Tracker itu tidak ditampilkan lagi di sini
   if (data && data.action === 'tolak_tugas_tracker') return zTolakTugas_(data.id);
-  var known = { add_strategi: 1, update_strategi_status: 1, update_strategi_tanggal: 1, add_hasil_event: 1, update_hasil_event_kegiatan: 1,
+  var known = { add_strategi: 1, update_strategi: 1, update_strategi_status: 1, update_strategi_tanggal: 1, add_hasil_event: 1, update_hasil_event_kegiatan: 1,
     add_seeding: 1, putuskan_seeding: 1, update_seeding: 1, add_kreator: 1, update_kreator: 1, hapus_kreator: 1, atur_label: 1 };
   if (!data || !known[data.action]) return null;
   mkt_ensureTabs_();
@@ -271,6 +271,7 @@ function mkt_handlePost(data) {
     if (data.action === 'add_strategi') return mkt_addStrategi_(data);
     if (data.action === 'update_strategi_status') return mkt_updateStatus_(data);
     if (data.action === 'update_strategi_tanggal') return mkt_updateTanggal_(data);
+    if (data.action === 'update_strategi') return mkt_updateStrategi_(data);
     if (data.action === 'update_hasil_event_kegiatan') return mkt_updateEventKegiatan_(data);
     if (data.action === 'atur_label') return mkt_aturLabel_(data);
     if (data.action === 'add_seeding') return seed_add_(data);
@@ -302,7 +303,8 @@ function mkt_addStrategi_(d) {
     if (!selesai) return { ok: false, error: 'Tanggal selesai tidak valid.' };
     if (selesai < mulai) return { ok: false, error: 'Tanggal selesai tidak boleh sebelum tanggal mulai.' };
   }
-  if (!isKnownPic_(d.pic)) return { ok: false, error: 'PIC tidak dikenali.' };
+  var pics = mkt_pics_(d.pic);
+  if (!pics.length) return { ok: false, error: 'PIC tidak dikenali.' };
   var status = d.status || 'Ide';
   if (MKT_STATUS.indexOf(status) === -1) return { ok: false, error: 'Status tidak dikenali.' };
 
@@ -312,10 +314,39 @@ function mkt_addStrategi_(d) {
 
   var id = 'S' + new Date().getTime().toString(36);
   var sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('strategi');
-  mkt_append_(sheet, [id, nama, lane.join(', '), pesan, channel.join(', '), mulai, selesai, normalizePic_(d.pic), status, new Date(), d.kalender === false ? 'tidak' : 'ya']);
+  mkt_append_(sheet, [id, nama, lane.join(', '), pesan, channel.join(', '), mulai, selesai, pics.join(', '), status, new Date(), d.kalender === false ? 'tidak' : 'ya']);
   return { ok: true, id: id, lane: lane, channel: channel };
 }
 
+// PIC satu atau beberapa: array id/nama, atau teks dipisah koma -> daftar id yang dikenal (urutan dijaga, tanpa dobel)
+function mkt_pics_(v) {
+  return resolvePicIds_(Array.isArray(v) ? v.join(',') : String(v === undefined || v === null ? '' : v));
+}
+// ubah isi strategi (nama, pesan inti, lane, channel, tanggal, PIC, status, Kalender Tim). Hanya kolom yang dikirim yang berubah.
+function mkt_updateStrategi_(d) {
+  var sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('strategi');
+  var last = sheet ? sheet.getLastRow() : 0;
+  if (last < 2) return { ok: false, error: 'Belum ada strategi.' };
+  var ids = sheet.getRange(2, 1, last - 1, 1).getValues(), row = 0;
+  for (var i = 0; i < ids.length; i++) if (String(ids[i][0]) === String(d.id)) { row = i + 2; break; }
+  if (!row) return { ok: false, error: 'Strategi tidak ditemukan.' };
+  var col = function (judul) { return MKT_TABS.strategi.indexOf(judul) + 1; };
+  var set = function (judul, v) { sheet.getRange(row, col(judul)).setValue(mkt_safe_(v)); };
+  var ubah = [];
+  if (d.nama !== undefined) { var nm = mkt_text_(d.nama, 120); if (!nm) return { ok: false, error: 'Nama strategi wajib diisi.' }; set('Nama Strategi', nm); ubah.push('nama'); }
+  if (d.pesan !== undefined) { var ps = mkt_text_(d.pesan, 500); if (!ps) return { ok: false, error: 'Pesan inti wajib diisi.' }; set('Pesan Inti', ps); ubah.push('pesan inti'); }
+  if (d.lane !== undefined) { var ln = mkt_resolveLabels_('lane', Array.isArray(d.lane) ? d.lane : []); if (!ln.length) return { ok: false, error: 'Pilih minimal satu lane.' }; set('Lane', ln.join(', ')); ubah.push('lane'); }
+  if (d.channel !== undefined) { var ch = mkt_resolveLabels_('channel', Array.isArray(d.channel) ? d.channel : []); if (!ch.length) return { ok: false, error: 'Pilih minimal satu channel.' }; set('Channel', ch.join(', ')); ubah.push('channel'); }
+  if (d.pic !== undefined) { var pc = mkt_pics_(d.pic); if (!pc.length) return { ok: false, error: 'PIC tidak dikenali.' }; set('PIC', pc.join(', ')); ubah.push('PIC'); }
+  if (d.status !== undefined) { if (MKT_STATUS.indexOf(d.status) === -1) return { ok: false, error: 'Status tidak dikenali.' }; set('Status', d.status); ubah.push('status'); }
+  if (d.kalender !== undefined) { mkt_ensureTabs_(); set('Kalender', d.kalender === true ? 'ya' : 'tidak'); ubah.push('Kalender Tim'); }
+  if (d.mulai !== undefined || d.selesai !== undefined) {
+    var t = mkt_updateTanggal_({ id: d.id, mulai: d.mulai, selesai: d.selesai });
+    if (!t.ok) return t;
+    ubah.push('tanggal');
+  }
+  return { ok: true, id: d.id, message: 'Strategi diperbarui' + (ubah.length ? ': ' + ubah.join(', ') : '') + '.' };
+}
 // ubah tanggal mulai / selesai strategi (dari web Zerodeo, atau dari Tracker lewat Hub). selesai kosong = belum ditentukan.
 function mkt_updateTanggal_(d) {
   var sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('strategi');
@@ -517,7 +548,7 @@ function seed_add_(d) {
   if (kembar) return { ok: false, error: 'Seeding "' + kembar['Nama Batch'] + '" sudah ada (status ' + kembar['Status'] + '). Tambahkan kreatornya ke batch itu, jangan bikin batch baru.' };
   var kreator = seed_parseKreator_(d.kreator);
   if (kreator.length > SEED_MAKS_KREATOR) return { ok: false, error: 'Maksimal ' + SEED_MAKS_KREATOR + ' kreator per batch.' };
-  var pic = d.pic ? normalizePic_(d.pic) : CURRENT_WHO_.uid;
+  var pic = d.pic && mkt_pics_(d.pic).length ? mkt_pics_(d.pic).join(', ') : (d.pic ? '' : CURRENT_WHO_.uid);
   if (!pic) return { ok: false, error: 'PIC tidak dikenali.' };
   var sampel = seed_parseSampel_(d);
   var platform = seed_platform_(d.platform);
@@ -586,7 +617,7 @@ function seed_update_(d) {
       seed_set_('seeding', b._row, 'Lane', sp.lane); seed_set_('seeding', b._row, 'Qty', sp.qty); pesan.push('varian & jumlah sampel');
     }
     if (d.platform !== undefined) { seed_set_('seeding', b._row, 'Platform', seed_platform_(d.platform)); pesan.push('platform'); }
-    if (d.pic !== undefined) { var pic = normalizePic_(d.pic); if (!pic) return { ok: false, error: 'PIC tidak dikenali.' }; seed_set_('seeding', b._row, 'PIC', pic); pesan.push('PIC ' + picNama_(pic)); }
+    if (d.pic !== undefined) { var picL = mkt_pics_(d.pic); if (!picL.length) return { ok: false, error: 'PIC tidak dikenali.' }; seed_set_('seeding', b._row, 'PIC', picL.join(', ')); pesan.push('PIC ' + picL.map(picNama_).join(', ')); }
     if (d.estimasi !== undefined && !isMarketingOnly_()) { seed_set_('seeding', b._row, 'Estimasi (Rp)', Math.round(Number(d.estimasi)) || ''); pesan.push('estimasi'); }
     if (d.batas !== undefined) { seed_set_('seeding', b._row, 'Batas Posting (hari)', mkt_int_(d.batas) || SEED_BATAS_BAWAAN); pesan.push('batas posting'); }
     if (d.catatan !== undefined) {
