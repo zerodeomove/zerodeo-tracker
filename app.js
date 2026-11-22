@@ -518,6 +518,9 @@ async function load(fresh) {
   }
 }
 
+// Tarik layar ke bawah (tarik.js dari Hub) = sama dengan tombol Refresh, tanpa memuat ulang halaman.
+window.muatUlangData = () => load(true);
+
 function showLoadError() {
   $('tableBody').innerHTML = '<tr><td colspan="10" class="empty-state">Data belum bisa dimuat.</td></tr>';
   $('bodyS').innerHTML = '<tr><td colspan="6" class="empty">Data belum bisa dimuat.</td></tr>';
