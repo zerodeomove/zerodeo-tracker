@@ -32,10 +32,17 @@ function tfBuktiHtml(r) {
   const riw = (transferRiwayat[String(r['ID'] || '')] || []).filter((t) => /^https:\/\/(drive|docs)\.google\.com\//.test(t.bukti || ''));
   return riw.length ? `<div class="tf-bukti-list">Bukti transfer: ${riw.map((t) => `<a href="${zEsc(t.bukti)}" target="_blank" rel="noopener noreferrer">📎 ${zEsc(t.ket)}</a>`).join(' ')}</div>` : '';
 }
+// Baris invoice di bawah nama kegiatan: lihat (penampil di halaman) atau tambah langsung, tanpa membuka Edit.
+function invoiceHtml(r) {
+  if (!backendInvoice || (r['Status'] || '') === 'Dibatalkan') return '';
+  const link = invoiceLink(r), boleh = isDecider() || isOwnRow(r);
+  if (link) return `<div class="tf-bukti-list">Invoice: <a href="${zEsc(link)}" data-judul="Invoice — ${zEsc(r['Item Kegiatan'] || '')}" target="_blank" rel="noopener noreferrer">🧾 lihat</a></div>`;
+  return boleh ? `<div class="tf-bukti-list"><button type="button" class="btn-link" onclick="pilihInvoice(${r['_row']})">📎 Tambah invoice</button></div>` : '';
+}
 function tfInfoHtml(r) {
-  if (!tfSebagian(r)) return tfBuktiHtml(r);
+  if (!tfSebagian(r)) return tfBuktiHtml(r) + invoiceHtml(r);
   const est = Number(r['Estimasi (Rp)']) || 0, pct = est ? Math.min(100, Math.round(tfSudah(r) / est * 100)) : 0;
-  return `<div class="tf-info"><div class="tf-bar"><i style="width:${pct}%"></i></div>Ditransfer <b>${fmtRupiah(tfSudah(r))}</b>${est ? ' dari ' + fmtRupiah(est) + ' · sisa <b>' + fmtRupiah(tfSisa(r)) + '</b>' : ''}</div>` + tfBuktiHtml(r);
+  return `<div class="tf-info"><div class="tf-bar"><i style="width:${pct}%"></i></div>Ditransfer <b>${fmtRupiah(tfSudah(r))}</b>${est ? ' dari ' + fmtRupiah(est) + ' · sisa <b>' + fmtRupiah(tfSisa(r)) + '</b>' : ''}</div>` + tfBuktiHtml(r) + invoiceHtml(r);
 }
 let backendDana = false;
 // Apps Script versi baru mengerti edit / batalkan / pulihkan / edit dana (doGet mengirim edit: true).
@@ -399,7 +406,7 @@ function renderTable() {
     }
     if (!pend.has(rowNo)) aksi += editBtn;
     return `<tr>
-      <td class="item">${zEsc(r['Item Kegiatan'] || '-')}${/^https?:\/\//i.test(r['Nota/Bukti'] || '') ? ` <a class="nota-link" href="${zEsc(r['Nota/Bukti'])}" data-item="${zEsc(r['Item Kegiatan'] || '')}" onclick="return openNota(this)" target="_blank" rel="noopener noreferrer" title="Lihat nota">📎</a>` : ''}${invoiceLink(r) ? ` <a class="nota-link" href="${zEsc(invoiceLink(r))}" data-judul="Invoice — ${zEsc(r['Item Kegiatan'] || '')}" target="_blank" rel="noopener noreferrer" title="Lihat invoice">🧾</a>` : ''}<div class="sub">${r['Tanggal Dicatat'] ? 'dicatat ' + zEsc(fmtDate(r['Tanggal Dicatat'])) : ''}${r['Tanggal Dicatat'] && r['Dana'] ? ' · ' : ''}${r['Dana'] ? 'Dana: ' + zEsc(r['Dana']) : ''}</div>${tfInfoHtml(r)}</td>
+      <td class="item">${zEsc(r['Item Kegiatan'] || '-')}${/^https?:\/\//i.test(r['Nota/Bukti'] || '') ? ` <a class="nota-link" href="${zEsc(r['Nota/Bukti'])}" data-item="${zEsc(r['Item Kegiatan'] || '')}" onclick="return openNota(this)" target="_blank" rel="noopener noreferrer" title="Lihat nota">📎</a>` : ''}<div class="sub">${r['Tanggal Dicatat'] ? 'dicatat ' + zEsc(fmtDate(r['Tanggal Dicatat'])) : ''}${r['Tanggal Dicatat'] && r['Dana'] ? ' · ' : ''}${r['Dana'] ? 'Dana: ' + zEsc(r['Dana']) : ''}</div>${tfInfoHtml(r)}</td>
       <td data-label="Kategori">${zEsc(r['Kategori'] || '-')}</td>
       <td data-label="Tipe">${zEsc(r['Tipe'] || '-')}</td>
       <td data-label="PIC">${zEsc(picNama(r['PIC']) || '-')}</td>
@@ -1110,11 +1117,13 @@ function paintInvoiceEdit(r) {
   box.style.display = '';
   box.innerHTML = (link ? `<a href="${zEsc(link)}" target="_blank" rel="noopener" data-judul="Invoice — ${zEsc(r['Item Kegiatan'] || '')}">🧾 Lihat invoice</a>` : '<span class="muted">Belum ada invoice</span>') +
     `<button type="button" class="btn-link" id="ed-inv-btn">${link ? 'Ganti invoice' : '📎 Tambah invoice'}</button>`;
-  $('ed-inv-btn').addEventListener('click', () => { $('ed-inv-file').value = ''; $('ed-inv-file').click(); });
+  $('ed-inv-btn').addEventListener('click', () => pilihInvoice(editRow));
 }
+let invoiceRow = null;
+function pilihInvoice(row) { invoiceRow = row; $('ed-inv-file').value = ''; $('ed-inv-file').click(); }
 $('ed-inv-file').addEventListener('change', async () => {
   const file = $('ed-inv-file').files[0];
-  const row = editRow;
+  const row = invoiceRow;
   if (!file || !row) return;
   const r = kegiatanData.find((x) => x['_row'] === row);
   let f;
