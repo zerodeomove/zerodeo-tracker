@@ -1117,7 +1117,28 @@ function invoiceList(r) {
   }).filter(Boolean);
 }
 function invoiceLinks(r, daftar) {
-  return daftar.map((x) => `<a href="${zEsc(x.url)}" data-judul="Invoice ${zEsc(x.ket)} — ${zEsc(r['Item Kegiatan'] || '')}" target="_blank" rel="noopener noreferrer">🧾 ${zEsc(x.ket)}</a>`).join(' ');
+  const boleh = isDecider() || isOwnRow(r);
+  return daftar.map((x, i) => `<span class="inv-item"><a href="${zEsc(x.url)}" data-judul="Invoice ${zEsc(x.ket)} — ${zEsc(r['Item Kegiatan'] || '')}" target="_blank" rel="noopener noreferrer">🧾 ${zEsc(x.ket)}</a>` +
+    (boleh ? `<button type="button" class="inv-mini" title="Ganti keterangan" aria-label="Ganti keterangan invoice ${zEsc(x.ket)}" onclick="aturInvoice(${r['_row']},${i},false)">✎</button><button type="button" class="inv-mini" title="Hapus invoice" aria-label="Hapus invoice ${zEsc(x.ket)}" onclick="aturInvoice(${r['_row']},${i},true)">🗑</button>` : '') + '</span>').join(' ');
+}
+// ✎ ganti keterangan (mis. DP salah, harusnya Pelunasan) / 🗑 hapus satu invoice dari daftar (filenya tetap di Drive).
+function aturInvoice(row, i, hapus) {
+  const r = kegiatanData.find((x) => x['_row'] === row);
+  const x = r && invoiceList(r)[i];
+  if (!x) return;
+  const nama = namaBaris(row) || 'Kegiatan';
+  let payload;
+  if (hapus) {
+    if (!window.confirm('Hapus invoice "' + x.ket + '" dari ' + nama + '?')) return;
+    payload = { action: 'ubah_invoice', row: row, url: x.url, hapus: true };
+  } else {
+    const baru = window.prompt('Keterangan baru untuk invoice "' + x.ket + '":', x.ket);
+    if (baru === null || !baru.trim() || baru.trim() === x.ket) return;
+    payload = { action: 'ubah_invoice', row: row, url: x.url, keterangan_baru: baru.trim() };
+  }
+  enqueueSave({ label: (hapus ? 'Hapus invoice ' : 'Ubah invoice ') + x.ket + ': ' + nama, payload: payload, rows: [row],
+    okMsg: hapus ? 'Invoice ' + x.ket + ' dihapus: ' + nama + '.' : 'Invoice diganti jadi ' + payload.keterangan_baru + ': ' + nama + '.' });
+  closeModal('m-edit');
 }
 
 function paintInvoiceEdit(r) {

@@ -579,3 +579,7 @@ tbody tr { transition: background-color .15s ease; }
 .inv-row a { color: var(--text); font-weight: 600; text-decoration: none; }
 .inv-row .muted { color: var(--text-muted); }
 .btn-link { border: 0; background: none; padding: 0; color: var(--accent, #2f6f5e); font: inherit; font-weight: 600; cursor: pointer; text-decoration: underline; }
+
+.inv-item { white-space: nowrap; }
+.inv-mini { border: 0; background: none; padding: 0 2px; margin-left: 2px; font-size: 12px; cursor: pointer; opacity: .55; }
+.inv-mini:hover { opacity: 1; }

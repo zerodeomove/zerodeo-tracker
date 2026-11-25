@@ -991,6 +991,9 @@ function routePost_(data) {
     if (data.action === 'invoice_kegiatan') {
       return handleInvoiceKegiatan(data);
     }
+    if (data.action === 'ubah_invoice') {
+      return handleUbahInvoice(data);
+    }
     return handleAddKegiatan(data);
   }
 }
@@ -1650,6 +1653,42 @@ function handleInvoiceKegiatan(data) {
     daftar.push({ ket: ket, url: link });
     sheet.getRange(row, COL.INVOICE).setValue(daftar.map(function (x) { return x.ket + ': ' + x.url; }).join('\n'));
     return jsonResponse({ ok: true, row: row, invoice: link, jumlah: daftar.length, pesan: '📎 Invoice ' + ket + ' "' + item + '" ' + (diganti ? 'diganti' : 'tersimpan') + (daftar.length > 1 ? ' (' + daftar.length + ' invoice)' : '') });
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+// Ganti keterangan (mis. DP -> Pelunasan) atau hapus satu invoice. Invoice dipilih lewat url (dari web) atau keterangan lama (dari bot).
+// Hak sama dengan menambah invoice: PIC kegiatan, approver, atau admin. File di Drive tidak dihapus (tetap ada sebagai arsip).
+function handleUbahInvoice(data) {
+  var row = Number(data.row);
+  var lock = LockService.getScriptLock();
+  if (!lock.tryLock(15000)) return jsonResponse({ ok: false, error: 'Server sedang sibuk, coba lagi sebentar.' });
+  try {
+    var ld = loadEditableRow_(row);
+    if (ld.error) return jsonResponse({ ok: false, error: ld.error });
+    var sheet = ld.sheet;
+    if (!CURRENT_WHO_) return jsonResponse({ ok: false, error: 'Masuk lewat Hub dulu supaya kami tahu siapa kamu.' });
+    if (!whoCanDecide_() && ownerIds_(sheet.getRange(row, COL.PIC).getValue()).indexOf(CURRENT_WHO_.uid) === -1) {
+      return jsonResponse({ ok: false, error: 'Hanya PIC kegiatan ini, approver, atau admin yang boleh mengubah invoice.' });
+    }
+    var daftar = sheet.getLastColumn() >= COL.INVOICE ? invoiceList_(sheet.getRange(row, COL.INVOICE).getValue()) : [];
+    var cari = String(data.url || ''), lama = String(data.keterangan || '').trim().toLowerCase();
+    var i = -1;
+    daftar.forEach(function (x, k) { if (i < 0 && ((cari && x.url === cari) || (!cari && lama && x.ket.toLowerCase() === lama))) i = k; });
+    if (i < 0) return jsonResponse({ ok: false, error: 'Invoice itu tidak ditemukan di kegiatan ini.' });
+    var item = String(sheet.getRange(row, COL.ITEM).getValue() || ''), ketLama = daftar[i].ket, pesan;
+    if (data.hapus === true) {
+      daftar.splice(i, 1);
+      pesan = '🗑 Invoice ' + ketLama + ' "' + item + '" dihapus dari daftar';
+    } else {
+      var baru = invoiceKet_(data.keterangan_baru, '');
+      if (!baru) return jsonResponse({ ok: false, error: 'Keterangan baru belum diisi.' });
+      daftar[i].ket = baru;
+      pesan = '✎ Invoice ' + ketLama + ' → ' + baru + ' ("' + item + '")';
+    }
+    sheet.getRange(row, COL.INVOICE).setValue(daftar.map(function (x) { return x.ket + ': ' + x.url; }).join('\n'));
+    return jsonResponse({ ok: true, row: row, pesan: pesan });
   } finally {
     lock.releaseLock();
   }

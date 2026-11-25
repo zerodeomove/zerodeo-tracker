@@ -575,7 +575,7 @@ function botFotoNota_(a) {
 function botNative_(a) {
   var baris = function () { var r = botBarisKegiatan_(a.id); return r ? r : null; };
   var j = String(a.jenis || '');
-  var perluBaris = { putuskan: 'update_status', tandai_transfer: 'mark_transferred', tempel_bukti: 'attach_transfer_proof', lengkapi: 'complete_kegiatan', tempel_invoice: 'invoice_kegiatan', ubah_kegiatan: 'edit_kegiatan', batalkan_kegiatan: 'cancel_kegiatan', pulihkan_kegiatan: 'restore_kegiatan' };
+  var perluBaris = { putuskan: 'update_status', tandai_transfer: 'mark_transferred', tempel_bukti: 'attach_transfer_proof', lengkapi: 'complete_kegiatan', tempel_invoice: 'invoice_kegiatan', atur_invoice: 'ubah_invoice', ubah_kegiatan: 'edit_kegiatan', batalkan_kegiatan: 'cancel_kegiatan', pulihkan_kegiatan: 'restore_kegiatan' };
   if (perluBaris[j]) {
     var row = baris();
     if (!row) return { error: 'Kegiatan dengan ID "' + String(a.id || '') + '" tidak ditemukan.' };
@@ -586,6 +586,7 @@ function botNative_(a) {
     if (j === 'tempel_bukti') return foto.photoBase64 ? Object.assign({ action: 'attach_transfer_proof', row: row, keterangan: a.keterangan || '', ganti: a.ganti === true }, foto) : { error: 'Foto / PDF bukti transfernya tidak ikut. Kirim fotonya lagi bersama perintahnya.' };
     if (j === 'tandai_transfer') return Object.assign({ action: 'mark_transferred', row: row, nominalTransfer: a.nominal, picTransaksi: a.pic_transaksi, tglTransfer: a.tanggal || '', keterangan: a.keterangan || '' }, foto);
     if (j === 'lengkapi') return Object.assign({ action: 'complete_kegiatan', row: row, actual: a.actual }, foto);
+    if (j === 'atur_invoice') return { action: 'ubah_invoice', row: row, keterangan: a.keterangan || '', keterangan_baru: a.keterangan_baru || '', hapus: a.hapus === true };
     if (j === 'tempel_invoice') return foto.photoBase64 ? Object.assign({ action: 'invoice_kegiatan', row: row, ganti: a.ganti === true, keterangan: a.keterangan || '' }, foto) : { error: 'Foto / PDF invoicenya tidak ikut. Kirim fotonya lagi bersama perintahnya.' };
     if (j === 'batalkan_kegiatan') return { action: 'cancel_kegiatan', row: row, alasan: a.alasan || '' };
     if (j === 'pulihkan_kegiatan') return { action: 'restore_kegiatan', row: row };
