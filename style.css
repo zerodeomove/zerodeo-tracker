@@ -260,6 +260,15 @@ h2.sec:first-child { margin-top: 0; }
   display: flex; flex-direction: column; gap: 12px;
 }
 .modal-box.wide { max-width: 680px; }
+.modal-box { position: relative; }
+.modal-x {
+  position: sticky; top: -12px; align-self: flex-end; z-index: 3; flex: none;
+  width: 34px; height: 34px; margin: -10px -10px -46px 0; padding: 0; border: 0; border-radius: 50%;
+  background: var(--surface); color: var(--text-muted); font-size: 17px; line-height: 1; cursor: pointer;
+  box-shadow: 0 1px 4px rgba(0,0,0,.12);
+}
+.modal-x:hover { color: var(--text); background: var(--bg); }
+.modal-box > .modal-x + h3, .modal-box > .modal-x + * { padding-right: 34px; }
 .modal-box h3 { margin: 0; font-size: 16px; font-weight: 600; }
 .modal-box label.check {
   flex-direction: row; align-items: flex-start; gap: 10px; font-weight: 400; cursor: pointer;
@@ -564,3 +573,9 @@ tbody tr { transition: background-color .15s ease; }
 .lbl-add { display: flex; gap: 6px; margin-top: 8px; }
 .lbl-add input { flex: 1; min-width: 0; }
 .badge.sd-Dibatalkan { background: #EEEDE8; color: var(--text-muted); text-decoration: line-through; }
+
+/* invoice di popup Edit */
+.inv-row { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; font-size: 13px; padding: 8px 10px; border: 1px dashed var(--border); border-radius: 8px; }
+.inv-row a { color: var(--text); font-weight: 600; text-decoration: none; }
+.inv-row .muted { color: var(--text-muted); }
+.btn-link { border: 0; background: none; padding: 0; color: var(--accent, #2f6f5e); font: inherit; font-weight: 600; cursor: pointer; text-decoration: underline; }

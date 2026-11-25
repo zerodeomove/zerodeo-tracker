@@ -377,7 +377,7 @@ function botBaca_(uid, peran, q) {
       var sebagian = tf > 0 && ['Ditransfer', 'Selesai', 'Dibatalkan'].indexOf(String(r['Status'])) === -1;
       var o = { id: r['ID'], item: r['Item Kegiatan'], project: r['Project/Brand'] || '', pic: nama(r['PIC']), status: sebagian ? r['Status'] + ' · ditransfer sebagian' : r['Status'],
         deadline: r['Deadline Kegiatan'] || '', estimasi: est, actual: Number(r['Actual (Rp)']) || 0,
-        transfer: tf, nota: adaNota(r), dana: r['Dana'] || '', kategori: r['Kategori'] || '', catatan: String(r['Catatan'] || '').slice(0, 200) };
+        transfer: tf, nota: adaNota(r), invoice: /^https?:\/\//i.test(String(r['Invoice'] || '')) ? String(r['Invoice']) : '', dana: r['Dana'] || '', kategori: r['Kategori'] || '', catatan: String(r['Catatan'] || '').slice(0, 200) };
       if (sebagian) o.sisa_transfer = Math.max(0, est - tf);
       if (riwayatTf[String(r['ID'])]) o.riwayat_transfer = riwayatTf[String(r['ID'])].map(function (t) { return t.ket + ' ' + t.tgl + ' Rp' + t.nominal + (t.bukti ? ' (bukti: ' + t.bukti + ')' : ' (tanpa bukti)'); });
       return o;
@@ -392,10 +392,22 @@ function botBaca_(uid, peran, q) {
     var bulan = /^\d{4}-\d{2}$/.test(String(q.bulan || '')) ? String(q.bulan) : Utilities.formatDate(new Date(), tz, 'yyyy-MM');
     var riw = {};
     try { riw = getTransferData_(); } catch (err) { riw = {}; }
-    var keluar = [], rk = { bulan: bulan, rencana: 0, ditransfer: 0, sisa_pelunasan: 0, menunggu_approve: 0, belum_nota: 0 };
+    var keluar = [], daftar = [], rk = { bulan: bulan, rencana: 0, ditransfer: 0, sisa_pelunasan: 0, menunggu_approve: 0, belum_nota: 0 };
+    var link = function (v) { return /^https?:\/\//i.test(String(v || '')) ? String(v) : ''; };
     kegiatan().forEach(function (r) {
       var st = String(r['Status'] || ''), id = String(r['ID'] || '');
       if (st === 'Dibatalkan') return;
+      // Daftar kegiatan untuk tab Kegiatan di Budget WBA (hanya dibaca; detail dan perubahan tetap di Zerodeo):
+      // yang dicatat bulan ini, plus yang masih berjalan dari bulan sebelumnya.
+      var dicatat = String(r['Tanggal Dicatat'] || '').slice(0, 10);
+      if (dicatat.slice(0, 7) === bulan || (st !== 'Selesai' && st !== 'Ditolak' && dicatat.slice(0, 7) < bulan)) {
+        var tfList = riw[id] || [];
+        daftar.push({ id: id, item: String(r['Item Kegiatan'] || ''), kategori: String(r['Kategori'] || ''), pic: nama(r['PIC']), status: st,
+          dicatat: dicatat, deadline: String(r['Deadline Kegiatan'] || '').slice(0, 10), estimasi: Number(r['Estimasi (Rp)']) || 0,
+          ditransfer: Number(r['Nominal Transfer (Rp)']) || 0, actual: Number(r['Actual (Rp)']) || 0, dana: String(r['Dana'] || ''),
+          invoice: link(r['Invoice']), nota: link(r['Nota/Bukti']),
+          transfer: tfList.map(function (t) { return { ket: t.ket, tgl: t.tgl, nominal: t.nominal, bukti: link(t.bukti) }; }) });
+      }
       var est = Number(r['Estimasi (Rp)']) || 0, tf = Number(r['Nominal Transfer (Rp)']) || 0;
       if (st !== 'Ditolak' && String(r['Tanggal Dicatat'] || '').slice(0, 7) === bulan) rk.rencana += est;
       if (st === 'Diajukan') rk.menunggu_approve++;
@@ -403,8 +415,8 @@ function botBaca_(uid, peran, q) {
       if (st === 'Selesai' && !adaNota(r)) rk.belum_nota++;
       if (r['Dana']) return;   // dibayar dari dana bulk: uangnya dihitung lewat dana (di bawah)
       var list = riw[id] || [];
-      if (list.length) list.forEach(function (t, i) { keluar.push({ kunci: 'zd:t:' + id + ':' + i, item: String(r['Item Kegiatan'] || ''), ket: t.ket, tgl: t.tgl, nominal: t.nominal }); });
-      else if (tf > 0 && r['Tgl Transfer']) keluar.push({ kunci: 'zd:k:' + id, item: String(r['Item Kegiatan'] || ''), ket: 'Lunas', tgl: String(r['Tgl Transfer']).slice(0, 10), nominal: tf });
+      if (list.length) list.forEach(function (t, i) { keluar.push({ kunci: 'zd:t:' + id + ':' + i, kegiatan_id: id, item: String(r['Item Kegiatan'] || ''), ket: t.ket, tgl: t.tgl, nominal: t.nominal, bukti: link(t.bukti) }); });
+      else if (tf > 0 && r['Tgl Transfer']) keluar.push({ kunci: 'zd:k:' + id, kegiatan_id: id, item: String(r['Item Kegiatan'] || ''), ket: 'Lunas', tgl: String(r['Tgl Transfer']).slice(0, 10), nominal: tf });
     });
     try {
       readDana_().forEach(function (d) {
@@ -414,7 +426,8 @@ function botBaca_(uid, peran, q) {
     } catch (err) { /* tab dana belum ada */ }
     keluar.forEach(function (t) { if (String(t.tgl).slice(0, 7) === bulan) rk.ditransfer += t.nominal; });
     keluar.sort(function (a, b) { return String(b.tgl).localeCompare(String(a.tgl)); });
-    return { rekap: rk, keluar: keluar };
+    daftar.sort(function (a, b) { return String(b.dicatat).localeCompare(String(a.dicatat)); });
+    return { rekap: rk, keluar: keluar, kegiatan: daftar };
   }
   if (jenis === 'strategi') {
     var st = mkt_readTab_('strategi').filter(function (r) {
@@ -562,7 +575,7 @@ function botFotoNota_(a) {
 function botNative_(a) {
   var baris = function () { var r = botBarisKegiatan_(a.id); return r ? r : null; };
   var j = String(a.jenis || '');
-  var perluBaris = { putuskan: 'update_status', tandai_transfer: 'mark_transferred', tempel_bukti: 'attach_transfer_proof', lengkapi: 'complete_kegiatan', ubah_kegiatan: 'edit_kegiatan', batalkan_kegiatan: 'cancel_kegiatan', pulihkan_kegiatan: 'restore_kegiatan' };
+  var perluBaris = { putuskan: 'update_status', tandai_transfer: 'mark_transferred', tempel_bukti: 'attach_transfer_proof', lengkapi: 'complete_kegiatan', tempel_invoice: 'invoice_kegiatan', ubah_kegiatan: 'edit_kegiatan', batalkan_kegiatan: 'cancel_kegiatan', pulihkan_kegiatan: 'restore_kegiatan' };
   if (perluBaris[j]) {
     var row = baris();
     if (!row) return { error: 'Kegiatan dengan ID "' + String(a.id || '') + '" tidak ditemukan.' };
@@ -573,6 +586,7 @@ function botNative_(a) {
     if (j === 'tempel_bukti') return foto.photoBase64 ? Object.assign({ action: 'attach_transfer_proof', row: row, keterangan: a.keterangan || '', ganti: a.ganti === true }, foto) : { error: 'Foto / PDF bukti transfernya tidak ikut. Kirim fotonya lagi bersama perintahnya.' };
     if (j === 'tandai_transfer') return Object.assign({ action: 'mark_transferred', row: row, nominalTransfer: a.nominal, picTransaksi: a.pic_transaksi, tglTransfer: a.tanggal || '', keterangan: a.keterangan || '' }, foto);
     if (j === 'lengkapi') return Object.assign({ action: 'complete_kegiatan', row: row, actual: a.actual }, foto);
+    if (j === 'tempel_invoice') return foto.photoBase64 ? Object.assign({ action: 'invoice_kegiatan', row: row, ganti: a.ganti === true }, foto) : { error: 'Foto / PDF invoicenya tidak ikut. Kirim fotonya lagi bersama perintahnya.' };
     if (j === 'batalkan_kegiatan') return { action: 'cancel_kegiatan', row: row, alasan: a.alasan || '' };
     if (j === 'pulihkan_kegiatan') return { action: 'restore_kegiatan', row: row };
     var ed = { action: 'edit_kegiatan', row: row };
@@ -589,6 +603,10 @@ function botNative_(a) {
     if (a.jalur && ['Fixed', 'Pengajuan'].indexOf(a.jalur) === -1) return { error: 'Jalur harus Fixed atau Pengajuan.' };
     var baru = { action: 'add_kegiatan', item: a.item, kategori: a.kategori, tipe: a.tipe, jalur: a.jalur || 'Pengajuan', pic: a.pic, estimasi: a.estimasi, deadline: a.deadline || '', status: st };
     if (a.dana) baru.dana = a.dana;
+    // foto/PDF invoice / penawaran yang dikirim di Telegram ikut tersimpan (sama seperti lampiran di form web)
+    var fInv = botFotoNota_(a);
+    if (fInv.error) return fInv;
+    if (fInv.photoBase64) { baru.invoiceBase64 = fInv.photoBase64; baru.invoiceMime = fInv.photoMime; }
     return baru;
   }
   if (j === 'strategi_baru') return { action: 'add_strategi', nama: a.nama, pesan: a.pesan, lane: a.lane || [], channel: a.channel || [], mulai: a.mulai, selesai: a.selesai || '', pic: a.pic, status: a.status || 'Ide', kalender: a.kalender !== false };
@@ -683,6 +701,10 @@ function kabarSesudah_(data, out) {
         var info = { jenis: 'kegiatan', id: String(v[COL.ID - 1] || ''), judul: String(v[COL.ITEM - 1] || '').slice(0, 120), project: String(v[COL.PROJECT - 1] || '').slice(0, 40),
           estimasi: Number(v[COL.ESTIMASI - 1]) || 0, oleh: picNama_(oleh), pic: owners.map(picNama_).join(', ') };
         if (!info.id) return;
+        if (a === 'add_kegiatan' && st === 'Diajukan') {
+          var inv = sh.getLastColumn() >= COL.INVOICE ? String(sh.getRange(r, COL.INVOICE).getValue() || '') : '';
+          if (/^https:\/\/(drive|docs)\.google\.com\//i.test(inv)) info.invoice = inv;   // tombol "Lihat invoice" di Telegram
+        }
         if (a === 'add_kegiatan' && st === 'Diajukan') { info.lagi = !!data.row; kirim.push({ kabar: 'perlu_acc', ke: zDeciders_(owners), data: info }); }
         if (a === 'update_status') { info.status = String(data.status || ''); info.alasan = String(data.alasan || '').slice(0, 200); kirim.push({ kabar: 'diputuskan', ke: owners, data: info }); }
         if (a === 'mark_transferred') { info.ket = String(res.keterangan || ''); info.nominal = Number(data.nominalTransfer) || 0; info.sebagian = !!res.sebagian; kirim.push({ kabar: 'ditransfer', ke: owners, data: info }); }

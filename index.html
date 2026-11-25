@@ -309,6 +309,10 @@
       <label>Deadline kegiatan (opsional)
         <input type="date" id="k-deadline"></label>
 
+      <label id="k-inv-wrap">📎 Invoice / penawaran <span class="opt">(opsional — foto atau PDF, biar approver bisa lihat)</span>
+        <input type="file" id="k-inv" accept="image/*,application/pdf">
+        <span class="hint" id="k-inv-info"></span></label>
+
       <div class="stack" id="k-arsip-box" style="display:none">
         <div class="hint">Dicatat langsung berstatus <b>Selesai</b>. Yang wajib hanya Actual.</div>
         <label>Actual (Rp)
@@ -352,6 +356,8 @@
   <div class="modal-box">
     <h3>Edit kegiatan</h3>
     <div class="hint" id="ed-sub"></div>
+    <div class="inv-row" id="ed-inv"></div>
+    <input type="file" id="ed-inv-file" accept="image/*,application/pdf" hidden>
     <form id="editForm" novalidate>
       <div class="estack" id="ed-fields">
         <label>Item kegiatan
@@ -769,5 +775,6 @@
 <!-- Winwin: asisten Pinggiran (dimuat dari Hub; login dikenali dari token Zerodeo yang dibuat Hub) -->
 <script src="https://hub.pinggiran.workers.dev/asisten.js" data-app="Zerodeo" data-sesi-app="zerodeo" data-sesi-key="zerodeo_hub_token" data-naik="64" defer></script>
 <script src="https://hub.pinggiran.workers.dev/tarik.js" defer></script>
+<script src="https://hub.pinggiran.workers.dev/lihat.js" defer></script>
 </body>
 </html>

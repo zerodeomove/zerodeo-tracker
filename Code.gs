@@ -27,7 +27,7 @@
 // Penanda versi kode. Ubah setiap kali Code.gs diedit; tampil di dashboard (baris "Terakhir ambil data")
 // supaya kelihatan versi mana yang sebenarnya melayani dashboard (beda dengan isi editor kalau
 // belum Deploy -> New version).
-var KODE_VERSI = '2026-11-19 lane';
+var KODE_VERSI = '2026-11-25 invoice';
 
 var HEADER_ROW = 4;
 // BUKAN batas jumlah kegiatan. Ini hanya sampai baris mana template di Sheet disiapkan
@@ -58,7 +58,7 @@ var COL = {
   NO: 1, TGL_DICATAT: 2, DEADLINE: 3, PROJECT: 4, ITEM: 5, KATEGORI: 6, TIPE: 7,
   JALUR: 8, PIC: 9, ESTIMASI: 10, STATUS: 11, PIC_TRANSAKSI: 12,
   NOMINAL_TRANSFER: 13, TGL_TRANSFER: 14, ACTUAL: 15, SELISIH: 16, NOTA: 17, CATATAN: 18,
-  DANA: 19, ID: 20
+  DANA: 19, ID: 20, INVOICE: 21
 };
 
 var NOTA_FOLDER_NAME = 'Zerodeo - Nota Bukti';
@@ -276,6 +276,16 @@ function ensureIdColumn_(sheet) {
     .setFontWeight('bold').setFontColor('#FFFFFF').setBackground('#1F4E5F')
     .setHorizontalAlignment('center').setVerticalAlignment('middle').setWrap(true);
   sheet.setColumnWidth(COL.ID, 90);
+}
+
+// Kolom Invoice (penawaran / invoice dari vendor saat pengajuan, sama seperti di Budget WBA). Dibuat otomatis kalau belum ada.
+function ensureInvoiceColumn_(sheet) {
+  var cell = sheet.getRange(HEADER_ROW, COL.INVOICE);
+  if (String(cell.getValue() || '').trim() !== '') return;
+  cell.setValue('Invoice')
+    .setFontWeight('bold').setFontColor('#FFFFFF').setBackground('#1F4E5F')
+    .setHorizontalAlignment('center').setVerticalAlignment('middle').setWrap(true);
+  sheet.setColumnWidth(COL.INVOICE, 120);
 }
 
 // Mengisi ID untuk baris berisi item yang belum punya ID. Mengembalikan jumlah ID yang dibuat.
@@ -597,7 +607,7 @@ function buildKegiatanSheet(ss) {
   // Urutan harus sama dengan COL di atas.
   var headers = ['No', 'Tanggal Dicatat', 'Deadline Kegiatan', 'Project/Brand', 'Item Kegiatan',
                   'Kategori', 'Tipe', 'Jalur', 'PIC', 'Estimasi (Rp)', 'Status', 'PIC Transaksi',
-                  'Nominal Transfer (Rp)', 'Tgl Transfer', 'Actual (Rp)', 'Selisih (Rp)', 'Nota/Bukti', 'Catatan', 'Dana', 'ID'];
+                  'Nominal Transfer (Rp)', 'Tgl Transfer', 'Actual (Rp)', 'Selisih (Rp)', 'Nota/Bukti', 'Catatan', 'Dana', 'ID', 'Invoice'];
   sheet.getRange(HEADER_ROW, 1, 1, headers.length).setValues([headers]);
   styleHeaderRow(sheet, HEADER_ROW, headers.length);
 
@@ -862,6 +872,7 @@ function buildPayload_() {
   payload.reimburse = true;   // penanda: backend ini mengerti reimburse_dana
   payload.fotoBatch = true;   // penanda: Isi Actual sekaligus menerima foto/PDF per baris
   payload.fotoNota = true;   // penanda: backend ini menerima photoBase64 di data lama dan edit
+  payload.invoice = true;   // penanda: backend ini menyimpan invoice / penawaran (kolom Invoice)
   payload.edit = true;   // penanda: backend ini mengerti edit / batalkan / pulihkan / edit dana
   var m = mkt_getData();
   payload.strategi = m.strategi;
@@ -967,6 +978,9 @@ function routePost_(data) {
     if (data.action === 'reimburse_dana') {
       return handleReimburseDana(data);
     }
+    if (data.action === 'invoice_kegiatan') {
+      return handleInvoiceKegiatan(data);
+    }
     return handleAddKegiatan(data);
   }
 }
@@ -1060,7 +1074,18 @@ function handleAddKegiatan(data) {
     ensureIdColumn_(sheet);
     sheet.getRange(targetRow, COL.ID).setValue(newKegiatanId_());
 
-    return jsonResponse({ ok: true, row: targetRow, nota: (arsip && data.photoBase64) ? nota : undefined });
+    // Invoice / penawaran (opsional): gagal unggah tidak menggagalkan pengajuan.
+    var invoice = '', invoiceGagal = '';
+    if (data.invoiceBase64) {
+      try {
+        invoice = saveNotaPhoto_(vals[COL.ITEM], data.invoiceBase64, data.invoiceMime, 'Invoice');
+        ensureInvoiceColumn_(sheet);
+        sheet.getRange(targetRow, COL.INVOICE).setValue(invoice);
+      } catch (e) { invoiceGagal = String(e.message || e); }
+    }
+
+    return jsonResponse({ ok: true, row: targetRow, nota: (arsip && data.photoBase64) ? nota : undefined,
+      invoice: invoice || undefined, invoice_gagal: invoiceGagal || undefined });
   } finally {
     lock.releaseLock();
   }
@@ -1102,7 +1127,7 @@ function handleUpdateStatus(data) {
 
 // Simpan foto nota (base64) ke folder Drive NOTA_FOLDER_NAME (dibuat otomatis), bisa dilihat
 // siapa pun yang punya link. Return URL file.
-function saveNotaPhoto_(itemName, base64, mime) {
+function saveNotaPhoto_(itemName, base64, mime, awalan) {
   var folder;
   var folderId = String(PropertiesService.getScriptProperties().getProperty(NOTA_FOLDER_ID_KEY) || NOTA_FOLDER_ID || '').trim();
   if (folderId) {
@@ -1119,7 +1144,7 @@ function saveNotaPhoto_(itemName, base64, mime) {
   mime = isPdf ? 'application/pdf' : 'image/jpeg';   // hanya foto (JPEG) atau PDF
   var safeName = String(itemName || 'kegiatan').replace(/[\\\/:*?"<>|]/g, '-');
   var stamp = Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'yyyyMMdd-HHmmss');
-  var blob = Utilities.newBlob(Utilities.base64Decode(base64), mime, 'Nota - ' + safeName + ' - ' + stamp + (isPdf ? '.pdf' : '.jpg'));
+  var blob = Utilities.newBlob(Utilities.base64Decode(base64), mime, (awalan || 'Nota') + ' - ' + safeName + ' - ' + stamp + (isPdf ? '.pdf' : '.jpg'));
   var file = folder.createFile(blob);
   file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
   return file.getUrl();
@@ -1578,6 +1603,34 @@ function handleEditKegiatan(data) {
     appendCatatan_(sheet, row, 'Diedit ' + stampNow_() + ': ' + parts.join('; '));
     return jsonResponse({ ok: true, row: row, changed: writes.length, nota: data.photoBase64 ? url : undefined,
       foto: data.photoBase64 ? ('diterima ' + Math.round(String(data.photoBase64).length / 1024) + ' KB, ' + (url ? 'tersimpan' : 'TIDAK tersimpan')) : undefined });
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+// Tempel / ganti invoice kegiatan yang sudah ada (status apa pun kecuali Dibatalkan):
+// PIC kegiatan, approver, atau admin. Sama seperti "Tambah invoice" di Budget WBA.
+function handleInvoiceKegiatan(data) {
+  var row = Number(data.row);
+  if (!data.photoBase64) return jsonResponse({ ok: false, error: 'Foto / PDF invoicenya tidak ikut. Kirim lagi filenya.' });
+  var lock = LockService.getScriptLock();
+  if (!lock.tryLock(15000)) return jsonResponse({ ok: false, error: 'Server sedang sibuk, coba lagi sebentar.' });
+  try {
+    var ld = loadEditableRow_(row);
+    if (ld.error) return jsonResponse({ ok: false, error: ld.error });
+    var sheet = ld.sheet;
+    if (ld.status === STATUS_BATAL) return jsonResponse({ ok: false, error: 'Kegiatan ini sudah dibatalkan.' });
+    if (!CURRENT_WHO_) return jsonResponse({ ok: false, error: 'Masuk lewat Hub dulu supaya kami tahu siapa kamu.' });
+    if (!whoCanDecide_() && ownerIds_(sheet.getRange(row, COL.PIC).getValue()).indexOf(CURRENT_WHO_.uid) === -1) {
+      return jsonResponse({ ok: false, error: 'Hanya PIC kegiatan ini, approver, atau admin yang boleh menambah invoice.' });
+    }
+    ensureInvoiceColumn_(sheet);
+    var ada = String(sheet.getRange(row, COL.INVOICE).getValue() || '').trim() !== '';
+    if (ada && data.ganti !== true) return jsonResponse({ ok: false, error: 'Kegiatan ini sudah punya invoice. Kalau mau diganti, bilang "ganti invoicenya".' });
+    var item = String(sheet.getRange(row, COL.ITEM).getValue() || '');
+    var link = saveNotaPhoto_(item, data.photoBase64, data.photoMime, 'Invoice');
+    sheet.getRange(row, COL.INVOICE).setValue(link);
+    return jsonResponse({ ok: true, row: row, invoice: link, pesan: '📎 Invoice "' + item + '" ' + (ada ? 'diganti' : 'tersimpan') });
   } finally {
     lock.releaseLock();
   }

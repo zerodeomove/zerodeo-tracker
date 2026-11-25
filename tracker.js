@@ -42,6 +42,7 @@ let backendDana = false;
 let backendEdit = false;
 let backendVersi = '';   // penanda versi Apps Script yang sedang melayani (doGet.versi)
 let backendFoto = false;
+let backendInvoice = false;   // backend menyimpan invoice / penawaran (kolom Invoice)
 let backendReimburse = false;   // Catat reimburse di kartu dana (butuh Apps Script terbaru)
 let backendFotoBatch = false;   // foto/PDF per baris di Isi Actual sekaligus
 let noNotaOnly = false;         // saringan "Selesai tapi belum ada nota" (dari kartu)   // upload foto nota di Data lama / Edit (butuh Apps Script terbaru)
@@ -398,7 +399,7 @@ function renderTable() {
     }
     if (!pend.has(rowNo)) aksi += editBtn;
     return `<tr>
-      <td class="item">${zEsc(r['Item Kegiatan'] || '-')}${/^https?:\/\//i.test(r['Nota/Bukti'] || '') ? ` <a class="nota-link" href="${zEsc(r['Nota/Bukti'])}" data-item="${zEsc(r['Item Kegiatan'] || '')}" onclick="return openNota(this)" target="_blank" rel="noopener noreferrer" title="Lihat nota">📎</a>` : ''}<div class="sub">${r['Tanggal Dicatat'] ? 'dicatat ' + zEsc(fmtDate(r['Tanggal Dicatat'])) : ''}${r['Tanggal Dicatat'] && r['Dana'] ? ' · ' : ''}${r['Dana'] ? 'Dana: ' + zEsc(r['Dana']) : ''}</div>${tfInfoHtml(r)}</td>
+      <td class="item">${zEsc(r['Item Kegiatan'] || '-')}${/^https?:\/\//i.test(r['Nota/Bukti'] || '') ? ` <a class="nota-link" href="${zEsc(r['Nota/Bukti'])}" data-item="${zEsc(r['Item Kegiatan'] || '')}" onclick="return openNota(this)" target="_blank" rel="noopener noreferrer" title="Lihat nota">📎</a>` : ''}${invoiceLink(r) ? ` <a class="nota-link" href="${zEsc(invoiceLink(r))}" data-judul="Invoice — ${zEsc(r['Item Kegiatan'] || '')}" target="_blank" rel="noopener noreferrer" title="Lihat invoice">🧾</a>` : ''}<div class="sub">${r['Tanggal Dicatat'] ? 'dicatat ' + zEsc(fmtDate(r['Tanggal Dicatat'])) : ''}${r['Tanggal Dicatat'] && r['Dana'] ? ' · ' : ''}${r['Dana'] ? 'Dana: ' + zEsc(r['Dana']) : ''}</div>${tfInfoHtml(r)}</td>
       <td data-label="Kategori">${zEsc(r['Kategori'] || '-')}</td>
       <td data-label="Tipe">${zEsc(r['Tipe'] || '-')}</td>
       <td data-label="PIC">${zEsc(picNama(r['PIC']) || '-')}</td>
@@ -957,6 +958,7 @@ function syncKegiatanForm() {
   $('k-jalur-wrap').style.display = dana ? 'none' : '';
   $('k-nominal-wrap').style.display = dana ? 'none' : '';
   $('k-est-opt').style.display = arsip ? 'inline' : 'none';
+  $('k-inv-wrap').style.display = backendInvoice && !arsip ? '' : 'none';   // data lama: yang dicatat nota, bukan invoice
   updateDanaHint();
 }
 $('k-arsip').addEventListener('change', syncKegiatanForm);
@@ -976,6 +978,7 @@ function openKegiatan() {
   $('k-arsip').closest('label').style.display = backendBaru ? '' : 'none';
   photos.k = null;
   showPhoto('k');
+  setInvoiceK(null);
   $('k-photo').closest('label').style.display = backendFoto ? '' : 'none';
   syncKegiatanForm();
   openModal('m-kegiatan');
@@ -1019,6 +1022,7 @@ function clearForNext() {
   ['k-item', 'k-estimasi', 'k-deadline', 'k-actual', 'k-nominal', 'k-nota', 'k-kategoriNew'].forEach((id) => { $(id).value = ''; });
   photos.k = null;
   showPhoto('k');
+  setInvoiceK(null);
   clearErrors($('kegiatanForm'));
   syncKegiatanForm();
   $('k-item').focus();
@@ -1054,6 +1058,8 @@ $('kegiatanForm').addEventListener('submit', (e) => {
     });
     if (photos.k) Object.assign(payload, { photoBase64: photos.k.base64, photoMime: photos.k.mime });
   }
+  const invK = !arsip && backendInvoice ? invoiceK : null;
+  if (invK) Object.assign(payload, { invoiceBase64: invK.base64, invoiceMime: invK.mime });
   const dana = chosenDana();
   if (dana) {
     Object.assign(payload, { dana: dana, jalur: 'Dana', status: arsip ? 'Selesai' : 'Ditransfer' });
@@ -1063,9 +1069,9 @@ $('kegiatanForm').addEventListener('submit', (e) => {
   const snap = snapshotForm($('kegiatanForm'));
   const photoK = arsip ? photos.k : null;
   enqueueSave({
-    label: payload.item + (arsip ? ' (data lama)' : '') + (photoK ? ' (+ foto nota)' : '') + (dana ? ' — dari dana "' + dana + '"' : ''),
+    label: payload.item + (arsip ? ' (data lama)' : '') + (photoK ? ' (+ foto nota)' : '') + (invK ? ' (+ invoice)' : '') + (dana ? ' — dari dana "' + dana + '"' : ''),
     payload: payload, rows: [], expectNota: !!photoK,
-    restore: () => { openKegiatan(); restoreForm(snap); photos.k = photoK; showPhoto('k'); syncKegiatanForm(); }
+    restore: () => { openKegiatan(); restoreForm(snap); photos.k = photoK; showPhoto('k'); setInvoiceK(invK); syncKegiatanForm(); }
   });
   if (keepOpen) {
     setMsg($('k-msg'), '"' + payload.item + '" masuk antrean simpan. Silakan isi yang berikutnya.', 'ok');
@@ -1074,9 +1080,54 @@ $('kegiatanForm').addEventListener('submit', (e) => {
     $('kegiatanForm').reset();
     photos.k = null;
     showPhoto('k');
+    setInvoiceK(null);
     syncKegiatanForm();
     closeModal('m-kegiatan');
   }
+});
+
+// ---------- invoice / penawaran (sama seperti di Budget WBA) ----------
+// Saat mengajukan: file dikecilkan di browser lalu ikut dikirim. Sesudahnya: tempel / ganti dari popup Edit.
+let invoiceK = null;
+function setInvoiceK(v) {
+  invoiceK = v;
+  $('k-inv-info').textContent = v ? 'Siap: ' + (v.name || 'invoice') + ' · ' + v.kb + ' KB' : '';
+  if (!v) $('k-inv').value = '';
+}
+$('k-inv').addEventListener('change', async () => {
+  const file = $('k-inv').files[0];
+  setInvoiceK(null);
+  if (!file) return;
+  try { setInvoiceK(await compressImage(file)); } catch (err) { $('k-inv').value = ''; setMsg($('k-msg'), err.message, 'err'); }
+});
+
+function invoiceLink(r) { return /^https?:\/\//i.test(String(r['Invoice'] || '')) ? String(r['Invoice']) : ''; }
+
+function paintInvoiceEdit(r) {
+  const box = $('ed-inv');
+  if (!backendInvoice || (r['Status'] || '') === 'Dibatalkan') { box.innerHTML = ''; box.style.display = 'none'; return; }
+  const link = invoiceLink(r);
+  box.style.display = '';
+  box.innerHTML = (link ? `<a href="${zEsc(link)}" target="_blank" rel="noopener" data-judul="Invoice — ${zEsc(r['Item Kegiatan'] || '')}">🧾 Lihat invoice</a>` : '<span class="muted">Belum ada invoice</span>') +
+    `<button type="button" class="btn-link" id="ed-inv-btn">${link ? 'Ganti invoice' : '📎 Tambah invoice'}</button>`;
+  $('ed-inv-btn').addEventListener('click', () => { $('ed-inv-file').value = ''; $('ed-inv-file').click(); });
+}
+$('ed-inv-file').addEventListener('change', async () => {
+  const file = $('ed-inv-file').files[0];
+  const row = editRow;
+  if (!file || !row) return;
+  const r = kegiatanData.find((x) => x['_row'] === row);
+  let f;
+  try { f = await compressImage(file); } catch (err) { setMsg($('ed-msg'), err.message, 'err'); return; }
+  const nama = namaBaris(row) || 'Kegiatan';
+  const ganti = !!(r && invoiceLink(r));
+  enqueueSave({
+    label: (ganti ? 'Ganti invoice: ' : 'Invoice: ') + nama,
+    payload: { action: 'invoice_kegiatan', row: row, ganti: ganti, photoBase64: f.base64, photoMime: f.mime },
+    rows: [row],
+    okMsg: '📎 Invoice tersimpan: ' + nama + '.'
+  });
+  closeModal('m-edit');
 });
 
 // ---------- foto nota di popup Data lama (k) dan Edit (ed) ----------
@@ -1353,6 +1404,7 @@ function openEdit(row) {
   photos.ed = null;
   showPhoto('ed');
   $('ed-photo').closest('label').style.display = backendFoto ? '' : 'none';
+  paintInvoiceEdit(r);
 
   const sudahTf = status === 'Ditransfer' || status === 'Selesai';
   $('ed-sub').textContent = (r['Item Kegiatan'] || '-') + ' · status ' + status + (r['Dana'] ? ' · dari dana "' + r['Dana'] + '"' : '');
