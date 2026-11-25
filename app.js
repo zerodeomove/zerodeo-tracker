@@ -217,6 +217,7 @@ async function runSaveQueue() {
             continue;
           }
           if (/^https:\/\/(drive|docs)\.google\.com\//.test(json.nota || '')) job.notaUrl = json.nota;
+          if (job.sesudah) { try { job.sesudah(json); } catch (e) { /* tampilan diperbarui saat muat ulang */ } }
           if (job.okMsg) toast(job.okMsg);
         } else {
           failSave(job, json.error || 'Gagal menyimpan.');
@@ -236,7 +237,7 @@ async function runSaveQueue() {
     zApi.post({ action: 'kirim_kabar' }).catch(() => {});
   }
   if (done.length) {
-    await load();
+    await load(true);   // langsung dari Sheet: hasil simpan harus kelihatan, bukan data simpanan lama
     done.forEach((j) => { j.reloaded = true; });
     renderSaveBar();
     if (typeof renderTracker === 'function' && dataLoaded) renderTracker();

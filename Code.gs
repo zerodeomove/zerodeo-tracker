@@ -1675,7 +1675,9 @@ function handleUbahInvoice(data) {
     var daftar = sheet.getLastColumn() >= COL.INVOICE ? invoiceList_(sheet.getRange(row, COL.INVOICE).getValue()) : [];
     var cari = String(data.url || ''), lama = String(data.keterangan || '').trim().toLowerCase();
     var i = -1;
-    daftar.forEach(function (x, k) { if (i < 0 && ((cari && x.url === cari) || (!cari && lama && x.ket.toLowerCase() === lama))) i = k; });
+    var idFile = function (u) { var m = /\/d\/([\w-]{10,})/.exec(String(u || '')) || /[?&]id=([\w-]{10,})/.exec(String(u || '')); return m ? m[1] : String(u || ''); };
+    daftar.forEach(function (x, k) { if (i < 0 && ((cari && idFile(x.url) === idFile(cari)) || (!cari && lama && x.ket.toLowerCase() === lama))) i = k; });
+    if (i < 0 && lama) daftar.forEach(function (x, k) { if (i < 0 && x.ket.toLowerCase() === lama) i = k; });   // cadangan: cocokkan keterangannya
     if (i < 0) return jsonResponse({ ok: false, error: 'Invoice itu tidak ditemukan di kegiatan ini.' });
     var item = String(sheet.getRange(row, COL.ITEM).getValue() || ''), ketLama = daftar[i].ket, pesan;
     if (data.hapus === true) {

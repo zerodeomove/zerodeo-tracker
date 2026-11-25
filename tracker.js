@@ -1116,6 +1116,13 @@ function invoiceList(r) {
     return m ? { ket: m[1].replace(/:$/, '').trim() || 'Invoice', url: m[2] } : null;
   }).filter(Boolean);
 }
+// Tampilan langsung ikut berubah begitu server menjawab (tidak menunggu muat ulang).
+function setInvoiceRow(row, daftar) {
+  const r = kegiatanData.find((x) => x['_row'] === row);
+  if (!r) return;
+  r['Invoice'] = daftar.map((y) => y.ket + ': ' + y.url).join('\n');
+  if (typeof renderTracker === 'function') renderTracker();
+}
 function invoiceLinks(r, daftar) {
   const boleh = isDecider() || isOwnRow(r);
   return daftar.map((x, i) => `<span class="inv-item"><a href="${zEsc(x.url)}" data-judul="Invoice ${zEsc(x.ket)} — ${zEsc(r['Item Kegiatan'] || '')}" target="_blank" rel="noopener noreferrer">🧾 ${zEsc(x.ket)}</a>` +
@@ -1130,13 +1137,14 @@ function aturInvoice(row, i, hapus) {
   let payload;
   if (hapus) {
     if (!window.confirm('Hapus invoice "' + x.ket + '" dari ' + nama + '?')) return;
-    payload = { action: 'ubah_invoice', row: row, url: x.url, hapus: true };
+    payload = { action: 'ubah_invoice', row: row, url: x.url, keterangan: x.ket, hapus: true };
   } else {
     const baru = window.prompt('Keterangan baru untuk invoice "' + x.ket + '":', x.ket);
     if (baru === null || !baru.trim() || baru.trim() === x.ket) return;
-    payload = { action: 'ubah_invoice', row: row, url: x.url, keterangan_baru: baru.trim() };
+    payload = { action: 'ubah_invoice', row: row, url: x.url, keterangan: x.ket, keterangan_baru: baru.trim() };
   }
   enqueueSave({ label: (hapus ? 'Hapus invoice ' : 'Ubah invoice ') + x.ket + ': ' + nama, payload: payload, rows: [row],
+    sesudah: () => setInvoiceRow(row, invoiceList(r).filter((y) => y.url !== x.url || !hapus).map((y) => y.url === x.url ? { ket: payload.keterangan_baru, url: y.url } : y)),
     okMsg: hapus ? 'Invoice ' + x.ket + ' dihapus: ' + nama + '.' : 'Invoice diganti jadi ' + payload.keterangan_baru + ': ' + nama + '.' });
   closeModal('m-edit');
 }
@@ -1173,6 +1181,7 @@ $('ed-inv-file').addEventListener('change', async () => {
     label: 'Invoice ' + ket + ': ' + nama,
     payload: { action: 'invoice_kegiatan', row: row, keterangan: ket, photoBase64: f.base64, photoMime: f.mime },
     rows: [row],
+    sesudah: (json) => { if (r && json.invoice) setInvoiceRow(row, invoiceList(r).concat([{ ket: ket, url: json.invoice }])); },
     okMsg: '📎 Invoice ' + ket + ' tersimpan: ' + nama + '.'
   });
   closeModal('m-edit');
