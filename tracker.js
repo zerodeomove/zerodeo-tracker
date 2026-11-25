@@ -35,9 +35,10 @@ function tfBuktiHtml(r) {
 // Baris invoice di bawah nama kegiatan: lihat (penampil di halaman) atau tambah langsung, tanpa membuka Edit.
 function invoiceHtml(r) {
   if (!backendInvoice || (r['Status'] || '') === 'Dibatalkan') return '';
-  const link = invoiceLink(r), boleh = isDecider() || isOwnRow(r);
-  if (link) return `<div class="tf-bukti-list">Invoice: <a href="${zEsc(link)}" data-judul="Invoice — ${zEsc(r['Item Kegiatan'] || '')}" target="_blank" rel="noopener noreferrer">🧾 lihat</a></div>`;
-  return boleh ? `<div class="tf-bukti-list"><button type="button" class="btn-link" onclick="pilihInvoice(${r['_row']})">📎 Tambah invoice</button></div>` : '';
+  const daftar = invoiceList(r), boleh = isDecider() || isOwnRow(r);
+  const tambah = boleh ? ` <button type="button" class="btn-link" onclick="pilihInvoice(${r['_row']})">${daftar.length ? '+ invoice' : '📎 Tambah invoice'}</button>` : '';
+  if (!daftar.length && !tambah) return '';
+  return `<div class="tf-bukti-list">${daftar.length ? 'Invoice: ' + invoiceLinks(r, daftar) : ''}${tambah}</div>`;
 }
 function tfInfoHtml(r) {
   if (!tfSebagian(r)) return tfBuktiHtml(r) + invoiceHtml(r);
@@ -1108,19 +1109,36 @@ $('k-inv').addEventListener('change', async () => {
   try { setInvoiceK(await compressImage(file)); } catch (err) { $('k-inv').value = ''; setMsg($('k-msg'), err.message, 'err'); }
 });
 
-function invoiceLink(r) { return /^https?:\/\//i.test(String(r['Invoice'] || '')) ? String(r['Invoice']) : ''; }
+// Satu kegiatan bisa punya beberapa invoice (DP, pelunasan, …). Isi sel: "Keterangan: link" per baris.
+function invoiceList(r) {
+  return String(r['Invoice'] || '').split(/\n+/).map((line) => {
+    const m = /^(.*?)\s*:?\s*(https?:\/\/\S+)\s*$/.exec(line.trim());
+    return m ? { ket: m[1].replace(/:$/, '').trim() || 'Invoice', url: m[2] } : null;
+  }).filter(Boolean);
+}
+function invoiceLinks(r, daftar) {
+  return daftar.map((x) => `<a href="${zEsc(x.url)}" data-judul="Invoice ${zEsc(x.ket)} — ${zEsc(r['Item Kegiatan'] || '')}" target="_blank" rel="noopener noreferrer">🧾 ${zEsc(x.ket)}</a>`).join(' ');
+}
 
 function paintInvoiceEdit(r) {
   const box = $('ed-inv');
   if (!backendInvoice || (r['Status'] || '') === 'Dibatalkan') { box.innerHTML = ''; box.style.display = 'none'; return; }
-  const link = invoiceLink(r);
+  const daftar = invoiceList(r);
   box.style.display = '';
-  box.innerHTML = (link ? `<a href="${zEsc(link)}" target="_blank" rel="noopener" data-judul="Invoice — ${zEsc(r['Item Kegiatan'] || '')}">🧾 Lihat invoice</a>` : '<span class="muted">Belum ada invoice</span>') +
-    `<button type="button" class="btn-link" id="ed-inv-btn">${link ? 'Ganti invoice' : '📎 Tambah invoice'}</button>`;
+  box.innerHTML = (daftar.length ? 'Invoice: ' + invoiceLinks(r, daftar) : '<span class="muted">Belum ada invoice</span>') +
+    `<button type="button" class="btn-link" id="ed-inv-btn">${daftar.length ? '+ Tambah invoice lagi' : '📎 Tambah invoice'}</button>`;
   $('ed-inv-btn').addEventListener('click', () => pilihInvoice(editRow));
 }
 let invoiceRow = null;
-function pilihInvoice(row) { invoiceRow = row; $('ed-inv-file').value = ''; $('ed-inv-file').click(); }
+let invoiceKet = '';
+function pilihInvoice(row) {
+  const r = kegiatanData.find((x) => x['_row'] === row);
+  const ada = r ? invoiceList(r).length : 0;
+  const ket = window.prompt('Keterangan invoice ini (mis. DP, Pelunasan, Termin 2):', ada ? 'Pelunasan' : 'DP');
+  if (ket === null) return;
+  invoiceRow = row; invoiceKet = ket.trim() || (ada ? 'Invoice ' + (ada + 1) : 'Invoice');
+  $('ed-inv-file').value = ''; $('ed-inv-file').click();
+}
 $('ed-inv-file').addEventListener('change', async () => {
   const file = $('ed-inv-file').files[0];
   const row = invoiceRow;
@@ -1129,12 +1147,12 @@ $('ed-inv-file').addEventListener('change', async () => {
   let f;
   try { f = await compressImage(file); } catch (err) { setMsg($('ed-msg'), err.message, 'err'); return; }
   const nama = namaBaris(row) || 'Kegiatan';
-  const ganti = !!(r && invoiceLink(r));
+  const ket = invoiceKet;
   enqueueSave({
-    label: (ganti ? 'Ganti invoice: ' : 'Invoice: ') + nama,
-    payload: { action: 'invoice_kegiatan', row: row, ganti: ganti, photoBase64: f.base64, photoMime: f.mime },
+    label: 'Invoice ' + ket + ': ' + nama,
+    payload: { action: 'invoice_kegiatan', row: row, keterangan: ket, photoBase64: f.base64, photoMime: f.mime },
     rows: [row],
-    okMsg: '📎 Invoice tersimpan: ' + nama + '.'
+    okMsg: '📎 Invoice ' + ket + ' tersimpan: ' + nama + '.'
   });
   closeModal('m-edit');
 });

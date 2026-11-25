@@ -288,6 +288,16 @@ function ensureInvoiceColumn_(sheet) {
   sheet.setColumnWidth(COL.INVOICE, 120);
 }
 
+// Isi sel Invoice: satu invoice per baris, "Keterangan: link" (mis. "DP: https://…", "Pelunasan: https://…").
+// Sel lama yang hanya berisi link dibaca sebagai satu invoice berketerangan "Invoice".
+function invoiceList_(v) {
+  return String(v || '').split(/\n+/).map(function (line) {
+    var m = /^(.*?)\s*:?\s*(https?:\/\/\S+)\s*$/.exec(line.trim());
+    return m ? { ket: m[1].replace(/:$/, '').trim() || 'Invoice', url: m[2] } : null;
+  }).filter(Boolean);
+}
+function invoiceKet_(v, cadangan) { return cleanText_(v, 40).replace(/[:\n]/g, ' ').trim() || cadangan; }
+
 // Mengisi ID untuk baris berisi item yang belum punya ID. Mengembalikan jumlah ID yang dibuat.
 // Aman dipanggil berulang; tidak menyentuh ID yang sudah ada.
 function ensureKegiatanIds_() {
@@ -1080,7 +1090,7 @@ function handleAddKegiatan(data) {
       try {
         invoice = saveNotaPhoto_(vals[COL.ITEM], data.invoiceBase64, data.invoiceMime, 'Invoice');
         ensureInvoiceColumn_(sheet);
-        sheet.getRange(targetRow, COL.INVOICE).setValue(invoice);
+        sheet.getRange(targetRow, COL.INVOICE).setValue(invoiceKet_(data.invoiceKet, 'Invoice') + ': ' + invoice);
       } catch (e) { invoiceGagal = String(e.message || e); }
     }
 
@@ -1625,12 +1635,21 @@ function handleInvoiceKegiatan(data) {
       return jsonResponse({ ok: false, error: 'Hanya PIC kegiatan ini, approver, atau admin yang boleh menambah invoice.' });
     }
     ensureInvoiceColumn_(sheet);
-    var ada = String(sheet.getRange(row, COL.INVOICE).getValue() || '').trim() !== '';
-    if (ada && data.ganti !== true) return jsonResponse({ ok: false, error: 'Kegiatan ini sudah punya invoice. Kalau mau diganti, bilang "ganti invoicenya".' });
+    // Satu kegiatan boleh punya beberapa invoice (DP, pelunasan, …): yang baru DITAMBAHKAN.
+    // ganti = true mengganti invoice berketerangan sama (atau semuanya kalau keterangannya tidak disebut).
+    var daftar = invoiceList_(sheet.getRange(row, COL.INVOICE).getValue());
+    var ket = invoiceKet_(data.keterangan, daftar.length ? 'Invoice ' + (daftar.length + 1) : 'Invoice');
     var item = String(sheet.getRange(row, COL.ITEM).getValue() || '');
-    var link = saveNotaPhoto_(item, data.photoBase64, data.photoMime, 'Invoice');
-    sheet.getRange(row, COL.INVOICE).setValue(link);
-    return jsonResponse({ ok: true, row: row, invoice: link, pesan: '📎 Invoice "' + item + '" ' + (ada ? 'diganti' : 'tersimpan') });
+    var link = saveNotaPhoto_(item + ' - ' + ket, data.photoBase64, data.photoMime, 'Invoice');
+    var diganti = false;
+    if (data.ganti === true) {
+      var sisa = daftar.filter(function (x) { return data.keterangan ? x.ket.toLowerCase() !== ket.toLowerCase() : false; });
+      diganti = sisa.length !== daftar.length;
+      daftar = sisa;
+    }
+    daftar.push({ ket: ket, url: link });
+    sheet.getRange(row, COL.INVOICE).setValue(daftar.map(function (x) { return x.ket + ': ' + x.url; }).join('\n'));
+    return jsonResponse({ ok: true, row: row, invoice: link, jumlah: daftar.length, pesan: '📎 Invoice ' + ket + ' "' + item + '" ' + (diganti ? 'diganti' : 'tersimpan') + (daftar.length > 1 ? ' (' + daftar.length + ' invoice)' : '') });
   } finally {
     lock.releaseLock();
   }
